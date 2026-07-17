@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use super::Result;
+use crate::error::Result;
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -56,6 +56,16 @@ pub trait FileSystem {
     async fn create(&self, path: &Path) -> Result<Self::File>;
 
     async fn remove(&self, path: &Path) -> Result<()>;
+
+    async fn rename(&self, from: &Path, to: &Path) -> Result<()>;
+
+    async fn create_dir_all(&self, path: &Path) -> Result<()>;
+
+    /// Create a symbolic link at `link` pointing to `original`.
+    async fn symlink(&self, original: &Path, link: &Path) -> Result<()>;
+
+    /// Create a hard link at `link` pointing to `original`.
+    async fn hard_link(&self, original: &Path, link: &Path) -> Result<()>;
 
     async fn metadata(&self, path: &Path) -> Result<Metadata>;
 }

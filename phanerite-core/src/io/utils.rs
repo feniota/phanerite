@@ -1,4 +1,5 @@
-use crate::io::{AsyncFile, Result};
+use super::AsyncFile;
+use crate::error::{Error, Result};
 
 /// Extension trait providing compound I/O methods on top of [`AsyncFile`].
 ///
@@ -24,7 +25,7 @@ pub trait AsyncFileExt: AsyncFile {
             let buf = vec![0u8; needed];
             let (n, buf) = self.read_at(pos, buf).await?;
             if n == 0 {
-                return Err(crate::io::Error::Other);
+                return Err(Error::Other("unexpected EOF".into()));
             }
             dst.extend_from_slice(&buf[..n]);
             pos += n as u64;
@@ -58,7 +59,7 @@ pub trait AsyncFileExt: AsyncFile {
     /// Read the entire file and interpret as UTF-8.
     async fn read_to_string(&self) -> Result<String> {
         let bytes = self.read_all().await?;
-        String::from_utf8(bytes).map_err(|_| crate::io::Error::Other)
+        String::from_utf8(bytes).map_err(|_| Error::Other("invalid UTF-8".into()))
     }
 
     // ── Write utilities ─────────────────────────────────────────────
@@ -68,7 +69,7 @@ pub trait AsyncFileExt: AsyncFile {
         while !buf.is_empty() {
             let (n, rest) = self.write_at(offset, buf).await?;
             if n == 0 {
-                return Err(crate::io::Error::Other);
+                return Err(Error::Other("zero-length write".into()));
             }
             offset += n as u64;
             buf = rest;

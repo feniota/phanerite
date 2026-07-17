@@ -81,6 +81,26 @@ impl FileSystem for TokioFs {
         Ok(())
     }
 
+    async fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        tokio::fs::rename(from, to).await?;
+        Ok(())
+    }
+
+    async fn create_dir_all(&self, path: &Path) -> Result<()> {
+        tokio::fs::create_dir_all(path).await?;
+        Ok(())
+    }
+
+    async fn symlink(&self, original: &Path, link: &Path) -> Result<()> {
+        tokio::fs::symlink(original, link).await?;
+        Ok(())
+    }
+
+    async fn hard_link(&self, original: &Path, link: &Path) -> Result<()> {
+        tokio::fs::hard_link(original, link).await?;
+        Ok(())
+    }
+
     async fn metadata(&self, path: &Path) -> Result<Metadata> {
         let meta = tokio::fs::metadata(path).await?;
         Ok(Metadata {

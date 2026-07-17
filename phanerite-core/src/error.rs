@@ -1,0 +1,42 @@
+#[derive(Debug)]
+pub enum Error {
+    /// Underlying I/O error.
+    Io(std::io::Error),
+    /// HTTP status-code error.
+    Http(u16),
+    /// Catch-all for other failures.
+    Other(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Io(e) => write!(f, "I/O error: {e}"),
+            Error::Http(status) => write!(f, "HTTP {status}"),
+            Error::Other(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl Error {
+    pub fn other(msg: impl Into<String>) -> Self {
+        Error::Other(msg.into())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e)
+    }
+}
+
+pub type Result<T> = core::result::Result<T, Error>;

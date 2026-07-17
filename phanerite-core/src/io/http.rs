@@ -1,10 +1,11 @@
 //! HTTP client abstraction and body types.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use super::fs::AsyncFile;
-use super::{Error, Result};
+use crate::error::{Error, Result};
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -45,9 +46,9 @@ impl Method {
 ///
 /// Header keys should be lowercase for portability across HTTP/1.1
 /// and HTTP/2 backends.
-pub struct HttpRequest {
+pub struct HttpRequest<'a> {
     pub method: Method,
-    pub url: String,
+    pub url: &'a str,
     pub headers: BTreeMap<String, String>,
     pub body: Option<Vec<u8>>,
 }
@@ -88,7 +89,7 @@ impl AsyncFile for InMemoryBody {
     }
 
     async fn write_at(&self, _offset: u64, _buf: Vec<u8>) -> Result<(usize, Vec<u8>)> {
-        Err(Error::Other)
+        Err(Error::Other("InMemoryBody is read-only".into()))
     }
 
     async fn size(&self) -> Result<u64> {
@@ -179,11 +180,12 @@ impl<C: AsyncChunkReader> AsyncFile for StreamingBody<C> {
     }
 
     async fn write_at(&self, _offset: u64, _buf: Vec<u8>) -> Result<(usize, Vec<u8>)> {
-        Err(Error::Other)
+        Err(Error::Other("StreamingBody is read-only".into()))
     }
 
     async fn size(&self) -> Result<u64> {
-        self.content_length.ok_or(Error::Other)
+        self.content_length
+            .ok_or(Error::Other("content-length unknown".into()))
     }
 
     async fn flush(&self) -> Result<()> {

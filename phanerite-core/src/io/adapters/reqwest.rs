@@ -38,7 +38,10 @@ impl HttpClient for ReqwestClient {
 
     async fn execute(&self, request: HttpRequest) -> Result<HttpResponse<InMemoryBody>> {
         let (status, headers, resp) = self.send_request(request).await?;
-        let bytes = resp.bytes().await.map_err(|_| Error::other())?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|_| Error::other("read body failed"))?;
         Ok(HttpResponse {
             status,
             headers,
@@ -76,7 +79,10 @@ impl ReqwestClient {
             req = req.body(body.clone());
         }
 
-        let resp = req.send().await.map_err(|_| Error::other())?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|_| Error::other("request failed"))?;
         let status = resp.status().as_u16();
         let headers = resp
             .headers()
@@ -122,7 +128,7 @@ impl AsyncChunkReader for ReqwestChunkReader {
         match self.resp.chunk().await {
             Ok(Some(c)) => Ok(Some(c.to_vec())),
             Ok(None) => Ok(None),
-            Err(_) => Err(Error::other()),
+            Err(_) => Err(Error::other("chunk read failed")),
         }
     }
 }

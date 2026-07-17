@@ -55,10 +55,17 @@ impl NyquestClient {
             req = req.with_body(Body::binary_bytes(body.clone()));
         }
 
-        let resp = self.inner.request(req).await.map_err(|_| Error::other())?;
+        let resp = self
+            .inner
+            .request(req)
+            .await
+            .map_err(|_| Error::other("request failed"))?;
 
         let status = resp.status().code();
-        let bytes = resp.bytes().await.map_err(|_| Error::other())?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|_| Error::other("read body failed"))?;
 
         Ok(HttpResponse {
             status,

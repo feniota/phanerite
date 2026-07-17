@@ -74,6 +74,26 @@ impl FileSystem for CompioFs {
         Ok(())
     }
 
+    async fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        compio::fs::rename(from, to).await?;
+        Ok(())
+    }
+
+    async fn create_dir_all(&self, path: &Path) -> Result<()> {
+        compio::fs::create_dir_all(path).await?;
+        Ok(())
+    }
+
+    async fn symlink(&self, original: &Path, link: &Path) -> Result<()> {
+        compio::fs::symlink(original, link).await?;
+        Ok(())
+    }
+
+    async fn hard_link(&self, original: &Path, link: &Path) -> Result<()> {
+        compio::fs::hard_link(original, link).await?;
+        Ok(())
+    }
+
     async fn metadata(&self, path: &Path) -> Result<Metadata> {
         let meta = compio::fs::metadata(path).await?;
         Ok(Metadata {

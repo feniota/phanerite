@@ -1,11 +1,15 @@
+use crate::download::vanilla::assets::AssetIndex;
+use crate::download::vanilla::libraries::Library;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::{Error, Result};
-use crate::io::utils::AsyncFileExt;
-use crate::io::{HttpClient, HttpRequest, Method};
+use crate::io::utils::{AsyncFileExt, Hasher};
+use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
+use crate::utils::{HashValue, Sha1};
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
-use sha1::Digest;
 use std::collections::HashMap;
+use std::path::Path;
+use std::slice::Iter;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,17 +82,6 @@ pub struct Os {
     pub arch: Option<String>,
 }
 
-/// 资源索引
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AssetIndex {
-    pub id: String,
-    pub sha1: String,
-    pub size: u64,
-    pub total_size: Option<u64>,
-    pub url: String,
-}
-
 /// 游戏下载
 #[derive(Deserialize)]
 pub struct Downloads {
@@ -98,7 +91,7 @@ pub struct Downloads {
 
 #[derive(Deserialize)]
 pub struct Download {
-    pub sha1: String,
+    pub sha1: Sha1,
     pub size: u64,
     pub url: String,
 }
@@ -109,48 +102,6 @@ pub struct Download {
 pub struct JavaVersion {
     pub component: String,
     pub major_version: u32,
-}
-
-/// Library
-#[derive(Deserialize)]
-pub struct Library {
-    pub name: String,
-
-    pub downloads: Option<LibraryDownloads>,
-
-    pub rules: Option<Vec<Rule>>,
-
-    pub natives: Option<HashMap<String, String>>,
-
-    pub extract: Option<Extract>,
-
-    pub classifiers: Option<HashMap<String, Artifact>>,
-
-    #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-#[derive(Deserialize)]
-pub struct LibraryDownloads {
-    pub artifact: Option<Artifact>,
-
-    pub classifiers: Option<HashMap<String, Artifact>>,
-}
-
-#[derive(Deserialize)]
-pub struct Artifact {
-    pub path: String,
-
-    pub sha1: String,
-
-    pub size: u64,
-
-    pub url: String,
-}
-
-#[derive(Deserialize)]
-pub struct Extract {
-    pub exclude: Option<Vec<String>>,
 }
 
 /// 日志配置
@@ -170,7 +121,7 @@ pub struct LoggingClient {
 pub struct LoggingFile {
     pub id: String,
 
-    pub sha1: String,
+    pub sha1: Sha1,
 
     pub size: u64,
 
@@ -194,12 +145,43 @@ impl VersionInfo {
 
         let body = response.body.read_all().await?;
 
-        let hash = sha1::Sha1::digest(&body);
+        let hash = {
+            let mut hasher = sha1::Sha1::default();
+            hasher.update(&body);
+            hasher.finalize_hex()
+        };
 
-        if hex::encode(hash) != version.sha1 {
-            return Err(Error::Other("Hash check failed".to_string()));
+        if Sha1::from_hex(hash) != version.sha1 {
+            return Err(Error::Other("hash mismatch".to_string()));
         }
 
-        Ok(serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?)
+        let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
+        Ok(json)
+    }
+    async fn local(path: &Path, fs: &impl FileSystem) -> Result<Self> {
+        let file = fs.open(path).await?.read_all().await?;
+        let json = serde_json::from_slice(&file).map_err(|e| Error::Other(e.to_string()))?;
+        Ok(json)
+    }
+    async fn download_client<H: HttpClient>(
+        &self,
+        http_client: &H,
+    ) -> Result<(impl AsyncFile, impl HashValue)> {
+        if let Some(download) = &self.downloads.client {
+            let request = HttpRequest {
+                method: Method::Get,
+                url: &download.url,
+                headers: Default::default(),
+                body: None,
+            };
+            let response = http_client.execute_streaming(request).await?;
+            if response.status < 200 || response.status >= 300 {
+                Err(Error::Http(response.status))
+            } else {
+                Ok((response.body, download.sha1.clone()))
+            }
+        } else {
+            Err(Error::Other("No download link".to_string()))
+        }
     }
 }

@@ -4,6 +4,7 @@ pub mod error;
 pub mod io;
 pub mod java;
 pub mod storage;
+pub mod utils;
 pub mod version;
 
 pub fn add(left: u64, right: u64) -> u64 {

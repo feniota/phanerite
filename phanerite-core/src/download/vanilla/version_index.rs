@@ -1,6 +1,7 @@
 use crate::error::{Error, Result};
 use crate::io::utils::AsyncFileExt;
 use crate::io::{HttpClient, HttpRequest, Method};
+use crate::utils::Sha1;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use std::slice::Iter;
@@ -29,7 +30,7 @@ pub struct Version {
     pub url: String,
     pub time: DateTime<FixedOffset>,
     pub release_time: DateTime<FixedOffset>,
-    pub sha1: String,
+    pub sha1: Sha1,
     pub compliance_level: usize,
 }
 
@@ -58,7 +59,8 @@ impl VersionIndex {
         }
 
         let body = response.body.read_all().await?;
-        Ok(serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?)
+        let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
+        Ok(json)
     }
     pub fn iter(&self) -> Iter<'_, Version> {
         self.versions.iter()

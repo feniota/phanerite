@@ -1,6 +1,37 @@
 use super::AsyncFile;
 use crate::error::{Error, Result};
 
+// ── Streaming Hasher ──────────────────────────────────────────────
+
+/// Streaming content-addressable hasher.
+///
+/// Accumulates data in chunks and produces a hex string on
+/// finalization.
+pub trait Hasher {
+    fn update(&mut self, data: &[u8]);
+    fn finalize_hex(self) -> String;
+}
+
+impl Hasher for blake3::Hasher {
+    fn update(&mut self, data: &[u8]) {
+        blake3::Hasher::update(self, data);
+    }
+    fn finalize_hex(self) -> String {
+        self.finalize().to_string()
+    }
+}
+
+impl Hasher for sha1::Sha1 {
+    fn update(&mut self, data: &[u8]) {
+        sha1::Digest::update(self, data);
+    }
+    fn finalize_hex(self) -> String {
+        hex::encode(sha1::Digest::finalize(self))
+    }
+}
+
+// ── AsyncFileExt ──────────────────────────────────────────────────
+
 /// Extension trait providing compound I/O methods on top of [`AsyncFile`].
 ///
 /// These methods are built from the four primitives
@@ -145,6 +176,40 @@ pub trait AsyncFileExt: AsyncFile {
             dst_off += n;
         }
         Ok(total)
+    }
+
+    /// Copy from `reader` at `src_offset` until EOF into this file at
+    /// `dst_offset`, while simultaneously computing a streaming hash.
+    ///
+    /// Returns `(bytes_copied, hash)`.
+    async fn copy_all_with_hasher<R: AsyncFile + ?Sized>(
+        &self,
+        dst_offset: u64,
+        reader: &R,
+        src_offset: u64,
+        mut hasher: impl Hasher,
+    ) -> Result<(u64, String)>
+    where
+        Self: Sized,
+    {
+        const CHUNK: usize = 8192;
+        let mut total = 0u64;
+        let mut src_off = src_offset;
+        let mut dst_off = dst_offset;
+        loop {
+            let buf = vec![0u8; CHUNK];
+            let (n, buf) = reader.read_at(src_off, buf).await?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+            let n = n as u64;
+            self.write_all_at(dst_off, buf).await?;
+            total += n;
+            src_off += n;
+            dst_off += n;
+        }
+        Ok((total, hasher.finalize_hex()))
     }
 }
 

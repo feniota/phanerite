@@ -1,12 +1,15 @@
+use crate::download::Downloadable;
 use crate::download::vanilla::version_info::Rule;
 use crate::error::{Error, Result};
-use crate::io::{AsyncFile, HttpClient, HttpRequest, Method};
+use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
+use crate::storage::Storage;
 use crate::utils::{HashValue, Sha1};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Library
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Library {
     pub name: String,
 
@@ -24,14 +27,14 @@ pub struct Library {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LibraryDownloads {
     pub artifact: Option<Artifact>,
 
     pub classifiers: Option<HashMap<String, Artifact>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Artifact {
     pub path: String,
 
@@ -42,18 +45,21 @@ pub struct Artifact {
     pub url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Extract {
     pub exclude: Option<Vec<String>>,
 }
 
-impl Library {
-    pub async fn download(
-        &self,
+impl Downloadable for Library {
+    type HashAlgorithm = Sha1;
+
+    async fn download(
+        self,
         http_client: &impl HttpClient,
-    ) -> Result<(impl AsyncFile, impl HashValue)> {
-        if let Some(download) = &self.downloads {
-            if let Some(artifact) = &download.artifact {
+        storage: &Storage<impl FileSystem>,
+    ) -> Result<(impl AsyncFile, Option<Self::HashAlgorithm>, PathBuf)> {
+        if let Some(download) = self.downloads {
+            if let Some(artifact) = download.artifact {
                 let request = HttpRequest {
                     method: Method::Get,
                     url: &artifact.url,
@@ -64,7 +70,11 @@ impl Library {
                 if response.status < 200 || response.status >= 300 {
                     return Err(Error::Http(response.status));
                 }
-                return Ok((response.body, artifact.sha1.clone()));
+                return Ok((
+                    response.body,
+                    Some(artifact.sha1),
+                    storage.libraries_dir.join(artifact.path),
+                ));
             }
         }
 

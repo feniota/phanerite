@@ -3,7 +3,7 @@ use crate::io::utils::AsyncFileExt;
 use crate::io::{HttpClient, HttpRequest, Method};
 use crate::utils::Sha1;
 use chrono::{DateTime, FixedOffset};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::slice::Iter;
 use std::vec::IntoIter;
 
@@ -34,7 +34,7 @@ pub struct Version {
     pub compliance_level: usize,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionType {
     Release,

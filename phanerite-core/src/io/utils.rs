@@ -98,9 +98,14 @@ pub trait AsyncFileExt: AsyncFile {
     /// Write all of `buf` at `offset`, retrying on short writes.
     async fn write_all_at(&self, mut offset: u64, mut buf: Vec<u8>) -> Result<()> {
         while !buf.is_empty() {
+            let len_before = buf.len();
             let (n, rest) = self.write_at(offset, buf).await?;
             if n == 0 {
                 return Err(Error::Other("zero-length write".into()));
+            }
+            // 防御：确保 buffer 确实缩小了（适配器 bug 可能返回未截断的 buf）
+            if n > len_before || rest.len() >= len_before {
+                return Err(Error::Other("write_at did not consume buffer".into()));
             }
             offset += n as u64;
             buf = rest;

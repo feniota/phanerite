@@ -1,17 +1,18 @@
+use crate::download::Downloadable;
 use crate::download::vanilla::assets::AssetIndex;
 use crate::download::vanilla::libraries::Library;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::{Error, Result};
 use crate::io::utils::{AsyncFileExt, Hasher};
 use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
+use crate::storage::Storage;
 use crate::utils::{HashValue, Sha1};
 use chrono::{DateTime, FixedOffset};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
-use std::slice::Iter;
+use std::path::{Path, PathBuf};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionInfo {
     pub id: String,
@@ -46,13 +47,13 @@ pub struct VersionInfo {
 }
 
 /// 启动参数
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Arguments {
     pub game: Option<Vec<Argument>>,
     pub jvm: Option<Vec<Argument>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Argument {
     Simple(String),
@@ -63,33 +64,33 @@ pub enum Argument {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Value {
     Single(String),
     Multiple(Vec<String>),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Rule {
     pub action: String,
     pub os: Option<Os>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Os {
     pub name: Option<String>,
     pub arch: Option<String>,
 }
 
 /// 游戏下载
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Downloads {
     pub client: Option<Download>,
     pub server: Option<Download>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Download {
     pub sha1: Sha1,
     pub size: u64,
@@ -97,7 +98,7 @@ pub struct Download {
 }
 
 /// Java版本要求
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaVersion {
     pub component: String,
@@ -105,19 +106,19 @@ pub struct JavaVersion {
 }
 
 /// 日志配置
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Logging {
     pub client: LoggingClient,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LoggingClient {
     pub argument: String,
 
     pub file: LoggingFile,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LoggingFile {
     pub id: String,
 
@@ -129,7 +130,7 @@ pub struct LoggingFile {
 }
 
 impl VersionInfo {
-    async fn fetch(version: &Version, http_client: &impl HttpClient) -> Result<Self> {
+    pub async fn fetch(version: &Version, http_client: &impl HttpClient) -> Result<Self> {
         let request = HttpRequest {
             method: Method::Get,
             url: &version.url,
@@ -158,30 +159,49 @@ impl VersionInfo {
         let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
         Ok(json)
     }
-    async fn local(path: &Path, fs: &impl FileSystem) -> Result<Self> {
+    pub async fn local(path: &Path, fs: &impl FileSystem) -> Result<Self> {
         let file = fs.open(path).await?.read_all().await?;
         let json = serde_json::from_slice(&file).map_err(|e| Error::Other(e.to_string()))?;
         Ok(json)
     }
-    async fn download_client<H: HttpClient>(
-        &self,
-        http_client: &H,
-    ) -> Result<(impl AsyncFile, impl HashValue)> {
-        if let Some(download) = &self.downloads.client {
-            let request = HttpRequest {
-                method: Method::Get,
-                url: &download.url,
-                headers: Default::default(),
-                body: None,
-            };
-            let response = http_client.execute_streaming(request).await?;
-            if response.status < 200 || response.status >= 300 {
-                Err(Error::Http(response.status))
-            } else {
-                Ok((response.body, download.sha1.clone()))
-            }
+    pub fn get_client(&self, path: PathBuf) -> Result<ClientDownload> {
+        if let Some(client) = &self.downloads.client {
+            Ok(ClientDownload {
+                url: client.url.to_string(),
+                sha1: client.sha1.clone(),
+                path,
+            })
         } else {
             Err(Error::Other("No download link".to_string()))
+        }
+    }
+}
+
+pub struct ClientDownload {
+    pub url: String,
+    pub sha1: Sha1,
+    pub path: PathBuf,
+}
+
+impl Downloadable for ClientDownload {
+    type HashAlgorithm = Sha1;
+
+    async fn download(
+        self,
+        http_client: &impl HttpClient,
+        storage: &Storage<impl FileSystem>,
+    ) -> Result<(impl AsyncFile, Option<Self::HashAlgorithm>, PathBuf)> {
+        let request = HttpRequest {
+            method: Method::Get,
+            url: &self.url,
+            headers: Default::default(),
+            body: None,
+        };
+        let response = http_client.execute_streaming(request).await?;
+        if response.status < 200 || response.status >= 300 {
+            Err(Error::Http(response.status))
+        } else {
+            Ok((response.body, Some(self.sha1), self.path))
         }
     }
 }

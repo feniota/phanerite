@@ -34,10 +34,10 @@ impl AsyncFile for CompioFile {
     }
 
     async fn write_at(&self, offset: u64, buf: Vec<u8>) -> Result<(usize, Vec<u8>)> {
-        // AsyncWriteAt for &File takes &mut self (i.e. &mut &File).
         let mut file_ref = &self.inner;
         let BufResult(result, buf) = AsyncWriteAt::write_at(&mut file_ref, buf, offset).await;
-        Ok((result?, buf))
+        let n = result?;
+        Ok((n, split_off_suffix(buf, n)))
     }
 
     async fn size(&self) -> Result<u64> {
@@ -107,5 +107,13 @@ impl FileSystem for CompioFs {
             size: meta.len(),
             modified: meta.modified().ok(),
         })
+    }
+}
+
+fn split_off_suffix(mut buf: Vec<u8>, n: usize) -> Vec<u8> {
+    if n >= buf.len() {
+        Vec::new()
+    } else {
+        buf.split_off(n)
     }
 }

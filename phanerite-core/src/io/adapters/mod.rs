@@ -9,3 +9,6 @@ pub mod reqwest;
 
 #[cfg(feature = "nyquest")]
 pub mod nyquest;
+
+#[cfg(feature = "ureq")]
+pub mod ureq;

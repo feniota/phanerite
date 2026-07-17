@@ -1,6 +1,5 @@
 //! HTTP client abstraction and body types.
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -202,11 +201,11 @@ pub trait HttpClient {
     type StreamingBody: AsyncFile;
 
     /// Execute, buffering the full body in memory.
-    async fn execute(&self, request: HttpRequest) -> Result<HttpResponse<Self::Body>>;
+    async fn execute(&self, request: HttpRequest<'_>) -> Result<HttpResponse<Self::Body>>;
 
     /// Execute, returning a streaming body backed by the live connection.
     async fn execute_streaming(
         &self,
-        request: HttpRequest,
+        request: HttpRequest<'_>,
     ) -> Result<HttpResponse<Self::StreamingBody>>;
 }

@@ -2,10 +2,10 @@ use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::{Error, Result};
 use crate::io::utils::AsyncFileExt;
 use crate::io::{HttpClient, HttpRequest, Method};
+use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use sha1::Digest;
 use std::collections::HashMap;
-use time::OffsetDateTime;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,8 +15,8 @@ pub struct VersionInfo {
     #[serde(rename = "type")]
     pub version_type: VersionType,
 
-    pub time: OffsetDateTime,
-    pub release_time: OffsetDateTime,
+    pub time: DateTime<FixedOffset>,
+    pub release_time: DateTime<FixedOffset>,
 
     pub main_class: String,
 

@@ -36,7 +36,7 @@ impl HttpClient for ReqwestClient {
     type Body = InMemoryBody;
     type StreamingBody = StreamingBody<ReqwestChunkReader>;
 
-    async fn execute(&self, request: HttpRequest) -> Result<HttpResponse<InMemoryBody>> {
+    async fn execute(&self, request: HttpRequest<'_>) -> Result<HttpResponse<InMemoryBody>> {
         let (status, headers, resp) = self.send_request(request).await?;
         let bytes = resp
             .bytes()
@@ -51,7 +51,7 @@ impl HttpClient for ReqwestClient {
 
     async fn execute_streaming(
         &self,
-        request: HttpRequest,
+        request: HttpRequest<'_>,
     ) -> Result<HttpResponse<StreamingBody<ReqwestChunkReader>>> {
         let (status, headers, resp) = self.send_request(request).await?;
         let content_length = resp.content_length();
@@ -66,10 +66,10 @@ impl HttpClient for ReqwestClient {
 impl ReqwestClient {
     async fn send_request(
         &self,
-        request: HttpRequest,
+        request: HttpRequest<'_>,
     ) -> Result<(u16, BTreeMap<String, String>, reqwest::Response)> {
         let method = convert_method(&request.method);
-        let mut req = self.inner.request(method, &request.url);
+        let mut req = self.inner.request(method, request.url);
 
         for (k, v) in &request.headers {
             req = req.header(k.as_str(), v.as_str());

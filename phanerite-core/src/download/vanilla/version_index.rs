@@ -1,39 +1,39 @@
 use crate::error::{Error, Result};
 use crate::io::utils::AsyncFileExt;
 use crate::io::{HttpClient, HttpRequest, Method};
+use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use std::slice::Iter;
 use std::vec::IntoIter;
-use time::OffsetDateTime;
 
 const VERSION_INDEX_URL: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct VersionIndex {
     latest: Latest,
     versions: Vec<Version>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct Latest {
     release: String,
     snapshot: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Version {
     pub id: String,
     #[serde(rename = "type")]
     pub version_type: VersionType,
     pub url: String,
-    pub time: OffsetDateTime,
-    pub release_time: OffsetDateTime,
+    pub time: DateTime<FixedOffset>,
+    pub release_time: DateTime<FixedOffset>,
     pub sha1: String,
     pub compliance_level: usize,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionType {
     Release,
@@ -75,5 +75,24 @@ impl VersionIndex {
         self.iter()
             .find(|&x| x.id == self.latest.snapshot)
             .expect("Format error: There is no latest version listed in the version index.")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[cfg(feature = "reqwest")]
+    #[test]
+    fn test_fetch() {
+        use super::*;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let fs = crate::io::adapters::tokio::TokioFs;
+                let http_client = crate::io::adapters::reqwest::ReqwestClient::new();
+                let res = VersionIndex::fetch(&http_client).await;
+                assert!(res.is_ok());
+            });
     }
 }

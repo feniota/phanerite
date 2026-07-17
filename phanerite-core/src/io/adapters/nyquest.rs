@@ -33,19 +33,22 @@ impl HttpClient for NyquestClient {
     type Body = InMemoryBody;
     type StreamingBody = InMemoryBody; // TODO: StreamingBody + NyquestChunkReader
 
-    async fn execute(&self, request: HttpRequest) -> Result<HttpResponse<InMemoryBody>> {
+    async fn execute(&self, request: HttpRequest<'_>) -> Result<HttpResponse<InMemoryBody>> {
         self.do_execute(request).await
     }
 
-    async fn execute_streaming(&self, request: HttpRequest) -> Result<HttpResponse<InMemoryBody>> {
+    async fn execute_streaming(
+        &self,
+        request: HttpRequest<'_>,
+    ) -> Result<HttpResponse<InMemoryBody>> {
         self.do_execute(request).await
     }
 }
 
 impl NyquestClient {
-    async fn do_execute(&self, request: HttpRequest) -> Result<HttpResponse<InMemoryBody>> {
+    async fn do_execute(&self, request: HttpRequest<'_>) -> Result<HttpResponse<InMemoryBody>> {
         let method = convert_method(&request.method);
-        let mut req = Request::new(method, request.url);
+        let mut req = Request::new(method, request.url.to_owned());
 
         for (k, v) in &request.headers {
             req = req.with_header(k.clone(), v.clone());

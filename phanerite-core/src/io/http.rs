@@ -142,7 +142,7 @@ impl AsyncFile for InMemoryBody {
     }
 
     async fn write_at(&self, _offset: u64, _buf: Vec<u8>) -> Result<(usize, Vec<u8>)> {
-        Err(Error::Other("InMemoryBody is read-only".into()))
+        unreachable!("InMemoryBody is read-only")
     }
 
     async fn size(&self) -> Result<u64> {
@@ -264,7 +264,7 @@ impl<C: AsyncChunkReader> AsyncFile for StreamingBody<C> {
     }
 
     async fn write_at(&self, _offset: u64, _buf: Vec<u8>) -> Result<(usize, Vec<u8>)> {
-        Err(Error::Other("StreamingBody is read-only".into()))
+        unreachable!("StreamingBody is read-only")
     }
 
     async fn size(&self) -> Result<u64> {

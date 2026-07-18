@@ -61,7 +61,7 @@ impl<F: FileSystem, H: HttpClient> VersionsManager<F, H> {
             )
             .await?;
 
-        let mut tasks = ConcurrentTask::new(NonZeroU16::new(1).unwrap());
+        let mut tasks = ConcurrentTask::new(NonZeroU16::new(4).unwrap());
 
         tasks.push(
             self.downloader.download_to_bucket(

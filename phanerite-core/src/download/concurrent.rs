@@ -1,6 +1,5 @@
 use crate::error::Result;
 use futures::stream::{FuturesUnordered, StreamExt};
-use std::num::NonZeroU16;
 use std::pin::Pin;
 
 pub struct ConcurrentTask<'a> {
@@ -9,10 +8,10 @@ pub struct ConcurrentTask<'a> {
 }
 
 impl<'a> ConcurrentTask<'a> {
-    pub fn new(max_concurrent: NonZeroU16) -> Self {
+    pub fn new(max_concurrent: usize) -> Self {
         Self {
             pending: Vec::new(),
-            max_concurrent: max_concurrent.get() as usize,
+            max_concurrent,
         }
     }
 

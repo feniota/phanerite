@@ -1,11 +1,10 @@
+use crate::download::concurrent::ConcurrentTask;
 use crate::download::task::DownloadTask;
 use crate::error::Error;
 use crate::storage::Storage;
-use crate::utils::Hash::Blake3;
 use crate::utils::Hasher;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use nyquest::AsyncClient;
-use serde_json::to_string;
 use std::num::NonZeroU8;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -101,5 +100,16 @@ impl Downloader {
         }
 
         Err(Error::Other("download failed after retries".to_string()))
+    }
+    pub async fn download_concurrent(
+        &self,
+        tasks: impl Iterator<Item = DownloadTask>,
+    ) -> crate::error::Result<()> {
+        let mut executor = ConcurrentTask::new(self.concurrent);
+        tasks.for_each(|x| executor.push(self.download(x)));
+
+        executor.exec().await?;
+
+        Ok(())
     }
 }

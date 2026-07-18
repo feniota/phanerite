@@ -1,5 +1,5 @@
-use crate::download::Downloadable;
 use crate::download::vanilla::version_info::Rule;
+use crate::download::{DownloadHandle, Downloadable};
 use crate::error::{Error, Result};
 use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
 use crate::storage::Storage;
@@ -7,6 +7,7 @@ use crate::utils::{HashValue, Sha1};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::{debug, instrument};
 
 /// Library
 #[derive(Deserialize, Serialize)]
@@ -53,11 +54,12 @@ pub struct Extract {
 impl Downloadable for Library {
     type HashAlgorithm = Sha1;
 
+    #[instrument(skip_all)]
     async fn download(
         self,
         http_client: &impl HttpClient,
         storage: &Storage<impl FileSystem>,
-    ) -> Result<(impl AsyncFile, Option<Self::HashAlgorithm>, PathBuf)> {
+    ) -> Result<DownloadHandle<impl AsyncFile, Self::HashAlgorithm>> {
         if let Some(download) = self.downloads {
             if let Some(artifact) = download.artifact {
                 let request = HttpRequest {
@@ -67,14 +69,14 @@ impl Downloadable for Library {
                     body: None,
                 };
                 let response = http_client.execute_streaming(request).await?;
-                if response.status < 200 || response.status >= 300 {
-                    return Err(Error::Http(response.status));
-                }
-                return Ok((
-                    response.body,
-                    Some(artifact.sha1),
-                    storage.libraries_dir.join(artifact.path),
-                ));
+                response.ok()?;
+                return Ok(DownloadHandle {
+                    name: response.filename(),
+                    size: response.size(),
+                    stream: response.body,
+                    path: storage.libraries_dir.join(artifact.path),
+                    digest: Some(artifact.sha1),
+                });
             }
         }
 

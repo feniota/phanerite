@@ -1,7 +1,7 @@
-use crate::download::Downloadable;
 use crate::download::vanilla::assets::AssetIndex;
 use crate::download::vanilla::libraries::Library;
 use crate::download::vanilla::version_index::{Version, VersionType};
+use crate::download::{DownloadHandle, Downloadable};
 use crate::error::{Error, Result};
 use crate::io::utils::{AsyncFileExt, Hasher};
 use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
@@ -11,6 +11,7 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::{debug, instrument};
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -130,7 +131,9 @@ pub struct LoggingFile {
 }
 
 impl VersionInfo {
+    #[instrument(skip(http_client))]
     pub async fn fetch(version: &Version, http_client: &impl HttpClient) -> Result<Self> {
+        debug!(url = %version.url, "fetching version info");
         let request = HttpRequest {
             method: Method::Get,
             url: &version.url,
@@ -140,9 +143,7 @@ impl VersionInfo {
 
         let response = http_client.execute(request).await?;
 
-        if response.status < 200 || response.status >= 300 {
-            return Err(Error::Http(response.status));
-        }
+        response.ok()?;
 
         let body = response.body.read_all().await?;
 
@@ -164,6 +165,7 @@ impl VersionInfo {
         let json = serde_json::from_slice(&file).map_err(|e| Error::Other(e.to_string()))?;
         Ok(json)
     }
+    #[instrument(skip(self))]
     pub fn get_client(&self, path: PathBuf) -> Result<ClientDownload> {
         if let Some(client) = &self.downloads.client {
             Ok(ClientDownload {
@@ -177,6 +179,7 @@ impl VersionInfo {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientDownload {
     pub url: String,
     pub sha1: Sha1,
@@ -186,11 +189,13 @@ pub struct ClientDownload {
 impl Downloadable for ClientDownload {
     type HashAlgorithm = Sha1;
 
+    #[instrument(skip(http_client, _storage))]
     async fn download(
         self,
         http_client: &impl HttpClient,
-        storage: &Storage<impl FileSystem>,
-    ) -> Result<(impl AsyncFile, Option<Self::HashAlgorithm>, PathBuf)> {
+        _storage: &Storage<impl FileSystem>,
+    ) -> Result<DownloadHandle<impl AsyncFile, Self::HashAlgorithm>> {
+        debug!("downloading client");
         let request = HttpRequest {
             method: Method::Get,
             url: &self.url,
@@ -198,10 +203,13 @@ impl Downloadable for ClientDownload {
             body: None,
         };
         let response = http_client.execute_streaming(request).await?;
-        if response.status < 200 || response.status >= 300 {
-            Err(Error::Http(response.status))
-        } else {
-            Ok((response.body, Some(self.sha1), self.path))
-        }
+        response.ok()?;
+        Ok(DownloadHandle {
+            name: response.filename(),
+            size: response.size(),
+            stream: response.body,
+            path: self.path,
+            digest: Some(self.sha1),
+        })
     }
 }

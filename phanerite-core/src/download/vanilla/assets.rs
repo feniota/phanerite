@@ -1,4 +1,4 @@
-use crate::download::Downloadable;
+use crate::download::{DownloadHandle, Downloadable};
 use crate::error::{Error, Result};
 use crate::io::utils::{AsyncFileExt, Hasher};
 use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
@@ -6,12 +6,13 @@ use crate::storage::Storage;
 use crate::utils::{HashValue, Sha1};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use tracing::instrument;
 
 const RESOURCES_URL: &str = "https://resources.download.minecraft.net";
 
 /// 资源索引
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetIndex {
     pub id: String,
@@ -21,7 +22,7 @@ pub struct AssetIndex {
     pub url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AssetIndexList {
     pub objects: BTreeMap<String, AssetObject>,
 
@@ -29,7 +30,7 @@ pub struct AssetIndexList {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AssetObject {
     hash: Sha1,
     size: usize,
@@ -48,6 +49,7 @@ pub struct DownloadObject {
 }
 
 impl AssetIndexList {
+    #[instrument(skip(http_client))]
     pub async fn fetch(asset_index: &AssetIndex, http_client: &impl HttpClient) -> Result<Self> {
         let request = HttpRequest {
             method: Method::Get,
@@ -58,9 +60,7 @@ impl AssetIndexList {
 
         let response = http_client.execute(request).await?;
 
-        if response.status < 200 || response.status >= 300 {
-            return Err(Error::Http(response.status));
-        }
+        response.ok()?;
 
         let body = response.body.read_all().await?;
 
@@ -96,7 +96,7 @@ impl Downloadable for DownloadObject {
         self,
         http_client: &impl HttpClient,
         storage: &Storage<impl FileSystem>,
-    ) -> Result<(impl AsyncFile, Option<Self::HashAlgorithm>, PathBuf)> {
+    ) -> Result<DownloadHandle<impl AsyncFile, Self::HashAlgorithm>> {
         let request = HttpRequest {
             method: Method::Get,
             url: &self.url,
@@ -104,13 +104,13 @@ impl Downloadable for DownloadObject {
             body: None,
         };
         let response = http_client.execute_streaming(request).await?;
-        if response.status < 200 || response.status >= 300 {
-            return Err(Error::Http(response.status));
-        }
-        Ok((
-            response.body,
-            Some(self.sha1),
-            storage.assets_dir.join(self.path),
-        ))
+        response.ok()?;
+        Ok(DownloadHandle {
+            name: response.filename(),
+            size: response.size(),
+            stream: response.body,
+            path: storage.assets_dir.join(self.path),
+            digest: Some(self.sha1),
+        })
     }
 }

@@ -4,8 +4,12 @@ use crate::io::utils::Hasher;
 ///
 /// Concrete implementations: [`Sha1`], [`Blake3`].
 pub trait HashValue: std::fmt::Display + std::fmt::Debug + Clone + PartialEq + Eq {
+    /// Raw bytes of the digest.
     fn as_bytes(&self) -> &[u8];
+    /// Parse from a lowercase hex string.
     fn from_hex(hex: impl AsRef<str>) -> Self;
+    /// Create a streaming hasher that accumulates data and produces
+    /// this hash type.
     fn hasher() -> impl Hasher;
 }
 

@@ -10,6 +10,7 @@ use std::io::Read;
 
 use crate::error::Error;
 use crate::io::{HttpClient, HttpRequest, HttpResponse, InMemoryBody, Method, Result};
+use tracing::trace;
 
 /// An [`HttpClient`] backed by a [`ureq::Agent`].
 pub struct UreqClient {
@@ -48,6 +49,7 @@ impl HttpClient for UreqClient {
             .map_err(|e| Error::Other(e.to_string()))?;
 
         let status = resp.status().as_u16();
+        trace!(%status, method = %request.method.as_str(), url = request.url, "request");
 
         let headers: BTreeMap<_, _> = resp
             .headers()
@@ -65,6 +67,7 @@ impl HttpClient for UreqClient {
             .as_reader()
             .read_to_end(&mut body)
             .map_err(|e| Error::Other(e.to_string()))?;
+        trace!(body_len = body.len(), "body read");
 
         Ok(HttpResponse {
             status,

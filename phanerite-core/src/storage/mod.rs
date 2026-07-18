@@ -1,9 +1,28 @@
-use crate::error::{Error, Result};
-use crate::io::utils::{AsyncFileExt, Hasher};
-use crate::io::{AsyncFile, FileSystem};
-use crate::utils::HashValue;
-use std::path::{Path, PathBuf};
+//! Content-addressed storage layer.
+//!
+//! [`Storage`] manages a directory tree for deduplicated asset
+//! storage: downloads land in `cache/`, are renamed into `share/`
+//! under their Blake3 hash, and hard-linked or symlinked to their
+//! final paths.
 
+use crate::error::Result;
+use crate::io::FileSystem;
+use std::path::{Path, PathBuf};
+use tracing::{debug, instrument};
+
+/// Content-addressed file store.
+///
+/// Manages a directory layout:
+///
+/// ```text
+/// {root}/
+///   data/
+///     cache/      ← temp download files
+///     share/      ← blake3-named deduplicated blobs
+///     libraries/  ← library JARs
+///     assets/     ← game assets
+///   version/      ← per-version JSON + client JAR symlinks
+/// ```
 pub struct Storage<F: FileSystem> {
     pub fs: F,
     pub root_dir: PathBuf,
@@ -15,10 +34,12 @@ pub struct Storage<F: FileSystem> {
 }
 
 impl<F: FileSystem> Storage<F> {
+    #[instrument(skip(fs))]
     pub async fn new(root: &Path, fs: F) -> Result<Self> {
-        let root_dir = root.join("data");
+        debug!("creating storage dirs");
+        let root_dir = root.to_owned();
         let cache_dir = root_dir.join("cache");
-        let versions_dir = root.join("version");
+        let versions_dir = root_dir.join("version");
         let share_dir = root_dir.join("share");
         let libraries_dir = root_dir.join("libraries");
         let assets_dir = root_dir.join("assets");

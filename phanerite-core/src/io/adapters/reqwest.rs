@@ -8,6 +8,7 @@ use crate::io::{
     AsyncChunkReader, Error, HttpClient, HttpRequest, HttpResponse, InMemoryBody, Method, Result,
     StreamingBody,
 };
+use tracing::trace;
 
 /// An [`HttpClient`] that delegates to a [`reqwest::Client`].
 pub struct ReqwestClient {
@@ -82,8 +83,9 @@ impl ReqwestClient {
         let resp = req
             .send()
             .await
-            .map_err(|_| Error::other("request failed"))?;
+            .map_err(|e| Error::other(format!("request failed: {e}")))?;
         let status = resp.status().as_u16();
+        trace!(%status, method = %request.method.as_str(), url = %request.url, "request");
         let headers = resp
             .headers()
             .iter()
@@ -126,8 +128,14 @@ pub struct ReqwestChunkReader {
 impl AsyncChunkReader for ReqwestChunkReader {
     async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>> {
         match self.resp.chunk().await {
-            Ok(Some(c)) => Ok(Some(c.to_vec())),
-            Ok(None) => Ok(None),
+            Ok(Some(c)) => {
+                trace!(len = c.len(), "chunk");
+                Ok(Some(c.to_vec()))
+            }
+            Ok(None) => {
+                trace!("chunk eof");
+                Ok(None)
+            }
             Err(_) => Err(Error::other("chunk read failed")),
         }
     }

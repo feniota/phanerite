@@ -6,6 +6,7 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::slice::Iter;
 use std::vec::IntoIter;
+use tracing::{debug, instrument};
 
 const VERSION_INDEX_URL: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
 
@@ -44,7 +45,9 @@ pub enum VersionType {
 }
 
 impl VersionIndex {
+    #[instrument(skip(http_client))]
     pub async fn fetch(http_client: &impl HttpClient) -> Result<Self> {
+        debug!("fetching version index");
         let request = HttpRequest {
             method: Method::Get,
             url: VERSION_INDEX_URL,
@@ -54,12 +57,11 @@ impl VersionIndex {
 
         let response = http_client.execute(request).await?;
 
-        if response.status < 200 || response.status >= 300 {
-            return Err(Error::Http(response.status));
-        }
+        response.ok()?;
 
         let body = response.body.read_all().await?;
-        let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
+        let json: Self = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
+        debug!("fetched {} versions", json.versions.len());
         Ok(json)
     }
     pub fn iter(&self) -> Iter<'_, Version> {

@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use crate::io::{Error, HttpClient, HttpRequest, HttpResponse, InMemoryBody, Method, Result};
 use nyquest::AsyncClient;
 use nyquest::r#async::{Body, Request};
+use tracing::{trace, warn};
 
 /// An [`HttpClient`] that delegates to a [`nyquest::AsyncClient`].
 pub struct NyquestClient {
@@ -48,33 +49,48 @@ impl HttpClient for NyquestClient {
 impl NyquestClient {
     async fn do_execute(&self, request: HttpRequest<'_>) -> Result<HttpResponse<InMemoryBody>> {
         let method = convert_method(&request.method);
-        let mut req = Request::new(method, request.url.to_owned());
+        let url = request.url.to_owned();
+        let headers = request.headers.clone();
+        let body = request.body.clone();
 
-        for (k, v) in &request.headers {
-            req = req.with_header(k.clone(), v.clone());
+        for attempt in 0..3 {
+            let mut req = Request::new(method.clone(), url.clone());
+            for (k, v) in &headers {
+                req = req.with_header(k.clone(), v.clone());
+            }
+            if let Some(b) = &body {
+                req = req.with_body(Body::binary_bytes(b.clone()));
+            }
+
+            let resp = match self.inner.request(req).await {
+                Ok(r) => r,
+                Err(e) if attempt < 2 => {
+                    warn!(attempt, %e, "request failed, retrying");
+                    continue;
+                }
+                Err(e) => return Err(Error::other(format!("request failed: {e}"))),
+            };
+
+            let status = resp.status().code();
+            trace!(%status, method = %request.method.as_str(), url = %request.url, "request");
+
+            let bytes = match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) if attempt < 2 => {
+                    warn!(attempt, %e, "read body failed, retrying");
+                    continue;
+                }
+                Err(e) => return Err(Error::other(format!("read body failed: {e}"))),
+            };
+            trace!(body_len = bytes.len(), "body read");
+
+            return Ok(HttpResponse {
+                status,
+                headers: BTreeMap::new(),
+                body: InMemoryBody::new(bytes),
+            });
         }
-
-        if let Some(body) = &request.body {
-            req = req.with_body(Body::binary_bytes(body.clone()));
-        }
-
-        let resp = self
-            .inner
-            .request(req)
-            .await
-            .map_err(|_| Error::other("request failed"))?;
-
-        let status = resp.status().code();
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|_| Error::other("read body failed"))?;
-
-        Ok(HttpResponse {
-            status,
-            headers: BTreeMap::new(), // nyquest doesn't expose a full header iterator
-            body: InMemoryBody::new(bytes),
-        })
+        unreachable!()
     }
 }
 

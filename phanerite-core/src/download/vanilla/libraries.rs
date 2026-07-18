@@ -1,7 +1,29 @@
+use crate::download::task::DownloadTask;
 use crate::download::vanilla::version_info::Rule;
+use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+impl Library {
+    pub fn into_task(self, storage: &Storage) -> Option<DownloadTask> {
+        if let Some(d) = self.downloads
+            && let Some(a) = d.artifact
+        {
+            Some(
+                DownloadTask::builder()
+                    .url(a.url)
+                    .to_library(a.path.as_ref(), storage)
+                    .file_name(self.name)
+                    .file_size(a.size)
+                    .hash(a.sha1)
+                    .build(),
+            )
+        } else {
+            None
+        }
+    }
+}
 
 /// Library
 #[derive(Deserialize, Serialize)]

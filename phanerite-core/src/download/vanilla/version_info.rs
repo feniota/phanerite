@@ -1,10 +1,66 @@
-use crate::download::vanilla::assets::AssetIndex;
+use crate::download::downloader::Downloader;
+use crate::download::task::DownloadTask;
+use crate::download::vanilla::assets::{AssetIndex, AssetIndexList};
 use crate::download::vanilla::libraries::Library;
-use crate::download::vanilla::version_index::VersionType;
+use crate::download::vanilla::version_index::{Version, VersionType};
+use crate::error::{Error, Result};
+use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::ops::Add;
+use std::path::PathBuf;
+
+impl VersionInfo {
+    pub async fn get(version: &Version, downloader: &Downloader) -> Result<Self> {
+        let body = downloader
+            .fetch(version.url.clone(), Some(version.sha1.clone().into()))
+            .await?;
+        let json = serde_json::from_slice(&body)?;
+        Ok(json)
+    }
+    pub async fn build_all_task(
+        self,
+        client_path: PathBuf,
+        storage: &Storage,
+        downloader: &Downloader,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let client = self.build_client_task(client_path, storage);
+
+        let assets_list = AssetIndexList::get(&self.asset_index, downloader).await?;
+        let assets = assets_list.build_assets_task(storage);
+
+        let library = self.build_libraries_task(storage);
+
+        let chain = if let Some(c) = client {
+            library.chain(assets).chain(std::iter::once(c))
+        } else {
+            return Err(Error::Other("No downloadable client".to_string()));
+        };
+
+        Ok(chain)
+    }
+    pub fn build_libraries_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
+        self.libraries
+            .into_iter()
+            .filter_map(|x| x.into_task(storage))
+    }
+    pub fn build_client_task(&self, path: PathBuf, storage: &Storage) -> Option<DownloadTask> {
+        match &self.downloads.client {
+            None => None,
+            Some(c) => Some(
+                DownloadTask::builder()
+                    .url(c.url.clone())
+                    .to_path(path, storage)
+                    .file_name(self.id.clone().add(".jar"))
+                    .file_size(c.size)
+                    .hash(c.sha1.clone())
+                    .build(),
+            ),
+        }
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

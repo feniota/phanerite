@@ -36,9 +36,9 @@ struct DownloadProcessInner {
     total: OnceLock<u64>,
 }
 
-impl DownloadTaskBuilder {
-    pub fn new() -> Self {
-        Self {
+impl DownloadTask {
+    pub fn builder() -> DownloadTaskBuilder {
+        DownloadTaskBuilder {
             url: None,
             target: None,
             bucket: None,
@@ -47,6 +47,9 @@ impl DownloadTaskBuilder {
             file_hash: Hash::Empty(EmptyHash),
         }
     }
+}
+
+impl DownloadTaskBuilder {
     pub fn url(mut self, url: impl Into<String>) -> Self {
         self.url = Some(url.into());
         self
@@ -135,4 +138,10 @@ impl DownloadProcess {
     pub fn is_canceled(&self) -> bool {
         self.inner.cancelled.load(Acquire)
     }
+}
+
+pub fn filter_existed(
+    tasks: impl Iterator<Item = DownloadTask>,
+) -> impl Iterator<Item = DownloadTask> {
+    tasks.filter(|x| !x.target.exists())
 }

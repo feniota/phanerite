@@ -1,12 +1,15 @@
 use crate::download::concurrent::ConcurrentTask;
 use crate::download::task::DownloadTask;
 use crate::error::Error;
+use crate::error::Result;
 use crate::storage::Storage;
-use crate::utils::Hasher;
+use crate::utils::{Hash, Hasher};
 use futures::{AsyncReadExt, AsyncWriteExt};
 use nyquest::AsyncClient;
+use std::borrow::Cow;
 use std::num::NonZeroU8;
 use std::path::PathBuf;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 pub struct Downloader {
@@ -18,7 +21,8 @@ pub struct Downloader {
 }
 
 impl Downloader {
-    pub async fn new(storage: &Storage) -> nyquest::Result<Self> {
+    /// 构建默认下载器
+    pub async fn new(storage: &Storage) -> Result<Self> {
         Ok(Self {
             retries: 3,
             concurrent: 4,
@@ -29,17 +33,52 @@ impl Downloader {
             cache: storage.cache_dir.clone(),
         })
     }
+    /// 设置重试次数
     pub fn retries(mut self, retries: usize) -> Self {
         self.retries = retries;
         self
     }
+    /// 设置并发数
     pub fn concurrent(mut self, max: NonZeroU8) -> Self {
         self.concurrent = max.get() as usize;
         self
     }
+    /// 设置下载缓存
+    pub fn buffer(mut self, buffer: usize) -> Self {
+        self.buffer_per_thread = buffer;
+        self
+    }
+    /// 下载到内存
+    pub async fn fetch(
+        &self,
+        url: impl Into<Cow<'static, str>>,
+        hash: Option<Hash>,
+    ) -> Result<Vec<u8>> {
+        let url = url.into();
+        for _ in 0..self.retries {
+            let req = nyquest::Request::get(url.clone());
+            let res = self.client.request(req).await?.bytes().await?;
+            if let Some(h) = &hash {
+                let mut hasher = h.hasher();
+                hasher.update(&res);
+                let digest = hasher.finalize();
+                if digest != *h {
+                    error!("hash mismatch");
+                    continue;
+                }
+            }
+            return Ok(res);
+        }
+        Err(Error::Other("download failed after retries".to_string()))
+    }
+    /// 下载文件到储存
     // 允许不可到达代码（用于条件编译）
     #[allow(unreachable_code)]
-    pub async fn download(&self, task: DownloadTask) -> crate::error::Result<()> {
+    pub async fn download(&self, task: DownloadTask) -> Result<()> {
+        debug!(
+            "downloading: {}",
+            task.process.name().unwrap_or("unknown filename")
+        );
         let cache = self.cache.join(Uuid::now_v7().to_string());
         for _ in 0..self.retries {
             // 构造和发送请求
@@ -81,6 +120,7 @@ impl Downloader {
             // 校验文件
             if task.file_hash != hasher.finalize() {
                 async_fs::remove_file(&cache).await?;
+                error!("hash mismatch");
                 continue;
             }
 
@@ -125,10 +165,11 @@ impl Downloader {
         let _ = async_fs::remove_file(&cache).await;
         Err(Error::Other("download failed after retries".to_string()))
     }
+    /// 并发下载文件到储存
     pub async fn download_concurrent(
         &self,
         tasks: impl Iterator<Item = DownloadTask>,
-    ) -> crate::error::Result<()> {
+    ) -> Result<()> {
         let mut executor = ConcurrentTask::new(self.concurrent);
         tasks.for_each(|x| executor.push(self.download(x)));
 

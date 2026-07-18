@@ -1,109 +1,244 @@
-use crate::io::utils::Hasher;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+// =======================
+// Hash Value
+// =======================
 
-/// Content-addressable hash value.
-///
-/// Concrete implementations: [`Sha1`], [`Blake3`].
-pub trait HashValue: std::fmt::Display + std::fmt::Debug + Clone + PartialEq + Eq {
-    /// Raw bytes of the digest.
-    fn as_bytes(&self) -> &[u8];
-    /// Parse from a lowercase hex string.
-    fn from_hex(hex: impl AsRef<str>) -> Self;
-    /// Create a streaming hasher that accumulates data and produces
-    /// this hash type.
-    fn hasher() -> impl Hasher;
-}
+pub trait HashValue:
+    AsRef<[u8]>
+    + Clone
+    + Eq
+    + Send
+    + Sync
+    + fmt::Debug
+    + Serialize
+    + for<'de> Deserialize<'de>
+    + Into<Hash>
+{
+    const NAME: &'static str;
 
-/// SHA-1 hash (20 bytes).
-#[derive(Clone, PartialEq, Eq)]
-pub struct Sha1(pub(crate) [u8; 20]);
+    type Algorithm: HashAlgorithm<Value = Self>;
 
-impl HashValue for Sha1 {
-    fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    fn from_hex(hex: impl AsRef<str>) -> Self {
-        let bytes = hex::decode(hex.as_ref()).expect("invalid hex");
-        assert_eq!(bytes.len(), 20);
-        let mut arr = [0u8; 20];
-        arr.copy_from_slice(&bytes);
-        Sha1(arr)
-    }
-    fn hasher() -> impl Hasher {
-        sha1::Sha1::default()
+    fn from_bytes(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
+
+    fn hasher() -> <Self::Algorithm as HashAlgorithm>::Hasher {
+        Self::Algorithm::create()
     }
 }
 
-impl Sha1 {
-    pub fn from_bytes(bytes: [u8; 20]) -> Self {
-        Sha1(bytes)
+// =======================
+// Hash Enum
+// =======================
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "algorithm", content = "value")]
+pub enum Hash {
+    Blake3(Blake3Hash),
+    Sha1(Sha1Hash),
+}
+
+impl Hash {
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Blake3(v) => v.as_ref(),
+            Self::Sha1(v) => v.as_ref(),
+        }
+    }
+
+    pub fn algorithm(&self) -> &'static str {
+        match self {
+            Self::Blake3(_) => Blake3Hash::NAME,
+            Self::Sha1(_) => Sha1Hash::NAME,
+        }
     }
 }
 
-/// BLAKE3 hash (32 bytes).
-#[derive(Clone, PartialEq, Eq)]
-pub struct Blake3(pub(crate) [u8; 32]);
+// =======================
+// Hasher
+// =======================
 
-impl HashValue for Blake3 {
-    fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    fn from_hex(hex: impl AsRef<str>) -> Self {
-        let bytes = hex::decode(hex.as_ref()).expect("invalid hex");
-        assert_eq!(bytes.len(), 32);
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        Blake3(arr)
-    }
-    fn hasher() -> impl Hasher {
-        blake3::Hasher::new()
-    }
+pub trait Hasher {
+    type Value: HashValue;
+
+    fn update(&mut self, data: &[u8]);
+
+    fn finalize(self) -> Self::Value;
 }
 
-impl Blake3 {
-    pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        Blake3(bytes)
-    }
+// =======================
+// Algorithm
+// =======================
+
+pub trait HashAlgorithm {
+    const NAME: &'static str;
+
+    type Value: HashValue;
+
+    type Hasher: Hasher<Value = Self::Value>;
+
+    fn create() -> Self::Hasher;
 }
 
-macro_rules! impl_hash_serde {
-    ($ty:ty) => {
-        impl serde::Serialize for $ty {
+// =======================
+// HashValue Macro
+// =======================
+
+macro_rules! impl_hash_value {
+    (
+        $name:ident,
+        $size:expr,
+        $algo:literal,
+        $algorithm:ty,
+        $variant:ident
+    ) => {
+        #[derive(Clone, Eq, PartialEq)]
+        pub struct $name(pub(crate) [u8; $size]);
+
+        impl AsRef<[u8]> for $name {
+            fn as_ref(&self) -> &[u8] {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}:{}", Self::NAME, hex::encode(self.0))
+            }
+        }
+
+        impl HashValue for $name {
+            const NAME: &'static str = $algo;
+
+            type Algorithm = $algorithm;
+
+            fn from_bytes(bytes: &[u8]) -> Option<Self> {
+                if bytes.len() != $size {
+                    return None;
+                }
+
+                let mut value = [0u8; $size];
+
+                value.copy_from_slice(bytes);
+
+                Some(Self(value))
+            }
+        }
+
+        impl Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,
             {
-                serializer.serialize_str(&self.to_string())
+                serializer.serialize_str(&hex::encode(self.0))
             }
         }
-        impl<'de> serde::Deserialize<'de> for $ty {
+
+        impl<'de> Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
                 D: serde::Deserializer<'de>,
             {
-                let hex: String = String::deserialize(deserializer)?;
-                Ok(HashValue::from_hex(hex))
-            }
-        }
-    };
-}
-impl_hash_serde!(Sha1);
-impl_hash_serde!(Blake3);
+                let value = String::deserialize(deserializer)?;
 
-macro_rules! impl_hash_fmt {
-    ($ty:ty) => {
-        impl std::fmt::Debug for $ty {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_tuple(stringify!($ty))
-                    .field(&hex::encode(self.as_bytes()))
-                    .finish()
+                let bytes = hex::decode(value).map_err(serde::de::Error::custom)?;
+
+                Self::from_bytes(&bytes)
+                    .ok_or_else(|| serde::de::Error::custom("invalid hash length"))
             }
         }
-        impl std::fmt::Display for $ty {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&hex::encode(self.as_bytes()))
+
+        impl PartialEq<str> for $name {
+            fn eq(&self, other: &str) -> bool {
+                hex::encode(self.0).eq_ignore_ascii_case(other)
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.eq(*other)
+            }
+        }
+
+        impl From<$name> for Hash {
+            fn from(value: $name) -> Self {
+                Hash::$variant(value)
             }
         }
     };
 }
-impl_hash_fmt!(Sha1);
-impl_hash_fmt!(Blake3);
+
+// =======================
+// Algorithms
+// =======================
+
+pub struct Blake3Algorithm;
+
+pub struct Sha1Algorithm;
+
+// =======================
+// Hash Types
+// =======================
+
+impl_hash_value!(Blake3Hash, 32, "blake3", Blake3Algorithm, Blake3);
+
+impl_hash_value!(Sha1Hash, 20, "sha1", Sha1Algorithm, Sha1);
+
+// =======================
+// Blake3
+// =======================
+
+impl HashAlgorithm for Blake3Algorithm {
+    const NAME: &'static str = "blake3";
+
+    type Value = Blake3Hash;
+
+    type Hasher = blake3::Hasher;
+
+    fn create() -> Self::Hasher {
+        blake3::Hasher::new()
+    }
+}
+
+impl Hasher for blake3::Hasher {
+    type Value = Blake3Hash;
+
+    fn update(&mut self, data: &[u8]) {
+        blake3::Hasher::update(self, data);
+    }
+
+    fn finalize(self) -> Self::Value {
+        Blake3Hash(self.finalize().0)
+    }
+}
+
+// =======================
+// Sha1
+// =======================
+
+use sha1::{Digest, Sha1};
+
+impl HashAlgorithm for Sha1Algorithm {
+    const NAME: &'static str = "sha1";
+
+    type Value = Sha1Hash;
+
+    type Hasher = Sha1;
+
+    fn create() -> Self::Hasher {
+        Sha1::new()
+    }
+}
+
+impl Hasher for Sha1 {
+    type Value = Sha1Hash;
+
+    fn update(&mut self, data: &[u8]) {
+        Digest::update(self, data);
+    }
+
+    fn finalize(self) -> Self::Value {
+        Sha1Hash(Digest::finalize(self).into())
+    }
+}

@@ -1,17 +1,10 @@
 use crate::download::vanilla::assets::AssetIndex;
 use crate::download::vanilla::libraries::Library;
-use crate::download::vanilla::version_index::{Version, VersionType};
-use crate::download::{DownloadHandle, Downloadable};
-use crate::error::{Error, Result};
-use crate::io::utils::{AsyncFileExt, Hasher};
-use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
-use crate::storage::Storage;
-use crate::utils::{HashValue, Sha1};
+use crate::download::vanilla::version_index::VersionType;
+use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use tracing::{debug, instrument};
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,7 +86,7 @@ pub struct Downloads {
 
 #[derive(Deserialize, Serialize)]
 pub struct Download {
-    pub sha1: Sha1,
+    pub sha1: Sha1Hash,
     pub size: u64,
     pub url: String,
 }
@@ -123,93 +116,9 @@ pub struct LoggingClient {
 pub struct LoggingFile {
     pub id: String,
 
-    pub sha1: Sha1,
+    pub sha1: Sha1Hash,
 
     pub size: u64,
 
     pub url: String,
-}
-
-impl VersionInfo {
-    #[instrument(skip(http_client))]
-    pub async fn fetch(version: &Version, http_client: &impl HttpClient) -> Result<Self> {
-        debug!(url = %version.url, "fetching version info");
-        let request = HttpRequest {
-            method: Method::Get,
-            url: &version.url,
-            headers: Default::default(),
-            body: None,
-        };
-
-        let response = http_client.execute(request).await?;
-
-        response.ok()?;
-
-        let body = response.body.read_all().await?;
-
-        let hash = {
-            let mut hasher = sha1::Sha1::default();
-            hasher.update(&body);
-            hasher.finalize_hex()
-        };
-
-        if Sha1::from_hex(hash) != version.sha1 {
-            return Err(Error::Other("hash mismatch".to_string()));
-        }
-
-        let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
-        Ok(json)
-    }
-    pub async fn local(path: &Path, fs: &impl FileSystem) -> Result<Self> {
-        let file = fs.open(path).await?.read_all().await?;
-        let json = serde_json::from_slice(&file).map_err(|e| Error::Other(e.to_string()))?;
-        Ok(json)
-    }
-    #[instrument(skip(self))]
-    pub fn get_client(&self, path: PathBuf) -> Result<ClientDownload> {
-        if let Some(client) = &self.downloads.client {
-            Ok(ClientDownload {
-                url: client.url.to_string(),
-                sha1: client.sha1.clone(),
-                path,
-            })
-        } else {
-            Err(Error::Other("No download link".to_string()))
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ClientDownload {
-    pub url: String,
-    pub sha1: Sha1,
-    pub path: PathBuf,
-}
-
-impl Downloadable for ClientDownload {
-    type HashAlgorithm = Sha1;
-
-    #[instrument(skip(http_client, _storage))]
-    async fn download(
-        self,
-        http_client: &impl HttpClient,
-        _storage: &Storage<impl FileSystem>,
-    ) -> Result<DownloadHandle<impl AsyncFile, Self::HashAlgorithm>> {
-        debug!("downloading client");
-        let request = HttpRequest {
-            method: Method::Get,
-            url: &self.url,
-            headers: Default::default(),
-            body: None,
-        };
-        let response = http_client.execute_streaming(request).await?;
-        response.ok()?;
-        Ok(DownloadHandle {
-            name: response.filename(),
-            size: response.size(),
-            stream: response.body,
-            path: self.path,
-            digest: Some(self.sha1),
-        })
-    }
 }

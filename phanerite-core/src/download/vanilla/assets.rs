@@ -1,13 +1,7 @@
-use crate::download::{DownloadHandle, Downloadable};
-use crate::error::{Error, Result};
-use crate::io::utils::{AsyncFileExt, Hasher};
-use crate::io::{AsyncFile, FileSystem, HttpClient, HttpRequest, Method};
-use crate::storage::Storage;
-use crate::utils::{HashValue, Sha1};
+use crate::utils::Sha1Hash;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use tracing::instrument;
 
 const RESOURCES_URL: &str = "https://resources.download.minecraft.net";
 
@@ -16,7 +10,7 @@ const RESOURCES_URL: &str = "https://resources.download.minecraft.net";
 #[serde(rename_all = "camelCase")]
 pub struct AssetIndex {
     pub id: String,
-    pub sha1: Sha1,
+    pub sha1: Sha1Hash,
     pub size: u64,
     pub total_size: Option<u64>,
     pub url: String,
@@ -32,7 +26,7 @@ pub struct AssetIndexList {
 
 #[derive(Deserialize, Serialize)]
 pub struct AssetObject {
-    hash: Sha1,
+    hash: Sha1Hash,
     size: usize,
 }
 
@@ -44,73 +38,6 @@ impl AssetIndex {
 
 pub struct DownloadObject {
     pub url: String,
-    pub sha1: Sha1,
+    pub sha1: Sha1Hash,
     pub path: PathBuf,
-}
-
-impl AssetIndexList {
-    #[instrument(skip(http_client))]
-    pub async fn fetch(asset_index: &AssetIndex, http_client: &impl HttpClient) -> Result<Self> {
-        let request = HttpRequest {
-            method: Method::Get,
-            url: &asset_index.url,
-            headers: Default::default(),
-            body: None,
-        };
-
-        let response = http_client.execute(request).await?;
-
-        response.ok()?;
-
-        let body = response.body.read_all().await?;
-
-        let hash = {
-            let mut hasher = sha1::Sha1::default();
-            hasher.update(&body);
-            hasher.finalize_hex()
-        };
-
-        if Sha1::from_hex(hash) != asset_index.sha1 {
-            return Err(Error::Other("hash mismatch".to_string()));
-        }
-
-        let json = serde_json::from_slice(&body).map_err(|e| Error::Other(e.to_string()))?;
-        Ok(json)
-    }
-    pub fn iter_downloadable(&self) -> impl Iterator<Item = DownloadObject> {
-        self.objects.iter().map(|x| {
-            let hash = x.1.hash.to_string();
-            DownloadObject {
-                url: format!("{}/{}/{}", RESOURCES_URL, &hash[..2], hash),
-                sha1: x.1.hash.clone(),
-                path: PathBuf::new().join("object").join(&hash[..2]).join(hash),
-            }
-        })
-    }
-}
-
-impl Downloadable for DownloadObject {
-    type HashAlgorithm = Sha1;
-
-    async fn download(
-        self,
-        http_client: &impl HttpClient,
-        storage: &Storage<impl FileSystem>,
-    ) -> Result<DownloadHandle<impl AsyncFile, Self::HashAlgorithm>> {
-        let request = HttpRequest {
-            method: Method::Get,
-            url: &self.url,
-            headers: Default::default(),
-            body: None,
-        };
-        let response = http_client.execute_streaming(request).await?;
-        response.ok()?;
-        Ok(DownloadHandle {
-            name: response.filename(),
-            size: response.size(),
-            stream: response.body,
-            path: storage.assets_dir.join(self.path),
-            digest: Some(self.sha1),
-        })
-    }
 }

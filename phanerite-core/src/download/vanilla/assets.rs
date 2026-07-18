@@ -58,7 +58,10 @@ pub struct AssetObject {
 
 impl AssetIndex {
     pub fn index_file_name(&self) -> &str {
-        self.url.split('/').last().expect("Incorrect URL format")
+        self.url
+            .split('/')
+            .next_back()
+            .expect("Incorrect URL format")
     }
 }
 

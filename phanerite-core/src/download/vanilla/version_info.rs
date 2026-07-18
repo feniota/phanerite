@@ -47,18 +47,15 @@ impl VersionInfo {
             .filter_map(|x| x.into_task(storage))
     }
     pub fn build_client_task(&self, path: PathBuf, storage: &Storage) -> Option<DownloadTask> {
-        match &self.downloads.client {
-            None => None,
-            Some(c) => Some(
-                DownloadTask::builder()
-                    .url(c.url.clone())
-                    .to_path(path, storage)
-                    .file_name(self.id.clone().add(".jar"))
-                    .file_size(c.size)
-                    .hash(c.sha1.clone())
-                    .build(),
-            ),
-        }
+        self.downloads.client.as_ref().map(|c| {
+            DownloadTask::builder()
+                .url(c.url.clone())
+                .to_path(path, storage)
+                .file_name(self.id.clone().add(".jar"))
+                .file_size(c.size)
+                .hash(c.sha1.clone())
+                .build()
+        })
     }
 }
 

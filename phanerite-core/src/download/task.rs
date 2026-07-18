@@ -1,25 +1,25 @@
 use crate::storage::Storage;
-use crate::utils::{Hash, HashValue};
+use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{Arc, OnceLock};
 
 pub struct DownloadTaskBuilder {
     url: Option<String>,
     target: Option<PathBuf>,
-    bucket: bool,
+    bucket: Option<PathBuf>,
     file_name: Option<String>,
     file_size: Option<u64>,
-    file_hash: Option<Hash>,
+    file_hash: Hash,
 }
 
 pub struct DownloadTask {
     pub(super) url: String,
     pub(super) target: PathBuf,
-    pub(super) bucket: bool,
-    pub(super) file_hash: Option<Hash>,
+    pub(super) bucket: Option<PathBuf>,
+    pub(super) file_hash: Hash,
 
     pub process: DownloadProcess,
 }
@@ -33,7 +33,7 @@ struct DownloadProcessInner {
     current: AtomicU64,
     cancelled: AtomicBool,
     event: Event,
-    total: Option<u64>,
+    total: OnceLock<u64>,
 }
 
 impl DownloadTaskBuilder {
@@ -41,10 +41,10 @@ impl DownloadTaskBuilder {
         Self {
             url: None,
             target: None,
-            bucket: false,
+            bucket: None,
             file_name: None,
             file_size: None,
-            file_hash: None,
+            file_hash: Hash::Empty(EmptyHash),
         }
     }
     pub fn url(mut self, url: impl Into<String>) -> Self {
@@ -59,9 +59,9 @@ impl DownloadTaskBuilder {
         self.target = Some(storage.libraries_dir.join(path));
         self
     }
-    pub fn to_path(mut self, path: PathBuf) -> Self {
+    pub fn to_path(mut self, path: PathBuf, storage: &Storage) -> Self {
         self.target = Some(path);
-        self.bucket = true;
+        self.bucket = Some(storage.share_dir.clone());
         self
     }
     pub fn file_name(mut self, name: impl Into<String>) -> Self {
@@ -73,7 +73,7 @@ impl DownloadTaskBuilder {
         self
     }
     pub fn hash<H: HashValue>(mut self, hash: H) -> Self {
-        self.file_hash = Some(hash.into());
+        self.file_hash = hash.into();
         self
     }
     pub fn build(self) -> DownloadTask {
@@ -91,7 +91,13 @@ impl DownloadTaskBuilder {
                     current: AtomicU64::new(0),
                     cancelled: AtomicBool::new(false),
                     event: Default::default(),
-                    total: self.file_size,
+                    total: if let Some(t) = self.file_size {
+                        let cell = OnceLock::new();
+                        cell.set(t).unwrap();
+                        cell
+                    } else {
+                        OnceLock::new()
+                    },
                 }),
             },
         }
@@ -103,7 +109,15 @@ impl DownloadProcess {
         self.inner.name.as_deref()
     }
     pub fn total(&self) -> Option<u64> {
-        self.inner.total
+        self.inner.total.get().copied()
+    }
+    pub fn set_total(&self, total: u64) -> bool {
+        if self.inner.total.set(total).is_ok() {
+            self.inner.event.notify(usize::MAX);
+            true
+        } else {
+            false
+        }
     }
     pub fn current(&self) -> u64 {
         self.inner.current.load(Relaxed)

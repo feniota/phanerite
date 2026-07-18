@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+
 // =======================
 // Hash Value
 // =======================
@@ -11,6 +12,7 @@ pub trait HashValue:
     + Send
     + Sync
     + fmt::Debug
+    + fmt::Display
     + Serialize
     + for<'de> Deserialize<'de>
     + Into<Hash>
@@ -35,6 +37,7 @@ pub trait HashValue:
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "algorithm", content = "value")]
 pub enum Hash {
+    Empty(EmptyHash),
     Blake3(Blake3Hash),
     Sha1(Sha1Hash),
 }
@@ -42,6 +45,7 @@ pub enum Hash {
 impl Hash {
     pub fn as_bytes(&self) -> &[u8] {
         match self {
+            Self::Empty(v) => v.as_ref(),
             Self::Blake3(v) => v.as_ref(),
             Self::Sha1(v) => v.as_ref(),
         }
@@ -49,8 +53,19 @@ impl Hash {
 
     pub fn algorithm(&self) -> &'static str {
         match self {
+            Self::Empty(_) => EmptyHash::NAME,
             Self::Blake3(_) => Blake3Hash::NAME,
             Self::Sha1(_) => Sha1Hash::NAME,
+        }
+    }
+
+    pub fn hasher(&self) -> HashHasher {
+        match self {
+            Self::Empty(_) => HashHasher::Empty(EmptyAlgorithm::create()),
+
+            Self::Blake3(_) => HashHasher::Blake3(Blake3Algorithm::create()),
+
+            Self::Sha1(_) => HashHasher::Sha1(Sha1Algorithm::create()),
         }
     }
 }
@@ -65,6 +80,34 @@ pub trait Hasher {
     fn update(&mut self, data: &[u8]);
 
     fn finalize(self) -> Self::Value;
+}
+
+// =======================
+// Runtime Hasher
+// =======================
+
+pub enum HashHasher {
+    Empty(EmptyHasher),
+    Blake3(blake3::Hasher),
+    Sha1(Sha1),
+}
+
+impl HashHasher {
+    pub fn update(&mut self, data: &[u8]) {
+        match self {
+            Self::Empty(v) => v.update(data),
+            Self::Blake3(v) => Hasher::update(v, data),
+            Self::Sha1(v) => Hasher::update(v, data),
+        }
+    }
+
+    pub fn finalize(self) -> Hash {
+        match self {
+            Self::Empty(v) => v.finalize().into(),
+            Self::Blake3(v) => Hasher::finalize(v).into(),
+            Self::Sha1(v) => Hasher::finalize(v).into(),
+        }
+    }
 }
 
 // =======================
@@ -105,6 +148,12 @@ macro_rules! impl_hash_value {
         impl fmt::Debug for $name {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{}:{}", Self::NAME, hex::encode(self.0))
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&hex::encode(self.0))
             }
         }
 
@@ -170,6 +219,108 @@ macro_rules! impl_hash_value {
 }
 
 // =======================
+// Empty Hash
+// =======================
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct EmptyHash;
+
+impl AsRef<[u8]> for EmptyHash {
+    fn as_ref(&self) -> &[u8] {
+        &[]
+    }
+}
+
+impl fmt::Debug for EmptyHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "empty")
+    }
+}
+
+impl fmt::Display for EmptyHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("empty")
+    }
+}
+
+impl Serialize for EmptyHash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_unit()
+    }
+}
+
+impl<'de> Deserialize<'de> for EmptyHash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        <()>::deserialize(deserializer)?;
+        Ok(Self)
+    }
+}
+
+impl PartialEq<str> for EmptyHash {
+    fn eq(&self, _: &str) -> bool {
+        true
+    }
+}
+
+impl PartialEq<&str> for EmptyHash {
+    fn eq(&self, _: &&str) -> bool {
+        true
+    }
+}
+
+impl HashValue for EmptyHash {
+    const NAME: &'static str = "empty";
+
+    type Algorithm = EmptyAlgorithm;
+
+    fn from_bytes(_: &[u8]) -> Option<Self> {
+        Some(Self)
+    }
+}
+
+impl From<EmptyHash> for Hash {
+    fn from(_: EmptyHash) -> Self {
+        Hash::Empty(EmptyHash)
+    }
+}
+
+// =======================
+// Empty Algorithm
+// =======================
+
+pub struct EmptyAlgorithm;
+
+pub struct EmptyHasher;
+
+impl HashAlgorithm for EmptyAlgorithm {
+    const NAME: &'static str = "empty";
+
+    type Value = EmptyHash;
+
+    type Hasher = EmptyHasher;
+
+    fn create() -> Self::Hasher {
+        EmptyHasher
+    }
+}
+
+impl Hasher for EmptyHasher {
+    type Value = EmptyHash;
+
+    fn update(&mut self, _: &[u8]) {}
+
+    fn finalize(self) -> Self::Value {
+        EmptyHash
+    }
+}
+
+// =======================
 // Algorithms
 // =======================
 
@@ -209,7 +360,7 @@ impl Hasher for blake3::Hasher {
     }
 
     fn finalize(self) -> Self::Value {
-        Blake3Hash(self.finalize().0)
+        Blake3Hash(*blake3::Hasher::finalize(&self).as_bytes())
     }
 }
 
@@ -235,10 +386,10 @@ impl Hasher for Sha1 {
     type Value = Sha1Hash;
 
     fn update(&mut self, data: &[u8]) {
-        Digest::update(self, data);
+        <Sha1 as Digest>::update(self, data);
     }
 
     fn finalize(self) -> Self::Value {
-        Sha1Hash(Digest::finalize(self).into())
+        Sha1Hash(<Sha1 as Digest>::finalize(self).into())
     }
 }

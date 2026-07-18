@@ -37,6 +37,8 @@ impl Downloader {
         self.concurrent = max.get() as usize;
         self
     }
+    // 允许不可到达代码（用于条件编译）
+    #[allow(unreachable_code)]
     pub async fn download(&self, task: DownloadTask) -> crate::error::Result<()> {
         let cache = self.cache.join(Uuid::now_v7().to_string());
         for _ in 0..self.retries {
@@ -82,7 +84,7 @@ impl Downloader {
                 continue;
             }
 
-            // 保存位置
+            // 确定保存路径
             let save_path = if let Some(b) = &task.bucket {
                 let hash = bucket_hasher.unwrap().finalize().to_string();
                 b.join(&hash[..2]).join(hash)
@@ -90,15 +92,37 @@ impl Downloader {
                 task.target.clone()
             };
 
-            // 移动到目标
-            let parent = save_path.parent().expect("Error path format");
+            // 确保父目录存在（先建目录再移动）
+            let parent = save_path.parent().expect("invalid save path");
             if !parent.is_dir() {
                 async_fs::create_dir_all(parent).await?;
             }
-            async_fs::rename(&cache, save_path).await?;
+
+            // 移动到目标位置
+            async_fs::rename(&cache, &save_path).await?;
+
+            // 如果有 bucket，将共享文件链接到 task.target
+            if task.bucket.is_some()
+                && let Err(_e) = async_fs::hard_link(&save_path, &task.target).await
+            {
+                #[cfg(target_family = "unix")]
+                {
+                    std::os::unix::fs::symlink(save_path, task.target)?;
+                    break;
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    std::os::windows::fs::symlink_file(save_path, task.target)?;
+                    break;
+                }
+
+                return Err(Error::Io(_e));
+            }
+
             return Ok(());
         }
 
+        let _ = async_fs::remove_file(&cache).await;
         Err(Error::Other("download failed after retries".to_string()))
     }
     pub async fn download_concurrent(

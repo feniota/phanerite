@@ -168,8 +168,10 @@ impl Downloader {
                 async_fs::create_dir_all(parent).await?;
             }
 
-            // 移动到目标位置
-            async_fs::rename(&cache, &save_path).await?;
+            // 移动到目标位置，共享桶存在文件则不执行
+            if task.bucket.is_none() || !save_path.exists() {
+                async_fs::rename(&cache, &save_path).await?
+            };
 
             // 如果有 bucket，将共享文件链接到 task.target
             if task.bucket.is_some()

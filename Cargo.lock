@@ -797,6 +797,8 @@ version = "0.1.0"
 dependencies = [
  "async-channel",
  "async-fs",
+ "async-lock",
+ "async-process",
  "blake3",
  "chrono",
  "event-listener",

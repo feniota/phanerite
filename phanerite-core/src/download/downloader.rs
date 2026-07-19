@@ -180,12 +180,12 @@ impl Downloader {
             {
                 #[cfg(target_family = "unix")]
                 {
-                    std::os::unix::fs::symlink(save_path, task.target)?;
+                    async_fs::unix::symlink(save_path, task.target).await?;
                     break;
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    std::os::windows::fs::symlink_file(save_path, task.target)?;
+                    async_fs::windows::symlink_file(save_path, task.target).await?;
                     break;
                 }
 

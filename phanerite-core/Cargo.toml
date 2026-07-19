@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-async-channel = "2.5.0"
+async-channel = "2.5"
 async-fs = "2.2"
+async-lock = "3.4"
+async-process = "2.5"
 blake3 = { version = "1.8", features = ["serde"] }
-chrono = { version = "0.4.45", features = ["serde"] }
-event-listener = "5.4.1"
+chrono = { version = "0.4", features = ["serde"] }
+event-listener = "5.4"
 futures = "0.3"
 hex = "0.4"
 nyquest = { version = "0.4", features = ["async", "async-stream"] }

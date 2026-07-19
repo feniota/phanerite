@@ -22,13 +22,13 @@ impl VersionIndex {
     }
     pub fn latest_release(&self) -> Result<&Version> {
         match self.iter().find(|&x| x.id == self.latest.release) {
-            None => Err(Error::Other("Error version index format".to_string())),
+            None => Err(Error::Other("Error instance index format".to_string())),
             Some(v) => Ok(v),
         }
     }
     pub fn latest_snapshot(&self) -> Result<&Version> {
         match self.iter().find(|&x| x.id == self.latest.snapshot) {
-            None => Err(Error::Other("Error version index format".to_string())),
+            None => Err(Error::Other("Error instance index format".to_string())),
             Some(v) => Ok(v),
         }
     }

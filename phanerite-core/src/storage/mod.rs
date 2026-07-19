@@ -20,7 +20,7 @@ impl Storage {
         debug!("creating storage dirs");
         let root_dir = root.to_owned();
         let cache_dir = root_dir.join("cache");
-        let versions_dir = root_dir.join("instance");
+        let versions_dir = root_dir.join("versions");
         let runtime_dir = root_dir.join("runtime");
         let share_dir = root_dir.join("share");
         let libraries_dir = root_dir.join("libraries");

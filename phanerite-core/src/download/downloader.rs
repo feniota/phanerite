@@ -1,10 +1,9 @@
-use crate::download::concurrent::ConcurrentTask;
 use crate::download::task::DownloadTask;
 use crate::error::Error;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
-use futures::{AsyncReadExt, AsyncWriteExt};
+use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use nyquest::AsyncClient;
 use std::borrow::Cow;
 use std::num::NonZeroU8;
@@ -73,7 +72,7 @@ impl Downloader {
     }
     /// 下载文件到储存
     pub async fn download(&self, task: DownloadTask) -> Result<()> {
-        self.do_download(task, vec![0u8; self.buffer_per_thread])
+        self.do_download(task, vec![0u8; self.buffer_per_thread].as_mut_slice())
             .await?;
         Ok(())
     }
@@ -81,7 +80,7 @@ impl Downloader {
     pub async fn download_concurrent(
         &self,
         tasks: impl Iterator<Item = DownloadTask>,
-    ) -> Result<()> {
+    ) -> Vec<Error> {
         let (pool_tx, pool_rx) = async_channel::bounded(self.concurrent);
         for _ in 0..self.concurrent {
             pool_tx
@@ -90,24 +89,22 @@ impl Downloader {
                 .unwrap();
         }
 
-        let mut executor = ConcurrentTask::new(self.concurrent);
-        tasks.for_each(|x| {
-            executor.push(async {
-                let mut buf = self.do_download(x, pool_rx.recv().await.unwrap()).await?;
-                buf.resize(self.buffer_per_thread, 0);
+        futures::stream::iter(tasks)
+            .map(async |task| {
+                let mut buf = pool_rx.recv().await.unwrap();
+                let res = self.do_download(task, buf.as_mut_slice()).await;
                 pool_tx.send(buf).await.unwrap();
-                Ok(())
+                res
             })
-        });
-
-        executor.exec().await?;
-
-        Ok(())
+            .buffer_unordered(self.concurrent)
+            .filter_map(async |res| res.err())
+            .collect()
+            .await
     }
     /// 执行下载
     // 允许不可到达代码（用于条件编译）
     #[allow(unreachable_code)]
-    async fn do_download(&self, task: DownloadTask, mut buf: Vec<u8>) -> Result<Vec<u8>> {
+    async fn do_download(&self, task: DownloadTask, buf: &mut [u8]) -> Result<()> {
         debug!(
             "downloading: {}",
             task.process.name().unwrap_or("unknown filename")
@@ -132,7 +129,7 @@ impl Downloader {
 
             // 流式下载
             loop {
-                let n = reader.read(&mut buf).await?;
+                let n = reader.read(buf).await?;
                 if n == 0 {
                     break;
                 }
@@ -165,7 +162,7 @@ impl Downloader {
                 task.target.clone()
             };
 
-            // 确保父目录存在（先建目录再移动）
+            // 确保父目录存在
             let parent = save_path.parent().expect("invalid save path");
             if !parent.is_dir() {
                 async_fs::create_dir_all(parent).await?;
@@ -192,7 +189,7 @@ impl Downloader {
                 return Err(Error::Io(_e));
             }
             task.process.finish();
-            return Ok(buf);
+            return Ok(());
         }
 
         let _ = async_fs::remove_file(&cache).await;

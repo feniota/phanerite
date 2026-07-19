@@ -11,7 +11,7 @@ fn main() -> error::Result<()> {
         let downloader = download::downloader::Downloader::new(&storage)
             .await?
             .concurrent(NonZeroU8::new(16).unwrap())
-            .retries(10);
+            .retries(3);
 
         let index = download::vanilla::version_index::VersionIndex::sync(&downloader).await?;
 
@@ -34,7 +34,9 @@ fn main() -> error::Result<()> {
 
         downloader
             .download_concurrent(download::task::filter_existed(task))
-            .await?;
+            .await
+            .iter()
+            .for_each(|x| println!("{x:?}"));
 
         Ok::<(), error::Error>(())
     })

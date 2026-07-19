@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::env;
 use std::num::NonZeroU8;
 use std::path::PathBuf;
-use tracing::{debug, trace};
+use tracing::debug;
 
 pub async fn detect(concurrent: NonZeroU8) -> Result<Vec<JavaRuntime>> {
     debug!("detect java");
@@ -27,40 +27,11 @@ pub async fn detect(concurrent: NonZeroU8) -> Result<Vec<JavaRuntime>> {
         if !set.lock().await.insert(path.clone()) {
             return Ok(());
         }
-        debug!("check java: {}", path.to_string_lossy());
-        let mut name = None;
-        let mut major = None;
-        let mut version = None;
-        let out = async_process::Command::new(&path)
-            .arg("-XshowSettings:properties")
-            .arg("-version")
-            .output()
-            .await?
-            .stderr;
-
-        for (k, v) in String::from_utf8_lossy(&out)
-            .lines()
-            .filter_map(|x| x.trim().split_once('='))
-            .map(|(k, v)| (k.trim(), v.trim()))
-        {
-            trace!("properties: {}={}", k, v);
-            if k == "java.runtime.name" {
-                name = Some(v.to_string());
-            }
-            if k == "java.specification.version" {
-                major = Some(v.parse().unwrap_or_default())
-            }
-            if k == "java.runtime.version" {
-                version = Some(v.to_string());
-            }
-        }
-
-        result.lock().await.push(JavaRuntime {
-            name: name.unwrap_or("Unknown".to_string()),
-            major: major.unwrap_or_default(),
-            version: version.unwrap_or_default(),
-            path,
-        });
+        debug!("found java: {}", path.to_string_lossy());
+        result
+            .lock()
+            .await
+            .push(JavaRuntime::from_path(path).await?);
         Ok(())
     };
 

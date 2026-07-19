@@ -42,7 +42,7 @@ pub struct AssetIndex {
     pub url: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct AssetIndexList {
     pub objects: BTreeMap<String, AssetObject>,
 
@@ -50,7 +50,7 @@ pub struct AssetIndexList {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct AssetObject {
     hash: Sha1Hash,
     size: u64,

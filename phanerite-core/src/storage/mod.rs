@@ -10,6 +10,8 @@ pub struct Storage {
     pub share_dir: PathBuf,
     pub libraries_dir: PathBuf,
     pub assets_dir: PathBuf,
+    pub assets_objects: PathBuf,
+    pub assets_indexes: PathBuf,
 }
 
 impl Storage {
@@ -23,6 +25,8 @@ impl Storage {
         let share_dir = root_dir.join("share");
         let libraries_dir = root_dir.join("libraries");
         let assets_dir = root_dir.join("assets");
+        let assets_objects = assets_dir.join("objects");
+        let assets_indexes = assets_dir.join("indexes");
 
         if !root_dir.is_dir() {
             async_fs::create_dir_all(&root_dir).await?;
@@ -45,6 +49,12 @@ impl Storage {
         if !assets_dir.is_dir() {
             async_fs::create_dir_all(&assets_dir).await?;
         }
+        if !assets_objects.is_dir() {
+            async_fs::create_dir_all(&assets_objects).await?;
+        }
+        if !assets_indexes.is_dir() {
+            async_fs::create_dir_all(&assets_indexes).await?;
+        }
 
         Ok(Self {
             root_dir,
@@ -54,6 +64,8 @@ impl Storage {
             share_dir,
             libraries_dir,
             assets_dir,
+            assets_objects,
+            assets_indexes,
         })
     }
 }

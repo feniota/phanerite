@@ -60,7 +60,7 @@ impl DownloadTaskBuilder {
         self
     }
     pub fn to_asset(mut self, path: &Path, storage: &Storage) -> Self {
-        self.target = Some(storage.assets_dir.join(path));
+        self.target = Some(storage.assets_objects.join(path));
         self
     }
     pub fn to_library(mut self, path: &Path, storage: &Storage) -> Self {

@@ -8,10 +8,11 @@ fn main() -> error::Result<()> {
         .init();
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft".as_ref()).await?;
-        let downloader = download::downloader::Downloader::new(&storage)
-            .await?
+        let downloader = download::downloader::Downloader::builder(&storage)
             .concurrent(NonZeroU8::new(16).unwrap())
-            .retries(3);
+            .retries(3)
+            .build()
+            .await?;
 
         let index = download::vanilla::version_index::VersionIndex::sync(&downloader).await?;
 
@@ -21,7 +22,7 @@ fn main() -> error::Result<()> {
             download::vanilla::version_info::VersionInfo::get(latest, &downloader).await?;
 
         let _ = async_fs::create_dir_all(storage.versions_dir.join(&latest.id)).await;
-        let task = version
+        let (task, _) = version
             .build_all_task(
                 storage
                     .versions_dir

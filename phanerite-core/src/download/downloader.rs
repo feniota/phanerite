@@ -3,34 +3,36 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
+use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use nyquest::AsyncClient;
 use std::borrow::Cow;
 use std::num::NonZeroU8;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use tracing::{debug, error};
 use uuid::Uuid;
 
-pub struct Downloader {
+pub struct DownloaderBuilder {
+    /// 重试次数
     retries: usize,
-    concurrent: usize,
+    /// 最大并发数,
+    max_concurrent: usize,
+    /// 单个缓冲大小
     buffer_per_thread: usize,
-    client: AsyncClient,
+    /// 缓存目录
     cache: PathBuf,
 }
 
-impl Downloader {
+impl DownloaderBuilder {
     /// 构建默认下载器
-    pub async fn new(storage: &Storage) -> Result<Self> {
-        Ok(Self {
+    fn new(storage: &Storage) -> Self {
+        Self {
             retries: 3,
-            concurrent: 4,
+            max_concurrent: 4,
             buffer_per_thread: 64 * 1024,
-            client: nyquest::client::ClientBuilder::default()
-                .build_async()
-                .await?,
             cache: storage.cache_dir.clone(),
-        })
+        }
     }
     /// 设置重试次数
     pub fn retries(mut self, retries: usize) -> Self {
@@ -39,13 +41,51 @@ impl Downloader {
     }
     /// 设置并发数
     pub fn concurrent(mut self, max: NonZeroU8) -> Self {
-        self.concurrent = max.get() as usize;
+        self.max_concurrent = max.get() as usize;
         self
     }
     /// 设置下载缓存
     pub fn buffer(mut self, buffer: usize) -> Self {
         self.buffer_per_thread = buffer;
         self
+    }
+    pub async fn build(self) -> Result<Downloader> {
+        let (pool_tx, pool_rx) = async_channel::bounded(self.max_concurrent);
+        for _ in 0..self.max_concurrent {
+            pool_tx
+                .send(vec![0u8; self.buffer_per_thread])
+                .await
+                .unwrap()
+        }
+        Ok(Downloader {
+            retries: self.retries,
+            max_concurrent: self.max_concurrent,
+            cache: self.cache,
+            client: nyquest::client::ClientBuilder::default()
+                .build_async()
+                .await?,
+            pool_rx,
+            pool_tx,
+        })
+    }
+}
+
+pub struct Downloader {
+    retries: usize,
+    max_concurrent: usize,
+    cache: PathBuf,
+
+    /// HTTP 客户端
+    client: AsyncClient,
+    /// 获取缓冲
+    pool_rx: Receiver<Vec<u8>>,
+    /// 归还缓冲
+    pool_tx: Sender<Vec<u8>>,
+}
+
+impl Downloader {
+    pub fn builder(storage: &Storage) -> DownloaderBuilder {
+        DownloaderBuilder::new(storage)
     }
     /// 下载到内存
     pub async fn fetch(
@@ -68,43 +108,13 @@ impl Downloader {
             }
             return Ok(res);
         }
-        Err(Error::Other("download failed after retries".to_string()))
+        Err(Error::other("download failed after retries"))
     }
     /// 下载文件到储存
-    pub async fn download(&self, task: DownloadTask) -> Result<()> {
-        self.do_download(task, vec![0u8; self.buffer_per_thread].as_mut_slice())
-            .await?;
-        Ok(())
-    }
-    /// 并发下载文件到储存
-    pub async fn download_concurrent(
-        &self,
-        tasks: impl Iterator<Item = DownloadTask>,
-    ) -> Vec<Error> {
-        let (pool_tx, pool_rx) = async_channel::bounded(self.concurrent);
-        for _ in 0..self.concurrent {
-            pool_tx
-                .send(vec![0u8; self.buffer_per_thread])
-                .await
-                .unwrap();
-        }
-
-        futures::stream::iter(tasks)
-            .map(async |task| {
-                let mut buf = pool_rx.recv().await.unwrap();
-                let res = self.do_download(task, buf.as_mut_slice()).await;
-                pool_tx.send(buf).await.unwrap();
-                res
-            })
-            .buffer_unordered(self.concurrent)
-            .filter_map(async |res| res.err())
-            .collect()
-            .await
-    }
-    /// 执行下载
     // 允许不可到达代码（用于条件编译）
     #[allow(unreachable_code)]
-    async fn do_download(&self, task: DownloadTask, buf: &mut [u8]) -> Result<()> {
+    async fn download(&self, task: DownloadTask) -> Result<()> {
+        let mut buf = self.alloc_buf().await;
         debug!(
             "downloading: {}",
             task.process.name().unwrap_or("unknown filename")
@@ -129,7 +139,7 @@ impl Downloader {
 
             // 流式下载
             loop {
-                let n = reader.read(buf).await?;
+                let n = reader.read(&mut buf).await?;
                 if n == 0 {
                     break;
                 }
@@ -137,7 +147,6 @@ impl Downloader {
                     async_fs::remove_file(&cache).await?;
                     return Err(Error::Cancelled);
                 }
-
                 file.write_all(&buf[..n]).await?;
 
                 hasher.update(&buf[..n]);
@@ -197,6 +206,56 @@ impl Downloader {
         }
 
         let _ = async_fs::remove_file(&cache).await;
-        Err(Error::Other("download failed after retries".to_string()))
+        Err(Error::other("download failed after retries"))
+    }
+    /// 并发下载文件到储存
+    pub async fn download_concurrent(
+        &self,
+        tasks: impl Iterator<Item = DownloadTask>,
+    ) -> Vec<Error> {
+        futures::stream::iter(tasks)
+            .map(async |task| self.download(task).await)
+            .buffer_unordered(self.max_concurrent)
+            .filter_map(async |res| res.err())
+            .collect()
+            .await
+    }
+    /// 申请下载缓存，限制总并发量
+    async fn alloc_buf(&self) -> BufferGuard {
+        BufferGuard {
+            buf: Some(self.pool_rx.recv().await.expect("Failed to alloc buffer")),
+            pool: self.pool_tx.clone(),
+        }
+    }
+}
+
+struct BufferGuard {
+    buf: Option<Vec<u8>>,
+    pool: Sender<Vec<u8>>,
+}
+
+impl Deref for BufferGuard {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.buf.as_deref().unwrap()
+    }
+}
+
+impl DerefMut for BufferGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.buf.as_deref_mut().unwrap()
+    }
+}
+
+impl Drop for BufferGuard {
+    fn drop(&mut self) {
+        if let Some(buf) = self.buf.take() {
+            match self.pool.try_send(buf) {
+                Ok(_) => {}
+                Err(async_channel::TrySendError::Full(_))
+                | Err(async_channel::TrySendError::Closed(_)) => {}
+            }
+        }
     }
 }

@@ -25,21 +25,21 @@ impl VersionInfo {
         client_path: PathBuf,
         storage: &Storage,
         downloader: &Downloader,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+    ) -> Result<(impl Iterator<Item = DownloadTask>, AssetIndexList)> {
         let client = self.build_client_task(client_path, storage);
 
         let assets_list = AssetIndexList::get(&self.asset_index, downloader).await?;
-        let assets = assets_list.build_assets_task(storage);
+        let assets = assets_list.clone().build_assets_task(storage);
 
         let library = self.build_libraries_task(storage);
 
         let chain = if let Some(c) = client {
             library.chain(assets).chain(std::iter::once(c))
         } else {
-            return Err(Error::Other("No downloadable client".to_string()));
+            return Err(Error::other("No downloadable client"));
         };
 
-        Ok(chain)
+        Ok((chain, assets_list))
     }
     pub fn build_libraries_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
         self.libraries

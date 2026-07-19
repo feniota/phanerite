@@ -24,16 +24,21 @@ pub struct DownloadTask {
     pub process: DownloadProcess,
 }
 
+#[derive(Clone)]
 pub struct DownloadProcess {
     inner: Arc<DownloadProcessInner>,
 }
 
 struct DownloadProcessInner {
     name: Option<String>,
-    current: AtomicU64,
-    cancelled: AtomicBool,
     event: Event,
+
+    current: AtomicU64,
     total: OnceLock<u64>,
+
+    started: AtomicBool,
+    finished: AtomicBool,
+    cancelled: AtomicBool,
 }
 
 impl DownloadTask {
@@ -91,9 +96,9 @@ impl DownloadTaskBuilder {
             process: DownloadProcess {
                 inner: Arc::new(DownloadProcessInner {
                     name: self.file_name,
-                    current: AtomicU64::new(0),
-                    cancelled: AtomicBool::new(false),
                     event: Default::default(),
+
+                    current: AtomicU64::new(0),
                     total: if let Some(t) = self.file_size {
                         let cell = OnceLock::new();
                         cell.set(t).unwrap();
@@ -101,6 +106,10 @@ impl DownloadTaskBuilder {
                     } else {
                         OnceLock::new()
                     },
+
+                    started: AtomicBool::new(false),
+                    finished: AtomicBool::new(false),
+                    cancelled: AtomicBool::new(false),
                 }),
             },
         }
@@ -114,7 +123,27 @@ impl DownloadProcess {
     pub fn total(&self) -> Option<u64> {
         self.inner.total.get().copied()
     }
-    pub fn set_total(&self, total: u64) -> bool {
+    pub fn current(&self) -> u64 {
+        self.inner.current.load(Relaxed)
+    }
+    pub async fn changed(&self) {
+        self.inner.event.listen().await;
+    }
+    pub fn cancel(&self) {
+        self.inner.cancelled.store(true, Release);
+        self.inner.event.notify(usize::MAX);
+    }
+    pub fn is_canceled(&self) -> bool {
+        self.inner.cancelled.load(Acquire)
+    }
+    pub fn is_started(&self) -> bool {
+        self.inner.started.load(Acquire)
+    }
+    pub fn is_finished(&self) -> bool {
+        self.inner.finished.load(Acquire)
+    }
+
+    pub(super) fn set_total(&self, total: u64) -> bool {
         if self.inner.total.set(total).is_ok() {
             self.inner.event.notify(usize::MAX);
             true
@@ -122,21 +151,17 @@ impl DownloadProcess {
             false
         }
     }
-    pub fn current(&self) -> u64 {
-        self.inner.current.load(Relaxed)
-    }
-    pub fn step(&self, size: u64) {
+    pub(super) fn step(&self, size: u64) {
         self.inner.current.fetch_add(size, Relaxed);
         self.inner.event.notify(usize::MAX);
     }
-    pub async fn changed(&self) {
-        self.inner.event.listen().await;
+    pub(super) fn start(&self) {
+        self.inner.started.store(true, Release);
+        self.inner.event.notify(usize::MAX);
     }
-    pub fn cancel(&self) {
-        self.inner.cancelled.store(true, Release)
-    }
-    pub fn is_canceled(&self) -> bool {
-        self.inner.cancelled.load(Acquire)
+    pub(super) fn finish(&self) {
+        self.inner.finished.store(true, Release);
+        self.inner.event.notify(usize::MAX);
     }
 }
 

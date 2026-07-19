@@ -1,4 +1,5 @@
 use phanerite_core::*;
+use std::num::NonZeroU8;
 use tracing::Level;
 fn main() -> error::Result<()> {
     nyquest_preset::register();
@@ -9,6 +10,7 @@ fn main() -> error::Result<()> {
         let storage = storage::Storage::new(".minecraft".as_ref()).await?;
         let downloader = download::downloader::Downloader::new(&storage)
             .await?
+            .concurrent(NonZeroU8::new(16).unwrap())
             .retries(10);
 
         let index = download::vanilla::version_index::VersionIndex::sync(&downloader).await?;

@@ -680,6 +680,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7dd1a2bde71ed7e8bf33bcf5f56669aa3dea0f6d4a8b4b9c6557dd9766813ef"
 dependencies = [
  "cfg-if",
+ "futures-util",
  "nyquest-interface",
  "windows",
  "windows-collections",
@@ -794,6 +795,7 @@ checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 name = "phanerite-core"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "async-fs",
  "blake3",
  "chrono",
@@ -802,6 +804,7 @@ dependencies = [
  "hex",
  "nyquest",
  "nyquest-backend-curl",
+ "nyquest-backend-winrt",
  "nyquest-preset",
  "serde",
  "serde_json",

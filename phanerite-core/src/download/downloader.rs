@@ -72,13 +72,47 @@ impl Downloader {
         Err(Error::Other("download failed after retries".to_string()))
     }
     /// 下载文件到储存
+    pub async fn download(&self, task: DownloadTask) -> Result<()> {
+        self.do_download(task, vec![0u8; self.buffer_per_thread])
+            .await?;
+        Ok(())
+    }
+    /// 并发下载文件到储存
+    pub async fn download_concurrent(
+        &self,
+        tasks: impl Iterator<Item = DownloadTask>,
+    ) -> Result<()> {
+        let (pool_tx, pool_rx) = async_channel::bounded(self.concurrent);
+        for _ in 0..self.concurrent {
+            pool_tx
+                .send(vec![0u8; self.buffer_per_thread])
+                .await
+                .unwrap();
+        }
+
+        let mut executor = ConcurrentTask::new(self.concurrent);
+        tasks.for_each(|x| {
+            executor.push(async {
+                let mut buf = self.do_download(x, pool_rx.recv().await.unwrap()).await?;
+                buf.resize(self.buffer_per_thread, 0);
+                pool_tx.send(buf).await.unwrap();
+                Ok(())
+            })
+        });
+
+        executor.exec().await?;
+
+        Ok(())
+    }
+    /// 执行下载
     // 允许不可到达代码（用于条件编译）
     #[allow(unreachable_code)]
-    pub async fn download(&self, task: DownloadTask) -> Result<()> {
+    async fn do_download(&self, task: DownloadTask, mut buf: Vec<u8>) -> Result<Vec<u8>> {
         debug!(
             "downloading: {}",
             task.process.name().unwrap_or("unknown filename")
         );
+        task.process.start();
         let cache = self.cache.join(Uuid::now_v7().to_string());
         for _ in 0..self.retries {
             // 构造和发送请求
@@ -92,7 +126,6 @@ impl Downloader {
 
             // 创建文件
             let mut file = async_fs::File::create(&cache).await?;
-            let mut buf = vec![0u8; self.buffer_per_thread];
             let mut reader = res.into_async_read();
             let mut hasher = task.file_hash.hasher();
             let mut bucket_hasher = task.bucket.as_ref().map(|_| blake3::Hasher::new());
@@ -158,23 +191,11 @@ impl Downloader {
 
                 return Err(Error::Io(_e));
             }
-
-            return Ok(());
+            task.process.finish();
+            return Ok(buf);
         }
 
         let _ = async_fs::remove_file(&cache).await;
         Err(Error::Other("download failed after retries".to_string()))
-    }
-    /// 并发下载文件到储存
-    pub async fn download_concurrent(
-        &self,
-        tasks: impl Iterator<Item = DownloadTask>,
-    ) -> Result<()> {
-        let mut executor = ConcurrentTask::new(self.concurrent);
-        tasks.for_each(|x| executor.push(self.download(x)));
-
-        executor.exec().await?;
-
-        Ok(())
     }
 }

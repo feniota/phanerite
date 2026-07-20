@@ -6,9 +6,12 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, OnceLock};
 
-pub struct DownloadTaskBuilder {
-    url: Option<String>,
-    target: Option<PathBuf>,
+pub struct EmptyUrl;
+pub struct EmptyPath;
+
+pub struct DownloadTaskBuilder<U, P> {
+    url: U,
+    target: P,
     bucket: Option<PathBuf>,
     file_name: Option<String>,
     file_size: Option<u64>,
@@ -42,10 +45,10 @@ struct DownloadProcessInner {
 }
 
 impl DownloadTask {
-    pub fn builder() -> DownloadTaskBuilder {
+    pub fn builder() -> DownloadTaskBuilder<EmptyUrl, EmptyPath> {
         DownloadTaskBuilder {
-            url: None,
-            target: None,
+            url: EmptyUrl,
+            target: EmptyPath,
             bucket: None,
             file_name: None,
             file_size: None,
@@ -54,24 +57,53 @@ impl DownloadTask {
     }
 }
 
-impl DownloadTaskBuilder {
-    pub fn url(mut self, url: impl Into<String>) -> Self {
-        self.url = Some(url.into());
-        self
+impl<P> DownloadTaskBuilder<EmptyUrl, P> {
+    pub fn url(self, url: impl Into<String>) -> DownloadTaskBuilder<String, P> {
+        DownloadTaskBuilder {
+            url: url.into(),
+            target: self.target,
+            bucket: self.bucket,
+            file_name: self.file_name,
+            file_size: self.file_size,
+            file_hash: self.file_hash,
+        }
     }
-    pub fn to_asset(mut self, path: &Path, storage: &Storage) -> Self {
-        self.target = Some(storage.assets_objects.join(path));
-        self
+}
+
+impl<U> DownloadTaskBuilder<U, EmptyPath> {
+    pub fn to_asset(self, path: &Path, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+        DownloadTaskBuilder {
+            url: self.url,
+            target: storage.assets_objects.join(path),
+            bucket: self.bucket,
+            file_name: self.file_name,
+            file_size: self.file_size,
+            file_hash: self.file_hash,
+        }
     }
-    pub fn to_library(mut self, path: &Path, storage: &Storage) -> Self {
-        self.target = Some(storage.libraries_dir.join(path));
-        self
+    pub fn to_library(self, path: &Path, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+        DownloadTaskBuilder {
+            url: self.url,
+            target: storage.libraries_dir.join(path),
+            bucket: self.bucket,
+            file_name: self.file_name,
+            file_size: self.file_size,
+            file_hash: self.file_hash,
+        }
     }
-    pub fn to_path(mut self, path: PathBuf, storage: &Storage) -> Self {
-        self.target = Some(path);
-        self.bucket = Some(storage.share_dir.clone());
-        self
+    pub fn to_path(self, path: PathBuf, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+        DownloadTaskBuilder {
+            url: self.url,
+            target: path,
+            bucket: Some(storage.share_dir.clone()),
+            file_name: self.file_name,
+            file_size: self.file_size,
+            file_hash: self.file_hash,
+        }
     }
+}
+
+impl<U, P> DownloadTaskBuilder<U, P> {
     pub fn file_name(mut self, name: impl Into<String>) -> Self {
         self.file_name = Some(name.into());
         self
@@ -84,13 +116,13 @@ impl DownloadTaskBuilder {
         self.file_hash = hash.into();
         self
     }
+}
+
+impl DownloadTaskBuilder<String, PathBuf> {
     pub fn build(self) -> DownloadTask {
-        if self.url.is_none() || self.target.is_none() {
-            unreachable!()
-        }
         DownloadTask {
-            url: self.url.unwrap(),
-            target: self.target.unwrap(),
+            url: self.url,
+            target: self.target,
             bucket: self.bucket,
             file_hash: self.file_hash,
             process: DownloadProcess {

@@ -22,7 +22,7 @@ impl AssetIndexList {
             let hash = &object.hash.to_string();
             DownloadTask::builder()
                 .url(format!("{}/{}/{}", RESOURCES_URL, &hash[..2], hash))
-                .to_asset(&Path::new(&hash[..2]).join(hash), storage)
+                .to_asset(Path::new(&hash[..2]).join(hash), storage)
                 .file_name(name)
                 .file_size(object.size)
                 .hash(object.hash)

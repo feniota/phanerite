@@ -227,7 +227,7 @@ impl Downloader {
             // 解压缩
             Target::Extract(extract) => {
                 task.process.extracting();
-                extract.exec(&cache, task.bucket).await?
+                extract.exec(&cache, task.bucket, &mut buf).await?
             }
         } // Save or Extract
 

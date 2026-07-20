@@ -90,7 +90,11 @@ impl<T> DownloadTaskBuilder<EmptyUrl, T> {
 }
 
 impl<U> DownloadTaskBuilder<U, EmptyTarget> {
-    pub fn to_asset(self, path: &Path, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+    pub fn to_asset(
+        self,
+        path: impl AsRef<Path>,
+        storage: &Storage,
+    ) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
             target: storage.assets_objects.join(path),
@@ -100,7 +104,11 @@ impl<U> DownloadTaskBuilder<U, EmptyTarget> {
             file_hash: self.file_hash,
         }
     }
-    pub fn to_library(self, path: &Path, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+    pub fn to_library(
+        self,
+        path: impl AsRef<Path>,
+        storage: &Storage,
+    ) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
             target: storage.libraries_dir.join(path),

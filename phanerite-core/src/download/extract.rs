@@ -7,12 +7,22 @@ pub enum ArchiveFormat {
 }
 
 pub struct ExtractTask {
+    // 解压目标目录
     path: PathBuf,
+    // 压缩包格式
     format: ArchiveFormat,
+
+    // 自动拉平压缩包外层目录
+    auto_flattens: bool,
 }
 
 impl ExtractTask {
-    pub async fn exec(&self, archive: &Path, bucket: Option<PathBuf>) -> Result<()> {
+    pub(super) async fn exec(
+        &self,
+        archive_file: impl AsRef<Path>,
+        _bucket: Option<PathBuf>,
+        buf: &mut [u8],
+    ) -> Result<()> {
         todo!()
     }
 }

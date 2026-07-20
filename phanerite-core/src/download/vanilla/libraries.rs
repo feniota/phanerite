@@ -13,7 +13,7 @@ impl Library {
             Some(
                 DownloadTask::builder()
                     .url(a.url)
-                    .to_library(a.path.as_ref(), storage)
+                    .to_library(a.path, storage)
                     .file_name(self.name)
                     .file_size(a.size)
                     .hash(a.sha1)

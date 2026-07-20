@@ -281,7 +281,7 @@ impl VersionManifest {
         manifest
     }
 
-    pub async fn form_local(path: &Path) -> Result<Self> {
+    pub async fn form_local(path: impl AsRef<Path>) -> Result<Self> {
         let mut buf = vec![];
         async_fs::File::open(path)
             .await?

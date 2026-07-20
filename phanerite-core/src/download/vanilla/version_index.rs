@@ -5,7 +5,6 @@ use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use std::slice::Iter;
-use std::vec::IntoIter;
 
 const VERSION_INDEX_URL: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
 
@@ -17,9 +16,6 @@ impl VersionIndex {
     }
     pub fn iter(&self) -> Iter<'_, Version> {
         self.versions.iter()
-    }
-    pub fn into_iter(self) -> IntoIter<Version> {
-        self.versions.into_iter()
     }
     pub fn latest_release(&self) -> Result<&Version> {
         match self.iter().find(|&x| x.id == self.latest.release) {

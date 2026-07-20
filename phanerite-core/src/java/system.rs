@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::java::{JavaRuntime, BIN_NAME};
+use crate::java::{BIN_NAME, JavaRuntime};
 use futures::StreamExt;
 use std::collections::HashSet;
 use std::env;
@@ -18,7 +18,7 @@ pub async fn detect(concurrent: NonZeroU8) -> Result<Vec<JavaRuntime>> {
         .map(|x| x.join(BIN_NAME))
         .chain(std::iter::once(java_home))
         .filter(|x| x.is_file())
-        .map(|x| x.absolute().unwrap_or(x));
+        .map(|x| std::path::absolute(&x).unwrap_or(x));
 
     let result = async_lock::Mutex::new(Vec::new());
     let set = async_lock::Mutex::new(HashSet::new());

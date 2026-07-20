@@ -1,7 +1,7 @@
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
-    Http(nyquest::Error),
+    Http(isahc::Error),
     SerdeJson(serde_json::Error),
     Cancelled,
     Other(String),
@@ -40,8 +40,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<nyquest::Error> for Error {
-    fn from(e: nyquest::Error) -> Self {
+impl From<isahc::Error> for Error {
+    fn from(e: isahc::Error) -> Self {
         Error::Http(e)
     }
 }

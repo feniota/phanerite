@@ -4,7 +4,6 @@ use std::num::NonZeroU8;
 use std::sync::Arc;
 use tracing::Level;
 fn main() -> error::Result<()> {
-    nyquest_preset::register();
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft".as_ref()).await?;

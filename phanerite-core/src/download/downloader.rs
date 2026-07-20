@@ -5,8 +5,7 @@ use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
-use nyquest::AsyncClient;
-use std::borrow::Cow;
+use isahc::{AsyncReadResponseExt, HttpClient};
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -61,9 +60,7 @@ impl DownloaderBuilder {
             retries: self.retries,
             max_concurrent: self.max_concurrent,
             cache: self.cache,
-            client: nyquest::client::ClientBuilder::default()
-                .build_async()
-                .await?,
+            client: HttpClient::builder().build()?,
             pool_rx,
             pool_tx,
         })
@@ -76,7 +73,7 @@ pub struct Downloader {
     cache: PathBuf,
 
     /// HTTP 客户端
-    client: AsyncClient,
+    client: HttpClient,
     /// 获取缓冲
     pool_rx: Receiver<Vec<u8>>,
     /// 归还缓冲
@@ -88,15 +85,10 @@ impl Downloader {
         DownloaderBuilder::new(storage)
     }
     /// 下载到内存
-    pub async fn fetch(
-        &self,
-        url: impl Into<Cow<'static, str>>,
-        hash: Option<Hash>,
-    ) -> Result<Vec<u8>> {
+    pub async fn fetch(&self, url: impl Into<String>, hash: Option<Hash>) -> Result<Vec<u8>> {
         let url = url.into();
         for _ in 0..self.retries {
-            let req = nyquest::Request::get(url.clone());
-            let res = self.client.request(req).await?.bytes().await?;
+            let res = self.client.get_async(&url).await?.bytes().await?;
             if let Some(h) = &hash {
                 let mut hasher = h.hasher();
                 hasher.update(&res);
@@ -123,17 +115,22 @@ impl Downloader {
         let cache = self.cache.join(Uuid::now_v7().to_string());
         for _ in 0..self.retries {
             // 构造和发送请求
-            let req = nyquest::Request::get(task.url.clone());
-            let res = self.client.request(req).await?;
+            let mut res = self.client.get_async(&task.url).await?;
 
             // 补充文件大小（如果不存在）
-            if let Some(len) = res.content_length() {
+            if let Ok(len) = res
+                .headers()
+                .get("")
+                .and_then(|t| t.to_str().ok())
+                .unwrap_or_default()
+                .parse()
+            {
                 task.process.set_total(len);
             }
 
             // 创建文件
             let mut file = async_fs::File::create(&cache).await?;
-            let mut reader = res.into_async_read();
+            let reader = res.body_mut();
             let mut hasher = task.file_hash.hasher();
             let mut bucket_hasher = task.bucket.as_ref().map(|_| blake3::Hasher::new());
 

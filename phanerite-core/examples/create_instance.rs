@@ -6,7 +6,6 @@ use std::num::NonZeroU8;
 use tracing::Level;
 
 fn main() -> error::Result<()> {
-    nyquest_preset::register();
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
         .init();

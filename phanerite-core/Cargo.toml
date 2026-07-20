@@ -13,7 +13,7 @@ chrono = { version = "0.4", features = ["serde"] }
 event-listener = "5.4"
 futures = "0.3"
 hex = "0.4"
-nyquest = { version = "0.4", features = ["async", "async-stream"] }
+isahc = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha1 = "0.11"
@@ -22,8 +22,5 @@ uuid = { version = "1.24", features = ["v7"] }
 
 [dev-dependencies]
 indicatif = "0.18"
-nyquest-backend-curl = { version = "0.4", features = ["async", "async-stream"] }
-nyquest-preset = { version = "0.4", feature = ["async", "async-stream"] }
-nyquest-backend-winrt = { version = "0.4", features = ["async", "async-stream"] }
 smol = "2.0"
 tracing-subscriber = "0.3"

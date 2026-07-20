@@ -120,7 +120,7 @@ impl Downloader {
             // 补充文件大小（如果不存在）
             if let Ok(len) = res
                 .headers()
-                .get("")
+                .get("content-length")
                 .and_then(|t| t.to_str().ok())
                 .unwrap_or_default()
                 .parse()

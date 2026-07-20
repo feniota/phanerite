@@ -1,8 +1,9 @@
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
+pub(crate) use crate::instance::instance_info::VersionType;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
@@ -57,13 +58,4 @@ pub struct Version {
     pub release_time: DateTime<FixedOffset>,
     pub sha1: Sha1Hash,
     pub compliance_level: usize,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum VersionType {
-    Release,
-    Snapshot,
-    OldBeta,
-    OldAlpha,
 }

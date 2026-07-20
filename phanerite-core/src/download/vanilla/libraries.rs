@@ -26,7 +26,7 @@ impl Library {
 }
 
 /// Library
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Library {
     pub name: String,
 
@@ -44,14 +44,14 @@ pub struct Library {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct LibraryDownloads {
     pub artifact: Option<Artifact>,
 
     pub classifiers: Option<HashMap<String, Artifact>>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Artifact {
     pub path: String,
 
@@ -62,7 +62,7 @@ pub struct Artifact {
     pub url: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Extract {
     pub exclude: Option<Vec<String>>,
 }

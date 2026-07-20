@@ -32,7 +32,7 @@ impl AssetIndexList {
 }
 
 /// 资源索引
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetIndex {
     pub id: String,

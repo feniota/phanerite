@@ -59,7 +59,7 @@ impl VersionInfo {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionInfo {
     pub id: String,
@@ -94,13 +94,13 @@ pub struct VersionInfo {
 }
 
 /// 启动参数
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Arguments {
     pub game: Option<Vec<Argument>>,
     pub jvm: Option<Vec<Argument>>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Argument {
     Simple(String),
@@ -111,33 +111,35 @@ pub enum Argument {
     },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Value {
     Single(String),
     Multiple(Vec<String>),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Rule {
     pub action: String,
     pub os: Option<Os>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features: Option<HashMap<String, bool>>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Os {
     pub name: Option<String>,
     pub arch: Option<String>,
 }
 
 /// 游戏下载
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Downloads {
     pub client: Option<Download>,
     pub server: Option<Download>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Download {
     pub sha1: Sha1Hash,
     pub size: u64,
@@ -145,7 +147,7 @@ pub struct Download {
 }
 
 /// Java版本要求
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaVersion {
     pub component: String,
@@ -153,19 +155,19 @@ pub struct JavaVersion {
 }
 
 /// 日志配置
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Logging {
     pub client: LoggingClient,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct LoggingClient {
     pub argument: String,
 
     pub file: LoggingFile,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct LoggingFile {
     pub id: String,
 

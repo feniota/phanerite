@@ -1,11 +1,14 @@
 use crate::download::downloader::Downloader;
+use crate::download::task::filter_existed;
 use crate::download::vanilla::version_info::VersionInfo;
 use crate::error::{Error, Result};
+use crate::instance::instance_info::VersionManifest;
 use crate::storage::Storage;
 use futures::AsyncWriteExt;
 use tracing::error;
 
 pub mod arguments;
+pub mod instance_info;
 
 pub struct Instance;
 
@@ -32,8 +35,10 @@ impl Instance {
         let mut index_file = async_fs::File::create(index_file).await?;
 
         // versions/{name}/{name}.json
-        let info_json = serde_json::to_vec_pretty(&version)?;
+        let manifest = VersionManifest::from_remote(version.clone()).rename(name.to_string());
+        let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
+        drop(manifest);
         drop(info_json);
 
         // 构造下载任务
@@ -41,6 +46,7 @@ impl Instance {
         let (downloads, assets_index) = version
             .build_all_task(game_file, storage, downloader)
             .await?;
+        let downloads = filter_existed(downloads);
 
         // assets/indexes/{id}.json
         let index_json = serde_json::to_vec_pretty(&assets_index)?;

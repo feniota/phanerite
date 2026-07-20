@@ -1,4 +1,4 @@
-use crate::download::task::DownloadTask;
+use crate::download::task::{DownloadTask, Target};
 use crate::error::Error;
 use crate::error::Result;
 use crate::storage::Storage;
@@ -103,17 +103,27 @@ impl Downloader {
         Err(Error::other("download failed after retries"))
     }
     /// 下载文件到储存
-    // 允许不可到达代码（用于条件编译）
-    #[allow(unreachable_code)]
     async fn download(&self, task: DownloadTask) -> Result<()> {
+        // 申请缓存并等待
         let mut buf = self.alloc_buf().await;
+
+        // 准备工作
         debug!(
             "downloading: {}",
             task.process.name().unwrap_or("unknown filename")
         );
         task.process.start();
         let cache = self.cache.join(Uuid::now_v7().to_string());
-        for _ in 0..self.retries {
+
+        // 下载文件
+        let mut retry_body = async || {
+            // 共享储存桶 Hasher
+            let mut bucket_hasher = match task.target {
+                Target::File(_) => task.bucket.as_ref().map(|_| blake3::Hasher::new()),
+                // 解压需要单独计算文件 Hash
+                Target::Extract(_) => None,
+            };
+
             // 构造和发送请求
             let mut res = self.client.get_async(&task.url).await?;
 
@@ -132,7 +142,6 @@ impl Downloader {
             let mut file = async_fs::File::create(&cache).await?;
             let reader = res.body_mut();
             let mut hasher = task.file_hash.hasher();
-            let mut bucket_hasher = task.bucket.as_ref().map(|_| blake3::Hasher::new());
 
             // 流式下载
             loop {
@@ -154,56 +163,76 @@ impl Downloader {
             }
 
             // 校验文件
-            if task.file_hash != hasher.finalize() {
-                async_fs::remove_file(&cache).await?;
-                error!("hash mismatch");
-                continue;
-            }
-
-            // 确定保存路径
-            let save_path = if let Some(b) = &task.bucket {
-                let hash = bucket_hasher.unwrap().finalize().to_string();
-                b.join(&hash[..2]).join(hash)
+            if task.file_hash == hasher.finalize() {
+                Ok(bucket_hasher)
             } else {
-                task.target.clone()
-            };
-
-            // 确保父目录存在
-            let parent = save_path.parent().expect("invalid save path");
-            if !parent.is_dir() {
-                async_fs::create_dir_all(parent).await?;
+                Err(Error::other("hash mismatch"))
             }
+        }; // RETRY_BODY
 
-            // 移动到目标位置，共享桶存在文件则删除
-            if task.bucket.is_none() || !save_path.exists() {
-                async_fs::rename(&cache, &save_path).await?
-            } else {
-                async_fs::remove_file(&cache).await?
-            };
-
-            // 如果有 bucket，将共享文件链接到 task.target
-            if task.bucket.is_some()
-                && let Err(_e) = async_fs::hard_link(&save_path, &task.target).await
-            {
-                #[cfg(target_family = "unix")]
-                {
-                    async_fs::unix::symlink(save_path, task.target).await?;
+        let mut last_res = Ok(None);
+        for _ in 0..=self.retries {
+            match retry_body().await {
+                Ok(v) => {
+                    last_res = Ok(v);
                     break;
                 }
-                #[cfg(target_os = "windows")]
-                {
-                    async_fs::windows::symlink_file(save_path, task.target).await?;
-                    break;
-                }
-
-                return Err(Error::Io(_e));
+                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Err(e) => last_res = Err(e),
             }
-            task.process.finish();
-            return Ok(());
+            let _ = async_fs::remove_file(&cache).await;
         }
+        let bucket_hasher = last_res?;
 
-        let _ = async_fs::remove_file(&cache).await;
-        Err(Error::other("download failed after retries"))
+        match &task.target {
+            // 直接保存
+            Target::File(path) => {
+                // 确定保存路径
+                let save_path = if let Some(b) = &task.bucket {
+                    let hash = bucket_hasher.unwrap().finalize().to_string();
+                    &b.join(&hash[..2]).join(hash)
+                } else {
+                    path
+                };
+
+                // 确保父目录存在
+                let parent = save_path.parent().expect("invalid save path");
+                if !parent.is_dir() {
+                    async_fs::create_dir_all(parent).await?;
+                }
+
+                // 移动到目标位置，共享桶存在文件则删除缓存，不执行操作
+                if task.bucket.is_none() || !save_path.exists() {
+                    async_fs::rename(&cache, &save_path).await?
+                } else {
+                    async_fs::remove_file(&cache).await?
+                };
+
+                // 如果有 bucket，将共享文件链接到 task.target
+                if task.bucket.is_some()
+                    // 优先尝试硬链接
+                    && let Err(_e) = async_fs::hard_link(&save_path, &path).await
+                {
+                    // 对支持的系统使用符号链接 Fallback
+                    #[cfg(target_family = "unix")]
+                    async_fs::unix::symlink(save_path, &path).await?;
+                    #[cfg(target_os = "windows")]
+                    async_fs::windows::symlink_file(save_path, &path).await?;
+
+                    // 不支持的系统返回硬链接错误
+                    #[cfg(not(any(target_family = "unix", target_os = "windows")))]
+                    return Err(Error::Io(_e));
+                }
+            }
+            // 解压缩
+            Target::Extract(extract) => {
+                task.process.extracting();
+                extract.exec(&cache, task.bucket).await?
+            }
+        } // Save or Extract
+
+        task.process.finish();
+        Ok(())
     }
     /// 并发下载文件到储存
     pub async fn download_concurrent(

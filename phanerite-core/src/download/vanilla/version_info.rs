@@ -50,7 +50,8 @@ impl VersionInfo {
         self.downloads.client.as_ref().map(|c| {
             DownloadTask::builder()
                 .url(c.url.clone())
-                .to_path(path, storage)
+                .to_path(path)
+                .share(storage)
                 .file_name(self.id.clone().add(".jar"))
                 .file_size(c.size)
                 .hash(c.sha1.clone())

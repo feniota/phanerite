@@ -1,3 +1,5 @@
+use crate::download::extract::ExtractTask;
+use crate::download::task::Target::{Extract, File};
 use crate::storage::Storage;
 use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
@@ -7,11 +9,27 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, OnceLock};
 
 pub struct EmptyUrl;
-pub struct EmptyPath;
+pub struct EmptyTarget;
 
-pub struct DownloadTaskBuilder<U, P> {
+pub enum Target {
+    File(PathBuf),
+    Extract(ExtractTask),
+}
+
+impl From<PathBuf> for Target {
+    fn from(value: PathBuf) -> Self {
+        File(value)
+    }
+}
+impl From<ExtractTask> for Target {
+    fn from(value: ExtractTask) -> Self {
+        Extract(value)
+    }
+}
+
+pub struct DownloadTaskBuilder<U, T> {
     url: U,
-    target: P,
+    target: T,
     bucket: Option<PathBuf>,
     file_name: Option<String>,
     file_size: Option<u64>,
@@ -20,7 +38,7 @@ pub struct DownloadTaskBuilder<U, P> {
 
 pub struct DownloadTask {
     pub(super) url: String,
-    pub(super) target: PathBuf,
+    pub(super) target: Target,
     pub(super) bucket: Option<PathBuf>,
     pub(super) file_hash: Hash,
 
@@ -40,15 +58,16 @@ struct DownloadProcessInner {
     total: OnceLock<u64>,
 
     started: AtomicBool,
+    extracting: AtomicBool,
     finished: AtomicBool,
     cancelled: AtomicBool,
 }
 
 impl DownloadTask {
-    pub fn builder() -> DownloadTaskBuilder<EmptyUrl, EmptyPath> {
+    pub fn builder() -> DownloadTaskBuilder<EmptyUrl, EmptyTarget> {
         DownloadTaskBuilder {
             url: EmptyUrl,
-            target: EmptyPath,
+            target: EmptyTarget,
             bucket: None,
             file_name: None,
             file_size: None,
@@ -57,8 +76,8 @@ impl DownloadTask {
     }
 }
 
-impl<P> DownloadTaskBuilder<EmptyUrl, P> {
-    pub fn url(self, url: impl Into<String>) -> DownloadTaskBuilder<String, P> {
+impl<T> DownloadTaskBuilder<EmptyUrl, T> {
+    pub fn url(self, url: impl Into<String>) -> DownloadTaskBuilder<String, T> {
         DownloadTaskBuilder {
             url: url.into(),
             target: self.target,
@@ -70,7 +89,7 @@ impl<P> DownloadTaskBuilder<EmptyUrl, P> {
     }
 }
 
-impl<U> DownloadTaskBuilder<U, EmptyPath> {
+impl<U> DownloadTaskBuilder<U, EmptyTarget> {
     pub fn to_asset(self, path: &Path, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
@@ -91,11 +110,21 @@ impl<U> DownloadTaskBuilder<U, EmptyPath> {
             file_hash: self.file_hash,
         }
     }
-    pub fn to_path(self, path: PathBuf, storage: &Storage) -> DownloadTaskBuilder<U, PathBuf> {
+    pub fn to_path(self, path: PathBuf) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
             target: path,
-            bucket: Some(storage.share_dir.clone()),
+            bucket: self.bucket,
+            file_name: self.file_name,
+            file_size: self.file_size,
+            file_hash: self.file_hash,
+        }
+    }
+    pub fn extract_to(self, extract_task: ExtractTask) -> DownloadTaskBuilder<U, ExtractTask> {
+        DownloadTaskBuilder {
+            url: self.url,
+            target: extract_task,
+            bucket: self.bucket,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -116,13 +145,17 @@ impl<U, P> DownloadTaskBuilder<U, P> {
         self.file_hash = hash.into();
         self
     }
+    pub fn share(mut self, storage: &Storage) -> Self {
+        self.bucket = Some(storage.share_dir.clone());
+        self
+    }
 }
 
 impl DownloadTaskBuilder<String, PathBuf> {
     pub fn build(self) -> DownloadTask {
         DownloadTask {
             url: self.url,
-            target: self.target,
+            target: self.target.into(),
             bucket: self.bucket,
             file_hash: self.file_hash,
             process: DownloadProcess {
@@ -140,6 +173,7 @@ impl DownloadTaskBuilder<String, PathBuf> {
                     },
 
                     started: AtomicBool::new(false),
+                    extracting: AtomicBool::new(false),
                     finished: AtomicBool::new(false),
                     cancelled: AtomicBool::new(false),
                 }),
@@ -165,14 +199,17 @@ impl DownloadProcess {
         self.inner.cancelled.store(true, Release);
         self.inner.event.notify(usize::MAX);
     }
-    pub fn is_canceled(&self) -> bool {
-        self.inner.cancelled.load(Acquire)
-    }
     pub fn is_started(&self) -> bool {
         self.inner.started.load(Acquire)
     }
+    pub fn is_extracting(&self) -> bool {
+        self.inner.extracting.load(Acquire)
+    }
     pub fn is_finished(&self) -> bool {
         self.inner.finished.load(Acquire)
+    }
+    pub fn is_canceled(&self) -> bool {
+        self.inner.cancelled.load(Acquire)
     }
 
     pub(super) fn set_total(&self, total: u64) -> bool {
@@ -191,6 +228,10 @@ impl DownloadProcess {
         self.inner.started.store(true, Release);
         self.inner.event.notify(usize::MAX);
     }
+    pub(super) fn extracting(&self) {
+        self.inner.extracting.store(true, Release);
+        self.inner.event.notify(usize::MAX);
+    }
     pub(super) fn finish(&self) {
         self.inner.finished.store(true, Release);
         self.inner.event.notify(usize::MAX);
@@ -200,5 +241,11 @@ impl DownloadProcess {
 pub fn filter_existed(
     tasks: impl Iterator<Item = DownloadTask>,
 ) -> impl Iterator<Item = DownloadTask> {
-    tasks.filter(|x| !x.target.exists())
+    tasks.filter(|x| {
+        if let File(p) = &x.target {
+            !p.exists()
+        } else {
+            true
+        }
+    })
 }

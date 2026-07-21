@@ -203,7 +203,7 @@ impl VariablesBuilder<String, Missing, String> {
 
 impl<R, L, M> VariablesBuilder<R, L, M> {
     pub fn feature(mut self, feature: &'static str) -> Self {
-        self.features.insert(feature.into());
+        self.features.insert(feature);
         self
     }
 }
@@ -225,8 +225,8 @@ struct Generated {
     assets_index_name: String,
     /// 游戏位置
     classpath: PathBuf,
-    // /// 二进制库位置
-    // natives_directory: PathBuf,
+    /// 二进制库位置
+    natives_directory: PathBuf,
     /// 启动器名称
     launcher_name: &'static str,
     /// 启动器版本
@@ -249,7 +249,7 @@ impl Generated {
             assets_root: std::path::absolute(storage.assets_dir.clone())?,
             assets_index_name: manifest.assets.clone(),
             classpath: std::path::absolute(instance_dir.join(&manifest.jar))?,
-            // natives_directory: ,
+            natives_directory: instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
             path: std::path::absolute(instance_dir.join("logs"))?,
@@ -266,6 +266,10 @@ impl Generated {
         vars.insert("assets_root", self.assets_root.to_string_lossy().into());
         vars.insert("assets_index_name", self.assets_index_name.clone());
         vars.insert("classpath", self.classpath.to_string_lossy().into());
+        vars.insert(
+            "natives_directory",
+            self.natives_directory.to_string_lossy().into(),
+        );
         vars.insert("launcher_name", self.launcher_name.to_string());
         vars.insert("launcher_version", self.launcher_version.to_string());
         vars.insert("path", self.path.to_string_lossy().into());

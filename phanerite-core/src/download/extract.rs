@@ -17,6 +17,24 @@ pub struct ExtractTask {
     path: PathBuf,
     format: ArchiveFormat,
     auto_flattens: bool,
+    exclude: Vec<ExcludePattern>,
+}
+
+/// A simple exclusion pattern for archive entries.
+/// Mojang convention: `META-INF/` = prefix, `*.SF` = suffix.
+#[derive(Clone)]
+pub enum ExcludePattern {
+    Prefix(String),
+    Suffix(String),
+}
+
+impl ExcludePattern {
+    fn matches(&self, path: &str) -> bool {
+        match self {
+            ExcludePattern::Prefix(p) => path.starts_with(p.as_str()),
+            ExcludePattern::Suffix(p) => path.ends_with(p.as_str()),
+        }
+    }
 }
 
 impl ExtractTask {
@@ -25,6 +43,7 @@ impl ExtractTask {
             path: Missing,
             format: Missing,
             auto_flattens: false,
+            exclude: vec![],
         }
     }
 
@@ -38,13 +57,22 @@ impl ExtractTask {
         let target = self.path.clone();
         let format = self.format;
         let auto_flattens = self.auto_flattens;
+        let exclude = self.exclude.clone();
 
         let (tx, rx) = async_channel::bounded(1);
         std::thread::spawn(move || {
             let result = match format {
-                ArchiveFormat::Zip => unzip(&archive_path, &target, bucket, auto_flattens),
-                ArchiveFormat::Tar => untar(&archive_path, &target, bucket, auto_flattens),
+                ArchiveFormat::Zip => {
+                    unzip(&archive_path, &target, bucket, auto_flattens, &exclude)
+                }
+                ArchiveFormat::Tar => {
+                    untar(&archive_path, &target, bucket, auto_flattens, &exclude)
+                }
             };
+            // Native jars are delivery vehicles — remove after extraction.
+            if result.is_ok() {
+                let _ = fs::remove_file(&archive_path);
+            }
             let _ = tx.send_blocking(result);
         });
         rx.recv()
@@ -60,9 +88,10 @@ fn unzip(
     target: &Path,
     bucket: Option<PathBuf>,
     auto_flattens: bool,
+    exclude: &[ExcludePattern],
 ) -> Result<()> {
     let file = fs::File::open(archive)?;
-    let mut reader = zip::ZipArchive::new(BufReader::new(file))?;
+    let mut reader = zip::ZipArchive::new(file)?;
 
     // ── List entries ──────────────────────────────────────────────
     let mut entries: Vec<(String, u64)> = Vec::with_capacity(reader.len());
@@ -70,6 +99,9 @@ fn unzip(
         let entry = reader.by_index(i)?;
         let name = entry.name().to_owned();
         if entry.is_dir() || entry.name_raw().ends_with(b"/") {
+            continue;
+        }
+        if exclude.iter().any(|p| p.matches(&name)) {
             continue;
         }
         entries.push((name, entry.size()));
@@ -99,6 +131,7 @@ fn untar(
     target: &Path,
     bucket: Option<PathBuf>,
     auto_flattens: bool,
+    exclude: &[ExcludePattern],
 ) -> Result<()> {
     let file = fs::File::open(archive_path)?;
     let mut tar = tar::Archive::new(BufReader::new(file));
@@ -112,6 +145,9 @@ fn untar(
             continue;
         }
         let name = entry.path()?.to_string_lossy().into_owned();
+        if exclude.iter().any(|p| p.matches(&name)) {
+            continue;
+        }
         let size = header.size()?;
         entries.push((name, size));
     }
@@ -250,6 +286,7 @@ pub struct ExtractTaskBuilder<P, F> {
     path: P,
     format: F,
     auto_flattens: bool,
+    exclude: Vec<ExcludePattern>,
 }
 
 impl<P, F> ExtractTaskBuilder<P, F> {
@@ -258,6 +295,7 @@ impl<P, F> ExtractTaskBuilder<P, F> {
             path: path.into(),
             format: self.format,
             auto_flattens: self.auto_flattens,
+            exclude: self.exclude,
         }
     }
     pub fn zip(self) -> ExtractTaskBuilder<P, ArchiveFormat> {
@@ -265,6 +303,7 @@ impl<P, F> ExtractTaskBuilder<P, F> {
             path: self.path,
             format: ArchiveFormat::Zip,
             auto_flattens: self.auto_flattens,
+            exclude: self.exclude,
         }
     }
     pub fn tar(self) -> ExtractTaskBuilder<P, ArchiveFormat> {
@@ -272,10 +311,22 @@ impl<P, F> ExtractTaskBuilder<P, F> {
             path: self.path,
             format: ArchiveFormat::Tar,
             auto_flattens: self.auto_flattens,
+            exclude: self.exclude,
         }
     }
     pub fn flatten(mut self) -> Self {
         self.auto_flattens = true;
+        self
+    }
+    pub fn exclude(mut self, patterns: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        for p in patterns {
+            let s: String = p.into();
+            if let Some(suffix) = s.strip_prefix('*') {
+                self.exclude.push(ExcludePattern::Suffix(suffix.to_owned()));
+            } else {
+                self.exclude.push(ExcludePattern::Prefix(s));
+            }
+        }
         self
     }
 }
@@ -286,6 +337,7 @@ impl ExtractTaskBuilder<PathBuf, ArchiveFormat> {
             path: self.path,
             format: self.format,
             auto_flattens: self.auto_flattens,
+            exclude: self.exclude,
         }
     }
 }

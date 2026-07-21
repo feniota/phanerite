@@ -55,7 +55,7 @@ impl VersionInfo {
             .flat_map(|x| {
                 [
                     x.to_task(storage, features),
-                    x.to_native_task(features, native_dir),
+                    x.to_native_task(storage, features, native_dir),
                 ]
             })
             .flatten()

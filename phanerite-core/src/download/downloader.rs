@@ -161,6 +161,7 @@ impl Downloader {
                 }
                 task.process.step(n as u64);
             }
+            file.flush().await?;
 
             // 校验文件
             if task.file_hash == hasher.finalize() {

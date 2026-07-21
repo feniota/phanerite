@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use std::fs;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 const CHUNK_SIZE: usize = 8192;
@@ -134,7 +134,7 @@ fn untar(
     exclude: &[ExcludePattern],
 ) -> Result<()> {
     let file = fs::File::open(archive_path)?;
-    let mut tar = tar::Archive::new(BufReader::new(file));
+    let mut tar = tar::Archive::new(file);
 
     // ── List entries ──────────────────────────────────────────────
     let mut entries: Vec<(String, u64)> = Vec::new();
@@ -161,7 +161,7 @@ fn untar(
     // Re-open for extraction
     drop(tar);
     let file = fs::File::open(archive_path)?;
-    let mut tar = tar::Archive::new(BufReader::new(file));
+    let mut tar = tar::Archive::new(file);
 
     for entry in tar.entries()? {
         let entry = entry?;

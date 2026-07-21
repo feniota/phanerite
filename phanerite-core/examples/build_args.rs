@@ -1,6 +1,6 @@
-use phanerite_core::instance::arguments::variables::Variables;
-use phanerite_core::instance::arguments::LaunchArguments;
 use phanerite_core::instance::Instance;
+use phanerite_core::instance::arguments::LaunchArguments;
+use phanerite_core::instance::arguments::variables::Variables;
 use phanerite_core::storage::Storage;
 use std::error::Error;
 use tracing::Level;

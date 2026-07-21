@@ -1,10 +1,12 @@
+use crate::error::Result;
 use crate::instance::instance_info::{VersionManifest, VersionType};
 use crate::storage::Storage;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 pub struct Variables {
-    pub vars: HashMap<&'static str, String>,
+    vars: HashMap<&'static str, String>,
+    pub(super) feat: HashSet<&'static str>,
 }
 
 impl Variables {
@@ -23,7 +25,31 @@ impl Variables {
             quick_play_singleplayer: None,
             quick_play_multiplayer: None,
             quick_play_realms: None,
+            features: HashSet::new(),
         }
+    }
+    pub(super) fn resolve(&self, input: &str) -> Option<String> {
+        if let Some(key) = input.strip_prefix("${").and_then(|x| x.strip_suffix('}')) {
+            return self.vars.get(key).cloned();
+        }
+        self.resolve_template(input)
+    }
+    fn resolve_template(&self, input: &str) -> Option<String> {
+        let mut output = String::with_capacity(input.len());
+        let mut rest = input;
+
+        while let Some(start) = rest.find("${") {
+            output.push_str(&rest[..start]);
+            let rest2 = &rest[start + 2..];
+            let end = rest2.find('}')?;
+            let key = &rest2[..end];
+            let value = self.vars.get(key)?;
+            output.push_str(value);
+            rest = &rest2[end + 1..];
+        }
+
+        output.push_str(rest);
+        Some(output)
     }
 }
 
@@ -48,6 +74,9 @@ pub struct VariablesBuilder<Required, Legacy, Modern> {
     quick_play_singleplayer: Option<String>,
     quick_play_multiplayer: Option<String>,
     quick_play_realms: Option<String>,
+
+    // Features
+    features: HashSet<&'static str>,
 }
 
 // ————————————————————————————————————————
@@ -75,6 +104,7 @@ impl<Required, Legacy, Modern> VariablesBuilder<Required, Legacy, Modern> {
             quick_play_singleplayer: self.quick_play_singleplayer,
             quick_play_multiplayer: self.quick_play_multiplayer,
             quick_play_realms: self.quick_play_realms,
+            features: self.features,
         }
     }
 }
@@ -103,6 +133,7 @@ impl<Legacy> VariablesBuilder<String, Legacy, Missing> {
             quick_play_singleplayer: self.quick_play_singleplayer,
             quick_play_multiplayer: self.quick_play_multiplayer,
             quick_play_realms: self.quick_play_realms,
+            features: self.features,
         }
     }
 }
@@ -131,6 +162,7 @@ impl<Modern> VariablesBuilder<String, Missing, Modern> {
             quick_play_singleplayer: self.quick_play_singleplayer,
             quick_play_multiplayer: self.quick_play_multiplayer,
             quick_play_realms: self.quick_play_realms,
+            features: self.features,
         }
     }
 }
@@ -166,10 +198,21 @@ impl VariablesBuilder<String, Missing, String> {
 }
 
 // ————————————————————————————————————————
+// 启用特性
+// ————————————————————————————————————————
+
+impl<R, L, M> VariablesBuilder<R, L, M> {
+    pub fn feature(mut self, feature: &'static str) -> Self {
+        self.features.insert(feature.into());
+        self
+    }
+}
+
+// ————————————————————————————————————————
 // 自动生成配置
 // ————————————————————————————————————————
 
-pub struct Generated {
+struct Generated {
     /// 实例名称
     version_name: String,
     /// 版本类型
@@ -193,24 +236,24 @@ pub struct Generated {
 }
 
 impl Generated {
-    pub fn from_manifest(
+    fn from_manifest(
         manifest: &VersionManifest,
-        instance_dir: impl Into<PathBuf>,
+        instance_dir: impl AsRef<Path>,
         storage: &Storage,
-    ) -> Self {
-        let instance_dir = instance_dir.into();
-        Self {
+    ) -> Result<Self> {
+        let instance_dir = instance_dir.as_ref();
+        Ok(Self {
             version_name: manifest.id.clone(),
             version_type: manifest.version_type,
-            game_directory: instance_dir.clone(),
-            assets_root: storage.assets_dir.clone(),
+            game_directory: std::path::absolute(instance_dir)?,
+            assets_root: std::path::absolute(storage.assets_dir.clone())?,
             assets_index_name: manifest.assets.clone(),
-            classpath: instance_dir.join(&manifest.jar),
+            classpath: std::path::absolute(instance_dir.join(&manifest.jar))?,
             // natives_directory: ,
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            path: instance_dir.join("logs"),
-        }
+            path: std::path::absolute(instance_dir.join("logs"))?,
+        })
     }
 
     fn insert_into(&self, vars: &mut HashMap<&'static str, String>) {
@@ -251,7 +294,12 @@ macro_rules! insert_fields {
 
 /// 旧版配置
 impl VariablesBuilder<String, String, Missing> {
-    pub fn build(self, generated: Generated) -> Variables {
+    pub fn build(
+        self,
+        manifest: &VersionManifest,
+        instance_dir: impl AsRef<Path>,
+        storage: &Storage,
+    ) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -266,15 +314,24 @@ impl VariablesBuilder<String, String, Missing> {
             ]
         );
 
+        let generated = Generated::from_manifest(manifest, instance_dir, storage)?;
         generated.insert_into(&mut vars);
 
-        Variables { vars }
+        Ok(Variables {
+            vars,
+            feat: self.features,
+        })
     }
 }
 
 /// 新版配置
 impl VariablesBuilder<String, Missing, String> {
-    pub fn build(self, generated: Generated) -> Variables {
+    pub fn build(
+        self,
+        manifest: &VersionManifest,
+        instance_dir: impl AsRef<Path>,
+        storage: &Storage,
+    ) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -302,8 +359,12 @@ impl VariablesBuilder<String, Missing, String> {
             ]
         );
 
+        let generated = Generated::from_manifest(manifest, instance_dir, storage)?;
         generated.insert_into(&mut vars);
 
-        Variables { vars }
+        Ok(Variables {
+            vars,
+            feat: self.features,
+        })
     }
 }

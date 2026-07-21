@@ -1,15 +1,13 @@
-// Remote types from Mojang API — aliased to avoid conflicts with local types.
 use crate::download::vanilla::libraries::Library as RemoteLibrary;
-use crate::download::vanilla::version_info::{
-    self as remote, Arguments as RemoteArguments, JavaVersion as RemoteJavaVersion,
-    Logging as RemoteLogging, VersionInfo,
-};
+use crate::download::vanilla::version_info::VersionInfo;
 use crate::error::Result;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use futures::AsyncReadExt;
+use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::path::Path;
 use strum::{Display, EnumString};
 
@@ -18,7 +16,8 @@ use strum::{Display, EnumString};
 #[serde(rename_all = "camelCase")]
 pub struct VersionManifest {
     pub id: String,
-    pub arguments: Arguments,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<Arguments>,
     pub main_class: String,
     pub jar: String,
     pub asset_index: AssetIndex,
@@ -72,7 +71,9 @@ pub struct Patch {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Arguments {
+    #[serde(default)]
     pub game: Vec<Argument>,
+    #[serde(default)]
     pub jvm: Vec<Argument>,
 }
 
@@ -88,7 +89,9 @@ pub enum Argument {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConditionalArgument {
+    #[serde(default)]
     pub rules: Vec<Rule>,
+    #[serde(deserialize_with = "deser_value_string_or_vec")]
     pub value: Vec<String>,
 }
 
@@ -103,20 +106,78 @@ pub struct Rule {
     pub features: Option<HashMap<String, bool>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Rule {
+    /// Evaluate this rule against the current OS and a set of enabled features.
+    ///
+    /// Returns `Some(action)` if the rule's OS **and** feature conditions
+    /// are all met, or `None` if this rule does not apply.
+    pub fn evaluate(&self, features: &HashSet<&'static str>) -> Option<Action> {
+        if let Some(ref os) = self.os
+            && !os.matches_current()
+        {
+            return None;
+        }
+        if let Some(ref feats) = self.features {
+            for (k, v) in feats {
+                if features.contains(k.as_str()) != *v {
+                    return None;
+                }
+            }
+        }
+        Some(self.action)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Action {
     Allow,
     Disallow,
 }
 
+impl Action {
+    pub fn allow(&self) -> bool {
+        match self {
+            Action::Allow => true,
+            Action::Disallow => false,
+        }
+    }
+}
+
 /// OS constraint (name + optional architecture).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OsInfo {
+    #[serde(default)]
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
+}
+
+impl OsInfo {
+    /// Check whether the current system is included by this OS constraint.
+    ///
+    /// - `name` empty → matches any OS.
+    /// - `name` "osx" matches macOS (`std::env::consts::OS == "macos"`).
+    /// - `arch` `None` → matches any architecture.
+    pub fn matches_current(&self) -> bool {
+        if !self.name.is_empty() {
+            let current_os = std::env::consts::OS;
+            let mapped = match current_os {
+                "macos" => "osx",
+                other => other,
+            };
+            if self.name != mapped {
+                return false;
+            }
+        }
+        if let Some(ref arch) = self.arch
+            && arch != std::env::consts::ARCH
+        {
+            return false;
+        }
+        true
+    }
 }
 
 /// Asset index metadata.
@@ -192,12 +253,16 @@ pub struct Logging {
     pub client: LoggingClient,
 }
 
+fn default_logging_type() -> String {
+    "log4j2-xml".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoggingClient {
     pub file: LoggingFileInfo,
     pub argument: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "default_logging_type")]
     pub type_: String,
 }
 
@@ -231,13 +296,16 @@ impl VersionManifest {
         let id = remote.id;
         let mut manifest = Self {
             id: id.clone(),
-            arguments: convert_arguments(remote.arguments),
+            arguments: remote.arguments,
             main_class: remote.main_class,
             jar: id,
             asset_index: convert_asset_index(remote.asset_index),
             assets,
             compliance_level: 1,
-            java_version: convert_java_version(remote.java_version),
+            java_version: remote.java_version.unwrap_or(JavaVersion {
+                component: "java-runtime-alpha".into(),
+                major_version: 8,
+            }),
             libraries: remote
                 .libraries
                 .into_iter()
@@ -255,7 +323,7 @@ impl VersionManifest {
                     size: d.size,
                 }),
             },
-            logging: remote.logging.map(convert_logging),
+            logging: remote.logging,
             version_type: remote.version_type,
             time: remote.time,
             release_time: remote.release_time,
@@ -265,24 +333,26 @@ impl VersionManifest {
             minecraft_arguments: remote.minecraft_arguments,
             extra: filter_extra(remote.extra),
         };
-        manifest.patches = vec![Patch {
-            id: "game".into(),
-            version: manifest.id.clone(),
-            priority: 0,
-            arguments: manifest.arguments.clone(),
-            main_class: manifest.main_class.clone(),
-            asset_index: manifest.asset_index.clone(),
-            assets: manifest.assets.clone(),
-            compliance_level: manifest.compliance_level,
-            java_version: manifest.java_version.clone(),
-            libraries: manifest.libraries.clone(),
-            downloads: manifest.downloads.clone(),
-            logging: manifest.logging.clone(),
-            version_type: manifest.version_type.clone(),
-            time: manifest.time,
-            release_time: manifest.release_time,
-            minimum_launcher_version: manifest.minimum_launcher_version,
-        }];
+        manifest.patches = manifest.arguments.clone().map_or(vec![], |args| {
+            vec![Patch {
+                id: "game".into(),
+                version: manifest.id.clone(),
+                priority: 0,
+                arguments: args,
+                main_class: manifest.main_class.clone(),
+                asset_index: manifest.asset_index.clone(),
+                assets: manifest.assets.clone(),
+                compliance_level: manifest.compliance_level,
+                java_version: manifest.java_version.clone(),
+                libraries: manifest.libraries.clone(),
+                downloads: manifest.downloads.clone(),
+                logging: manifest.logging.clone(),
+                version_type: manifest.version_type,
+                time: manifest.time,
+                release_time: manifest.release_time,
+                minimum_launcher_version: manifest.minimum_launcher_version,
+            }]
+        });
         manifest
     }
 
@@ -296,61 +366,11 @@ impl VersionManifest {
     }
 
     /// Override `id` and `jar` with the given instance name.
-    pub fn rename(mut self, name: String) -> Self {
+    pub fn rename(mut self, name: impl Into<String>) -> Self {
+        let name = name.into();
         self.id = name.clone();
         self.jar = name;
         self
-    }
-}
-
-// ── Argument conversion ──────────────────────────────────────────────
-
-fn convert_arguments(args: Option<RemoteArguments>) -> Arguments {
-    let (game, jvm) = match args {
-        Some(a) => (
-            a.game
-                .map(|v| v.into_iter().map(convert_argument).collect())
-                .unwrap_or_default(),
-            a.jvm
-                .map(|v| v.into_iter().map(convert_argument).collect())
-                .unwrap_or_default(),
-        ),
-        None => (vec![], vec![]),
-    };
-    Arguments { game, jvm }
-}
-
-fn convert_argument(a: remote::Argument) -> Argument {
-    match a {
-        remote::Argument::Simple(s) => Argument::String(s),
-        remote::Argument::Complex { rules, value } => {
-            let converted_value = match value {
-                remote::Value::Single(s) => vec![s],
-                remote::Value::Multiple(v) => v,
-            };
-            Argument::Conditional(ConditionalArgument {
-                rules: rules
-                    .map(|v| v.into_iter().map(convert_rule).collect())
-                    .unwrap_or_default(),
-                value: converted_value,
-            })
-        }
-    }
-}
-
-fn convert_rule(r: remote::Rule) -> Rule {
-    let action = match r.action.as_str() {
-        "allow" => Action::Allow,
-        "disallow" => Action::Disallow,
-        _ => Action::Allow,
-    };
-    Rule {
-        action,
-        os: r.os.map(|o| OsInfo {
-            name: o.name.unwrap_or_default(),
-            arch: o.arch,
-        }),
-        features: r.features,
     }
 }
 
@@ -363,21 +383,6 @@ fn convert_asset_index(ai: crate::download::vanilla::assets::AssetIndex) -> Asse
         url: ai.url,
         sha1: ai.sha1,
         size: ai.size,
-    }
-}
-
-// ── Java version conversion ──────────────────────────────────────────
-
-fn convert_java_version(jv: Option<RemoteJavaVersion>) -> JavaVersion {
-    match jv {
-        Some(j) => JavaVersion {
-            component: j.component,
-            major_version: j.major_version,
-        },
-        None => JavaVersion {
-            component: "java-runtime-alpha".into(),
-            major_version: 8,
-        },
     }
 }
 
@@ -395,27 +400,39 @@ fn convert_library(lib: RemoteLibrary) -> Option<Library> {
                 size: artifact.size,
             },
         },
-        rules: lib.rules.map(|v| v.into_iter().map(convert_rule).collect()),
+        rules: lib.rules,
     })
 }
 
-// ── Logging conversion ───────────────────────────────────────────────
+// ── Custom deserializer: accept both `"str"` and `["a","b"]` ──────
 
-fn convert_logging(log: RemoteLogging) -> Logging {
-    let file = log.client.file;
-    Logging {
-        client: LoggingClient {
-            file: LoggingFileInfo {
-                id: file.id,
-                url: file.url,
-                sha1: file.sha1,
-                size: file.size,
-            },
-            argument: log.client.argument,
-            // Remote LoggingClient does not include `type`; vanilla defaults to log4j2-xml.
-            type_: "log4j2-xml".into(),
-        },
+fn deser_value_string_or_vec<'de, D: Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Vec<String>, D::Error> {
+    struct StringOrVec;
+    impl<'de> Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a string or a sequence of strings")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
+            Ok(vec![v.to_owned()])
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> std::result::Result<Self::Value, A::Error> {
+            let mut v = Vec::new();
+            while let Some(s) = seq.next_element::<String>()? {
+                v.push(s);
+            }
+            Ok(v)
+        }
     }
+    d.deserialize_any(StringOrVec)
 }
 
 /// Strip keys that `VersionManifest` already owns from the remote `extra` map,

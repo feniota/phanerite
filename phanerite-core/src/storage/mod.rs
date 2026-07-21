@@ -1,6 +1,6 @@
 use crate::error::Result;
 use std::path::{Path, PathBuf};
-use tracing::{debug, instrument};
+use tracing::debug;
 
 pub struct Storage {
     pub root_dir: PathBuf,
@@ -15,10 +15,9 @@ pub struct Storage {
 }
 
 impl Storage {
-    #[instrument]
-    pub async fn new(root: &Path) -> Result<Self> {
+    pub async fn new(root: impl AsRef<Path>) -> Result<Self> {
         debug!("creating storage dirs");
-        let root_dir = root.to_owned();
+        let root_dir = std::path::absolute(root.as_ref())?;
         let cache_dir = root_dir.join("cache");
         let versions_dir = root_dir.join("versions");
         let runtime_dir = root_dir.join("runtime");

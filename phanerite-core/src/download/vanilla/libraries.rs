@@ -1,14 +1,24 @@
 use crate::download::task::DownloadTask;
-use crate::download::vanilla::version_info::Rule;
+use crate::instance::instance_info::{Action, Rule};
 use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl Library {
-    pub fn into_task(self, storage: &Storage) -> Option<DownloadTask> {
+    pub fn into_task(
+        self,
+        storage: &Storage,
+        features: &HashSet<&'static str>,
+    ) -> Option<DownloadTask> {
         if let Some(d) = self.downloads
             && let Some(a) = d.artifact
+            && self.rules.is_none_or(|x| {
+                x.iter().fold(false, |b, rule| {
+                    rule.evaluate(features)
+                        .map_or(b, |a| matches!(a, Action::Allow))
+                })
+            })
         {
             Some(
                 DownloadTask::builder()

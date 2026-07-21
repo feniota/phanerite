@@ -4,11 +4,12 @@ use crate::download::vanilla::assets::{AssetIndex, AssetIndexList};
 use crate::download::vanilla::libraries::Library;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::{Error, Result};
+use crate::instance::instance_info::{Arguments, JavaVersion, Logging};
 use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 use std::path::PathBuf;
 
@@ -23,6 +24,7 @@ impl VersionInfo {
     pub async fn build_all_task(
         self,
         client_path: PathBuf,
+        features: &HashSet<&'static str>,
         storage: &Storage,
         downloader: &Downloader,
     ) -> Result<(impl Iterator<Item = DownloadTask>, AssetIndexList)> {
@@ -31,7 +33,7 @@ impl VersionInfo {
         let assets_list = AssetIndexList::get(&self.asset_index, downloader).await?;
         let assets = assets_list.clone().build_assets_task(storage);
 
-        let library = self.build_libraries_task(storage);
+        let library = self.build_libraries_task(storage, features);
 
         let chain = if let Some(c) = client {
             library.chain(assets).chain(std::iter::once(c))
@@ -41,10 +43,14 @@ impl VersionInfo {
 
         Ok((chain, assets_list))
     }
-    pub fn build_libraries_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
+    pub fn build_libraries_task(
+        self,
+        storage: &Storage,
+        features: &HashSet<&'static str>,
+    ) -> impl Iterator<Item = DownloadTask> {
         self.libraries
             .into_iter()
-            .filter_map(|x| x.into_task(storage))
+            .filter_map(|x| x.into_task(storage, features))
     }
     pub fn build_client_task(&self, path: PathBuf, storage: &Storage) -> Option<DownloadTask> {
         self.downloads.client.as_ref().map(|c| {
@@ -94,45 +100,6 @@ pub struct VersionInfo {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-/// 启动参数
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Arguments {
-    pub game: Option<Vec<Argument>>,
-    pub jvm: Option<Vec<Argument>>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum Argument {
-    Simple(String),
-
-    Complex {
-        rules: Option<Vec<Rule>>,
-        value: Value,
-    },
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum Value {
-    Single(String),
-    Multiple(Vec<String>),
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Rule {
-    pub action: String,
-    pub os: Option<Os>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub features: Option<HashMap<String, bool>>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Os {
-    pub name: Option<String>,
-    pub arch: Option<String>,
-}
-
 /// 游戏下载
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Downloads {
@@ -144,37 +111,5 @@ pub struct Downloads {
 pub struct Download {
     pub sha1: Sha1Hash,
     pub size: u64,
-    pub url: String,
-}
-
-/// Java版本要求
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JavaVersion {
-    pub component: String,
-    pub major_version: u32,
-}
-
-/// 日志配置
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Logging {
-    pub client: LoggingClient,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct LoggingClient {
-    pub argument: String,
-
-    pub file: LoggingFile,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct LoggingFile {
-    pub id: String,
-
-    pub sha1: Sha1Hash,
-
-    pub size: u64,
-
     pub url: String,
 }

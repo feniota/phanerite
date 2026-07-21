@@ -10,7 +10,7 @@ fn main() -> error::Result<()> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        let storage = storage::Storage::new(".minecraft".as_ref()).await?;
+        let storage = storage::Storage::new(".minecraft").await?;
         let downloader = download::downloader::Downloader::builder(&storage)
             .concurrent(NonZeroU8::new(16).unwrap())
             .retries(3)

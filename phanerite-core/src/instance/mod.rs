@@ -4,7 +4,10 @@ use crate::download::vanilla::version_info::VersionInfo;
 use crate::error::{Error, Result};
 use crate::instance::instance_info::VersionManifest;
 use crate::storage::Storage;
-use futures::AsyncWriteExt;
+use futures::StreamExt;
+use futures::{AsyncReadExt, AsyncWriteExt};
+use std::collections::HashSet;
+use std::path::Path;
 use tracing::error;
 
 pub mod arguments;
@@ -42,9 +45,10 @@ impl Instance {
         drop(info_json);
 
         // 构造下载任务
+        let features = HashSet::new(); // 下载大概不需要启用 features
         let game_file = path.join(format!("{}.jar", name));
         let (downloads, assets_index) = version
-            .build_all_task(game_file, storage, downloader)
+            .build_all_task(game_file, &features, storage, downloader)
             .await?;
         let downloads = filter_existed(downloads);
 
@@ -62,5 +66,46 @@ impl Instance {
             errors.iter().for_each(|e| error!("{e}"));
             Err(Error::other("download errors"))
         }
+    }
+    pub async fn open(instance_dir: impl AsRef<Path>) -> Result<VersionManifest> {
+        let path = std::path::absolute(instance_dir)?;
+
+        // 优先考虑 versions/{name}/{name}.json
+        if let Some(parent) = path.parent().and_then(|t| t.file_name()) {
+            let file = path.join(format!("{}.json", parent.to_string_lossy()));
+            if file.is_file() {
+                let mut json = Vec::new();
+                async_fs::File::open(file)
+                    .await?
+                    .read_to_end(&mut json)
+                    .await?;
+                return Ok(serde_json::from_slice(&json)?);
+            }
+        }
+
+        let jsons = async_fs::read_dir(path)
+            .await?
+            .filter_map(|entry| async move {
+                let entry = entry.ok()?;
+                let name = entry.file_name();
+                if name.to_string_lossy().ends_with(".json") && entry.path().is_file() {
+                    Some(entry.path())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .await;
+
+        if jsons.len() == 1 {
+            let mut json = Vec::new();
+            async_fs::File::open(jsons.first().unwrap())
+                .await?
+                .read_to_end(&mut json)
+                .await?;
+            return Ok(serde_json::from_slice(&json)?);
+        }
+
+        Err(Error::other("No instance found"))
     }
 }

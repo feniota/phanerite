@@ -69,10 +69,6 @@ impl ExtractTask {
                     untar(&archive_path, &target, bucket, auto_flattens, &exclude)
                 }
             };
-            // Native jars are delivery vehicles — remove after extraction.
-            if result.is_ok() {
-                let _ = fs::remove_file(&archive_path);
-            }
             let _ = tx.send_blocking(result);
         });
         rx.recv()

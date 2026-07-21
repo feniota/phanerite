@@ -68,3 +68,9 @@ impl Storage {
         })
     }
 }
+
+impl Drop for Storage {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.cache_dir);
+    }
+}

@@ -45,10 +45,11 @@ impl Instance {
         drop(info_json);
 
         // 构造下载任务
+        let native_dir = path.join("native");
         let features = HashSet::new(); // 下载大概不需要启用 features
         let game_file = path.join(format!("{}.jar", name));
         let (downloads, assets_index) = version
-            .build_all_task(game_file, &features, storage, downloader)
+            .build_all_task(game_file, &native_dir, &features, storage, downloader)
             .await?;
         let downloads = filter_existed(downloads);
 

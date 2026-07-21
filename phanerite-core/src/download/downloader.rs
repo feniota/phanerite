@@ -8,7 +8,7 @@ use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use isahc::{AsyncReadResponseExt, HttpClient};
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 use uuid::Uuid;
 
@@ -209,19 +209,8 @@ impl Downloader {
                 };
 
                 // 如果有 bucket，将共享文件链接到 task.target
-                if task.bucket.is_some()
-                    // 优先尝试硬链接
-                    && let Err(_e) = async_fs::hard_link(&save_path, &path).await
-                {
-                    // 对支持的系统使用符号链接 Fallback
-                    #[cfg(target_family = "unix")]
-                    async_fs::unix::symlink(save_path, &path).await?;
-                    #[cfg(target_os = "windows")]
-                    async_fs::windows::symlink_file(save_path, &path).await?;
-
-                    // 不支持的系统返回硬链接错误
-                    #[cfg(not(any(target_family = "unix", target_os = "windows")))]
-                    return Err(Error::Io(_e));
+                if task.bucket.is_some() {
+                    link_file(save_path, path).await?
                 }
             }
             // 解压缩
@@ -284,4 +273,20 @@ impl Drop for BufferGuard {
             }
         }
     }
+}
+
+pub(super) async fn link_file(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
+    // 优先尝试硬链接
+    if let Err(_e) = async_fs::hard_link(source.as_ref(), target.as_ref()).await {
+        // 对支持的系统使用符号链接 Fallback
+        #[cfg(target_family = "unix")]
+        async_fs::unix::symlink(source.as_ref(), target.as_ref()).await?;
+        #[cfg(target_os = "windows")]
+        async_fs::windows::symlink_file(source.as_ref(), target.as_ref()).await?;
+
+        // 不支持的系统返回硬链接错误
+        #[cfg(not(any(target_family = "unix", target_os = "windows")))]
+        return Err(Error::Io(_e));
+    }
+    Ok(())
 }

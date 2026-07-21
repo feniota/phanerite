@@ -8,8 +8,7 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, OnceLock};
 
-pub struct EmptyUrl;
-pub struct EmptyTarget;
+pub struct Missing;
 
 pub enum Target {
     File(PathBuf),
@@ -64,10 +63,10 @@ struct DownloadProcessInner {
 }
 
 impl DownloadTask {
-    pub fn builder() -> DownloadTaskBuilder<EmptyUrl, EmptyTarget> {
+    pub fn builder() -> DownloadTaskBuilder<Missing, Missing> {
         DownloadTaskBuilder {
-            url: EmptyUrl,
-            target: EmptyTarget,
+            url: Missing,
+            target: Missing,
             bucket: None,
             file_name: None,
             file_size: None,
@@ -76,7 +75,7 @@ impl DownloadTask {
     }
 }
 
-impl<T> DownloadTaskBuilder<EmptyUrl, T> {
+impl<T> DownloadTaskBuilder<Missing, T> {
     pub fn url(self, url: impl Into<String>) -> DownloadTaskBuilder<String, T> {
         DownloadTaskBuilder {
             url: url.into(),
@@ -89,7 +88,7 @@ impl<T> DownloadTaskBuilder<EmptyUrl, T> {
     }
 }
 
-impl<U> DownloadTaskBuilder<U, EmptyTarget> {
+impl<U> DownloadTaskBuilder<U, Missing> {
     pub fn to_asset(
         self,
         path: impl AsRef<Path>,
@@ -159,7 +158,7 @@ impl<U, P> DownloadTaskBuilder<U, P> {
     }
 }
 
-impl DownloadTaskBuilder<String, PathBuf> {
+impl<P: Into<Target>> DownloadTaskBuilder<String, P> {
     pub fn build(self) -> DownloadTask {
         DownloadTask {
             url: self.url,

@@ -3,6 +3,7 @@ pub enum Error {
     Io(std::io::Error),
     Http(isahc::Error),
     SerdeJson(serde_json::Error),
+    Zip(zip::result::ZipError),
     Cancelled,
     Other(String),
 }
@@ -14,6 +15,7 @@ impl std::fmt::Display for Error {
             Error::Http(status) => write!(f, "HTTP {status}"),
             Error::SerdeJson(e) => write!(f, "Serde JSON error: {e}"),
             Error::Cancelled => write!(f, "Operation cancelled"),
+            Error::Zip(e) => write!(f, "ZIP error: {e}"),
             Error::Other(msg) => f.write_str(msg),
         }
     }
@@ -23,6 +25,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Io(e) => Some(e),
+            Error::Zip(e) => Some(e),
             _ => None,
         }
     }
@@ -49,6 +52,12 @@ impl From<isahc::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::SerdeJson(e)
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(e: zip::result::ZipError) -> Self {
+        Error::Zip(e)
     }
 }
 

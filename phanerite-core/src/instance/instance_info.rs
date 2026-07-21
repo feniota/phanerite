@@ -11,6 +11,7 @@ use futures::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use strum::{Display, EnumString};
 
 /// Top-level Minecraft version manifest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,12 +211,16 @@ pub struct LoggingFileInfo {
     pub size: u64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Display, EnumString, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionType {
+    #[strum(to_string = "release")]
     Release,
+    #[strum(to_string = "snapshot")]
     Snapshot,
+    #[strum(to_string = "old_beta")]
     OldBeta,
+    #[strum(to_string = "old_alpha")]
     OldAlpha,
 }
 

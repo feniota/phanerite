@@ -17,6 +17,7 @@ isahc = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha1 = "0.11"
+strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1"
 uuid = { version = "1.24", features = ["v7"] }
 

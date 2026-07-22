@@ -1,6 +1,6 @@
-use phanerite_core::instance::Instance;
-use phanerite_core::instance::arguments::LaunchArguments;
 use phanerite_core::instance::arguments::variables::Variables;
+use phanerite_core::instance::arguments::LaunchArguments;
+use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
 use std::error::Error;
 use tracing::Level;
@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .init();
     smol::block_on(async {
         let instance_dir = ".minecraft/versions/26.2";
-        let storage = Storage::new(".minecraft").await?;
+        let storage = Storage::new(".minecraft")?;
         let manifest = Instance::open(instance_dir).await?;
         let variables = Variables::builder()
             .required(

@@ -23,7 +23,7 @@ impl Instance {
         downloader: &Downloader,
     ) -> Result<()> {
         // 准备实例目录
-        let path = storage.versions_dir.join(name);
+        let path = storage.versions_dir().join(name);
         if path.exists() {
             return Err(Error::other("Instance exists"));
         }
@@ -33,7 +33,7 @@ impl Instance {
         let info_file = path.join(format!("{}.json", name));
         let mut info_file = async_fs::File::create(info_file).await?;
         let index_file = storage
-            .assets_indexes
+            .assets_indexes()
             .join(format!("{}.json", version.asset_index.id));
         let mut index_file = async_fs::File::create(index_file).await?;
 

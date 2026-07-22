@@ -30,7 +30,7 @@ impl DownloaderBuilder {
             retries: 3,
             max_concurrent: 4,
             buffer_per_thread: 64 * 1024,
-            cache: storage.cache_dir.clone(),
+            cache: storage.cache_dir().to_path_buf(),
         }
     }
     /// 设置重试次数

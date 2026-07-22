@@ -96,7 +96,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
     ) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
-            target: storage.assets_objects.join(path),
+            target: storage.assets_objects().join(path),
             bucket: self.bucket,
             file_name: self.file_name,
             file_size: self.file_size,
@@ -110,7 +110,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
     ) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
-            target: storage.libraries_dir.join(path),
+            target: storage.libraries_dir().join(path),
             bucket: self.bucket,
             file_name: self.file_name,
             file_size: self.file_size,
@@ -153,7 +153,7 @@ impl<U, P> DownloadTaskBuilder<U, P> {
         self
     }
     pub fn share(mut self, storage: &Storage) -> Self {
-        self.bucket = Some(storage.share_dir.clone());
+        self.bucket = Some(storage.share_dir().to_path_buf());
         self
     }
 }

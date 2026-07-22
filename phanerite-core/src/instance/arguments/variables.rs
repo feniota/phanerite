@@ -246,7 +246,7 @@ impl Generated {
             version_name: manifest.id.clone(),
             version_type: manifest.version_type,
             game_directory: std::path::absolute(instance_dir)?,
-            assets_root: std::path::absolute(storage.assets_dir.clone())?,
+            assets_root: std::path::absolute(storage.assets_dir())?,
             assets_index_name: manifest.assets.clone(),
             classpath: std::path::absolute(instance_dir.join(&manifest.jar))?,
             natives_directory: instance_dir.join("native"),

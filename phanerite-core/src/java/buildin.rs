@@ -8,7 +8,7 @@ pub struct BuildInRuntime {
 impl BuildInRuntime {
     pub fn new(storage: &Storage) -> Self {
         Self {
-            runtime_dir: storage.runtime_dir.clone(),
+            runtime_dir: storage.runtime_dir().to_path_buf(),
         }
     }
 }

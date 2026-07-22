@@ -13,7 +13,9 @@ use tracing::error;
 pub mod arguments;
 pub mod instance_info;
 
-pub struct Instance;
+pub struct Instance {
+    pub manifest: VersionManifest,
+}
 
 impl Instance {
     pub async fn create(
@@ -68,7 +70,7 @@ impl Instance {
             Err(Error::other("download errors"))
         }
     }
-    pub async fn open(instance_dir: impl AsRef<Path>) -> Result<VersionManifest> {
+    pub async fn open(instance_dir: impl AsRef<Path>) -> Result<Self> {
         let path = std::path::absolute(instance_dir)?;
 
         // 优先考虑 versions/{name}/{name}.json
@@ -80,7 +82,9 @@ impl Instance {
                     .await?
                     .read_to_end(&mut json)
                     .await?;
-                return Ok(serde_json::from_slice(&json)?);
+                return Ok(Self {
+                    manifest: serde_json::from_slice(&json)?,
+                });
             }
         }
 
@@ -104,9 +108,14 @@ impl Instance {
                 .await?
                 .read_to_end(&mut json)
                 .await?;
-            return Ok(serde_json::from_slice(&json)?);
+            return Ok(Self {
+                manifest: serde_json::from_slice(&json)?,
+            });
         }
 
         Err(Error::other("No instance found"))
     }
+    // pub async fn check(&self) -> Result<impl Iterator<Item = DownloadTask>> {
+    //     todo!()
+    // }
 }

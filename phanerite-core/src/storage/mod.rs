@@ -14,6 +14,8 @@ pub struct Storage {
     assets_dir: OnceLock<PathBuf>,
     assets_objects: OnceLock<PathBuf>,
     assets_indexes: OnceLock<PathBuf>,
+
+    pub(crate) share_strategy: ShareStrategy,
 }
 
 impl Storage {
@@ -32,9 +34,13 @@ impl Storage {
             assets_dir: OnceLock::new(),
             assets_objects: OnceLock::new(),
             assets_indexes: OnceLock::new(),
+            share_strategy: ShareStrategy::Prefer,
         })
     }
-
+    pub fn share_strategy(mut self, strategy: ShareStrategy) -> Self {
+        self.share_strategy = strategy;
+        self
+    }
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
     }
@@ -83,4 +89,18 @@ impl Drop for Storage {
             let _ = std::fs::remove_dir_all(cache);
         }
     }
+}
+
+/// 共享储存桶策略，请勿在同一个储存桶混用，否则会导致文件缺失
+#[derive(Clone, Copy)]
+pub enum ShareStrategy {
+    /// 完全关闭储存桶
+    Off,
+    /// 优先使用硬链接，否则不使用链接
+    Prefer,
+    /// 使用符号链接 fallback
+    /// WIP: 暂未实习符号链接的计数机制
+    Fallback,
+    /// 强制使用硬链接
+    Force,
 }

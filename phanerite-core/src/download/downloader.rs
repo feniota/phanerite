@@ -1,7 +1,7 @@
 use crate::download::task::{DownloadTask, Target};
 use crate::error::Error;
 use crate::error::Result;
-use crate::storage::Storage;
+use crate::storage::{ShareStrategy, Storage};
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
@@ -21,6 +21,10 @@ pub struct DownloaderBuilder {
     buffer_per_thread: usize,
     /// 缓存目录
     cache: PathBuf,
+    /// 共享储存目录
+    bucket: PathBuf,
+    /// 共享储存策略
+    strategy: ShareStrategy,
 }
 
 impl DownloaderBuilder {
@@ -31,6 +35,8 @@ impl DownloaderBuilder {
             max_concurrent: 4,
             buffer_per_thread: 64 * 1024,
             cache: storage.cache_dir().to_path_buf(),
+            bucket: storage.share_dir().to_path_buf(),
+            strategy: storage.share_strategy,
         }
     }
     /// 设置重试次数
@@ -60,6 +66,8 @@ impl DownloaderBuilder {
             retries: self.retries,
             max_concurrent: self.max_concurrent,
             cache: self.cache,
+            bucket: self.bucket,
+            strategy: self.strategy,
             client: HttpClient::builder().build()?,
             pool_rx,
             pool_tx,
@@ -71,6 +79,8 @@ pub struct Downloader {
     retries: usize,
     max_concurrent: usize,
     cache: PathBuf,
+    bucket: PathBuf,
+    strategy: ShareStrategy,
 
     /// HTTP 客户端
     client: HttpClient,
@@ -119,7 +129,7 @@ impl Downloader {
         let mut retry_body = async || {
             // 共享储存桶 Hasher
             let mut bucket_hasher = match task.target {
-                Target::File(_) => task.bucket.as_ref().map(|_| blake3::Hasher::new()),
+                Target::File(_) => task.share.then_some(blake3::Hasher::new()),
                 // 解压需要单独计算文件 Hash
                 Target::Extract(_) => None,
             };
@@ -189,9 +199,9 @@ impl Downloader {
             // 直接保存
             Target::File(path) => {
                 // 确定保存路径
-                let save_path = if let Some(b) = &task.bucket {
+                let save_path = if task.share {
                     let hash = bucket_hasher.unwrap().finalize().to_string();
-                    &b.join(&hash[..2]).join(hash)
+                    &self.bucket.join(&hash[..2]).join(hash)
                 } else {
                     path
                 };
@@ -203,21 +213,28 @@ impl Downloader {
                 }
 
                 // 移动到目标位置，共享桶存在文件则删除缓存，不执行操作
-                if task.bucket.is_none() || !save_path.exists() {
+                if task.share || !save_path.exists() {
                     async_fs::rename(&cache, &save_path).await?
                 } else {
                     async_fs::remove_file(&cache).await?
                 };
 
                 // 如果有 bucket，将共享文件链接到 task.target
-                if task.bucket.is_some() {
-                    link_file(save_path, path).await?
+                if task.share {
+                    link_file(save_path, path, self.strategy).await?
                 }
             }
             // 解压缩
             Target::Extract(extract) => {
                 task.process.extracting();
-                extract.exec(&cache, task.bucket, &mut buf).await?
+                extract
+                    .exec(
+                        &cache,
+                        task.share.then_some(self.bucket.clone()),
+                        self.strategy,
+                        &mut buf,
+                    )
+                    .await?
             }
         } // Save or Extract
 
@@ -276,24 +293,43 @@ impl Drop for BufferGuard {
     }
 }
 
-pub(super) async fn link_file(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
+async fn link_file(
+    source: impl AsRef<Path>,
+    target: impl AsRef<Path>,
+    strategy: ShareStrategy,
+) -> Result<()> {
     let source = source.as_ref();
     let target = target.as_ref();
 
-    // 优先尝试硬链接
-    if async_fs::hard_link(source, target).await.is_ok() {
-        return Ok(());
+    match strategy {
+        ShareStrategy::Off => {
+            async_fs::rename(source, target).await?;
+        }
+        ShareStrategy::Prefer => {
+            if async_fs::hard_link(source, target).await.is_err() {
+                async_fs::rename(source, target).await?;
+            }
+        }
+        ShareStrategy::Fallback => {
+            if async_fs::hard_link(source, target).await.is_ok() {
+                return Ok(());
+            }
+            #[cfg(target_family = "unix")]
+            if async_fs::unix::symlink(source, target).await.is_ok() {
+                return Ok(());
+            }
+            #[cfg(target_os = "windows")]
+            if async_fs::windows::symlink_file(source, target)
+                .await
+                .is_ok()
+            {
+                return Ok(());
+            }
+            async_fs::rename(source, target).await?;
+        }
+        ShareStrategy::Force => {
+            async_fs::hard_link(source, target).await?;
+        }
     }
-    // Fallback: symlink
-    #[cfg(target_family = "unix")]
-    if async_fs::unix::symlink(source, target).await.is_ok() {
-        return Ok(());
-    }
-    #[cfg(target_os = "windows")]
-    if async_fs::windows::symlink_file(source, target).await.is_ok() {
-        return Ok(());
-    }
-    // Last resort: copy
-    async_fs::copy(source, target).await?;
     Ok(())
 }

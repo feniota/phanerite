@@ -29,7 +29,7 @@ impl From<ExtractTask> for Target {
 pub struct DownloadTaskBuilder<U, T> {
     url: U,
     target: T,
-    bucket: Option<PathBuf>,
+    share: bool,
     file_name: Option<String>,
     file_size: Option<u64>,
     file_hash: Hash,
@@ -38,7 +38,7 @@ pub struct DownloadTaskBuilder<U, T> {
 pub struct DownloadTask {
     pub(super) url: String,
     pub(super) target: Target,
-    pub(super) bucket: Option<PathBuf>,
+    pub(super) share: bool,
     pub(super) file_hash: Hash,
 
     pub process: DownloadProcess,
@@ -67,7 +67,7 @@ impl DownloadTask {
         DownloadTaskBuilder {
             url: Missing,
             target: Missing,
-            bucket: None,
+            share: false,
             file_name: None,
             file_size: None,
             file_hash: Hash::Empty(EmptyHash),
@@ -80,7 +80,7 @@ impl<T> DownloadTaskBuilder<Missing, T> {
         DownloadTaskBuilder {
             url: url.into(),
             target: self.target,
-            bucket: self.bucket,
+            share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -97,7 +97,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
         DownloadTaskBuilder {
             url: self.url,
             target: storage.assets_objects().join(path),
-            bucket: self.bucket,
+            share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -111,7 +111,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
         DownloadTaskBuilder {
             url: self.url,
             target: storage.libraries_dir().join(path),
-            bucket: self.bucket,
+            share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -121,7 +121,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
         DownloadTaskBuilder {
             url: self.url,
             target: path,
-            bucket: self.bucket,
+            share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -131,7 +131,7 @@ impl<U> DownloadTaskBuilder<U, Missing> {
         DownloadTaskBuilder {
             url: self.url,
             target: extract_task,
-            bucket: self.bucket,
+            share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,
             file_hash: self.file_hash,
@@ -152,8 +152,8 @@ impl<U, P> DownloadTaskBuilder<U, P> {
         self.file_hash = hash.into();
         self
     }
-    pub fn share(mut self, storage: &Storage) -> Self {
-        self.bucket = Some(storage.share_dir().to_path_buf());
+    pub fn share(mut self) -> Self {
+        self.share = true;
         self
     }
 }
@@ -163,7 +163,7 @@ impl<P: Into<Target>> DownloadTaskBuilder<String, P> {
         DownloadTask {
             url: self.url,
             target: self.target.into(),
-            bucket: self.bucket,
+            share: self.share,
             file_hash: self.file_hash,
             process: DownloadProcess {
                 inner: Arc::new(DownloadProcessInner {

@@ -29,7 +29,7 @@ impl VersionInfo {
         storage: &Storage,
         downloader: &Downloader,
     ) -> Result<(impl Iterator<Item = DownloadTask>, AssetIndexList)> {
-        let client = self.build_client_task(client_path, storage);
+        let client = self.build_client_task(client_path);
 
         let assets_list = AssetIndexList::get(&self.asset_index, downloader).await?;
         let assets = assets_list.clone().build_assets_task(storage);
@@ -55,17 +55,17 @@ impl VersionInfo {
             .flat_map(|x| {
                 [
                     x.to_task(storage, features),
-                    x.to_native_task(storage, features, native_dir),
+                    x.to_native_task(native_dir, features),
                 ]
             })
             .flatten()
     }
-    pub fn build_client_task(&self, path: PathBuf, storage: &Storage) -> Option<DownloadTask> {
+    pub fn build_client_task(&self, path: PathBuf) -> Option<DownloadTask> {
         self.downloads.client.as_ref().map(|c| {
             DownloadTask::builder()
                 .url(c.url.clone())
                 .to_path(path)
-                .share(storage)
+                .share()
                 .file_name(self.id.clone().add(".jar"))
                 .file_size(c.size)
                 .hash(c.sha1.clone())

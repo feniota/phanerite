@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "30000000-0000-0000-0000-000000000000",
                 "40000000-0000-0000-0000-000000000000",
             )
-            .build(&manifest, instance_dir, &storage)?;
-        let arguments = LaunchArguments::from_vars(&manifest, variables);
+            .build(&manifest.manifest, instance_dir, &storage)?;
+        let arguments = LaunchArguments::from_vars(&manifest.manifest, variables);
 
         for i in arguments.args {
             println!("{} {}", i.0, i.1.unwrap_or_default())

@@ -30,9 +30,8 @@ impl Library {
 
     pub fn to_native_task(
         &self,
-        storage: &Storage,
-        features: &HashSet<&'static str>,
         native_dir: &Path,
+        features: &HashSet<&'static str>,
     ) -> Option<DownloadTask> {
         if !self.allowed_env(features) {
             return None;
@@ -52,7 +51,6 @@ impl Library {
                 artifact,
                 native_dir,
                 &format!("{}-{}", self.name, classifier_key),
-                storage,
                 self.extract.as_ref(),
             ));
         }
@@ -79,7 +77,6 @@ impl Library {
                 &a,
                 native_dir,
                 &self.name,
-                storage,
                 self.extract.as_ref(),
             ));
         }
@@ -100,7 +97,6 @@ fn native_download(
     artifact: &Artifact,
     native_dir: &Path,
     file_name: &str,
-    storage: &Storage,
     extract: Option<&Extract>,
 ) -> DownloadTask {
     let mut builder = ExtractTask::builder().target(native_dir).zip().flatten();
@@ -115,7 +111,7 @@ fn native_download(
         .file_name(file_name)
         .file_size(artifact.size)
         .hash(artifact.sha1.clone())
-        .share(storage)
+        .share()
         .build()
 }
 

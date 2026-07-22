@@ -1,6 +1,7 @@
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionInfo;
 use phanerite_core::instance::Instance;
+use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
 use tracing::Level;
@@ -10,7 +11,7 @@ fn main() -> error::Result<()> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        let storage = storage::Storage::new(".minecraft")?;
+        let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
         let downloader = download::downloader::Downloader::builder(&storage)
             .concurrent(NonZeroU8::new(16).unwrap())
             .retries(3)

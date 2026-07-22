@@ -6,7 +6,9 @@ use std::num::NonZeroU8;
 use tracing::Level;
 
 fn main() -> error::Result<()> {
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::DEBUG)
+        .init();
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?;
         let downloader = download::downloader::Downloader::builder(&storage)

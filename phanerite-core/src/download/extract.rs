@@ -69,6 +69,10 @@ impl ExtractTask {
                     untar(&archive_path, &target, bucket, auto_flattens, &exclude)
                 }
             };
+            // Native jars are delivery vehicles — remove after extraction.
+            if result.is_ok() {
+                let _ = fs::remove_file(&archive_path);
+            }
             let _ = tx.send_blocking(result);
         });
         rx.recv()
@@ -180,6 +184,11 @@ fn untar(
 // ── Extract a single entry (shared by zip / tar) ────────────────────
 
 fn extract_entry(mut reader: impl Read, dest: &Path, bucket: Option<&Path>) -> Result<()> {
+    // Already extracted by a previous native jar — skip.
+    if dest.exists() {
+        return Ok(());
+    }
+
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -187,7 +196,6 @@ fn extract_entry(mut reader: impl Read, dest: &Path, bucket: Option<&Path>) -> R
     let mut hasher = blake3::Hasher::new();
     let mut chunk = vec![0u8; CHUNK_SIZE];
 
-    // Write to a temp file so failed extractions don't leave partial junk.
     let tmp = temp_path(dest);
     let mut tmp_file = fs::File::create(&tmp)?;
 
@@ -210,7 +218,6 @@ fn extract_entry(mut reader: impl Read, dest: &Path, bucket: Option<&Path>) -> R
 
     match bucket {
         Some(bucket_root) => {
-            // Content-addressed: obj/{first2}/{full_hash}
             let obj_path = bucket_root.join(&hash_str[..2]).join(hash_str);
             if !obj_path.exists() {
                 fs::create_dir_all(obj_path.parent().unwrap())?;
@@ -218,13 +225,17 @@ fn extract_entry(mut reader: impl Read, dest: &Path, bucket: Option<&Path>) -> R
             } else {
                 let _ = fs::remove_file(&tmp);
             }
-            // Hardlink from dest → bucket; fall back to copy if cross-device.
+            let _ = fs::remove_file(dest);
             if fs::hard_link(&obj_path, dest).is_err() {
                 fs::copy(&obj_path, dest)?;
             }
         }
         None => {
-            fs::rename(&tmp, dest)?;
+            let _ = fs::remove_file(dest);
+            if fs::rename(&tmp, dest).is_err() {
+                // Concurrent extraction won the race — temp is stale.
+                let _ = fs::remove_file(&tmp);
+            }
         }
     }
 

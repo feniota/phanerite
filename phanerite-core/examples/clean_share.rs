@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .init();
     smol::block_on(async {
         let storage = phanerite_core::storage::Storage::new(".minecraft")?;
-        phanerite_core::storage::bucket::clean_hardlink(&storage).await?;
+        storage.clean_hardlink().await?;
 
         Ok::<(), phanerite_core::error::Error>(())
     })?;

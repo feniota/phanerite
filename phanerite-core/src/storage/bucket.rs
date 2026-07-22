@@ -5,38 +5,40 @@ use futures::StreamExt;
 use tracing::trace;
 
 /// 清理共享储存桶中的孤立文件
-pub async fn clean_hardlink(storage: &Storage) -> Result<()> {
-    let bucket = storage.share_dir();
+impl Storage {
+    pub async fn clean_hardlink(&self) -> Result<()> {
+        let bucket = self.share_dir();
 
-    async_fs::read_dir(bucket)
-        .await?
-        .filter_map(async |x| x.ok())
-        // 拉平一层目录
-        .filter_map(async |x| async_fs::read_dir(x.path()).await.ok())
-        .flatten()
-        .filter_map(async |x| x.ok())
-        .map(|x| x.path())
-        // 过滤孤立文件
-        .filter_map(async |x| {
-            async_fs::metadata(&x)
-                .await
-                .ok()
-                .and_then(|t| t.is_file().then_some(t))
-                .and_then(|t| ref_count(&t).ok())
-                .map(|n| n < 2)
-                .unwrap_or(false)
-                .then_some(x)
-        })
-        // 执行删除
-        .for_each_concurrent(16, async |path| {
-            trace!("Cleaning orphan file: {}", path.display());
-            if let Err(e) = async_fs::remove_file(path).await {
-                tracing::warn!(?e, "failed to remove orphan");
-            }
-        })
-        .await;
+        async_fs::read_dir(bucket)
+            .await?
+            .filter_map(async |x| x.ok())
+            // 拉平一层目录
+            .filter_map(async |x| async_fs::read_dir(x.path()).await.ok())
+            .flatten()
+            .filter_map(async |x| x.ok())
+            .map(|x| x.path())
+            // 过滤孤立文件
+            .filter_map(async |x| {
+                async_fs::metadata(&x)
+                    .await
+                    .ok()
+                    .and_then(|t| t.is_file().then_some(t))
+                    .and_then(|t| ref_count(&t).ok())
+                    .map(|n| n < 2)
+                    .unwrap_or(false)
+                    .then_some(x)
+            })
+            // 执行删除
+            .for_each_concurrent(16, async |path| {
+                trace!("Cleaning orphan file: {}", path.display());
+                if let Err(e) = async_fs::remove_file(path).await {
+                    tracing::warn!(?e, "failed to remove orphan");
+                }
+            })
+            .await;
 
-    Ok(())
+        Ok(())
+    }
 }
 
 #[cfg(target_family = "unix")]

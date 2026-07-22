@@ -277,17 +277,23 @@ impl Drop for BufferGuard {
 }
 
 pub(super) async fn link_file(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
-    // 优先尝试硬链接
-    if let Err(_e) = async_fs::hard_link(source.as_ref(), target.as_ref()).await {
-        // 对支持的系统使用符号链接 Fallback
-        #[cfg(target_family = "unix")]
-        async_fs::unix::symlink(source.as_ref(), target.as_ref()).await?;
-        #[cfg(target_os = "windows")]
-        async_fs::windows::symlink_file(source.as_ref(), target.as_ref()).await?;
+    let source = source.as_ref();
+    let target = target.as_ref();
 
-        // 不支持的系统返回硬链接错误
-        #[cfg(not(any(target_family = "unix", target_os = "windows")))]
-        return Err(Error::Io(_e));
+    // 优先尝试硬链接
+    if async_fs::hard_link(source, target).await.is_ok() {
+        return Ok(());
     }
+    // Fallback: symlink
+    #[cfg(target_family = "unix")]
+    if async_fs::unix::symlink(source, target).await.is_ok() {
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    if async_fs::windows::symlink_file(source, target).await.is_ok() {
+        return Ok(());
+    }
+    // Last resort: copy
+    async_fs::copy(source, target).await?;
     Ok(())
 }

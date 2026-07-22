@@ -1,4 +1,11 @@
+use crate::download::downloader::Downloader;
+use crate::download::java::JavaDownload;
 use crate::error::Result;
+use crate::instance::instance_info::VersionManifest;
+use crate::instance::Instance;
+use crate::java::buildin::BuildInRuntime;
+use crate::java::system::detect;
+use crate::storage::Storage;
 use std::path::PathBuf;
 use tracing::trace;
 
@@ -6,16 +13,64 @@ pub mod buildin;
 pub mod system;
 
 #[cfg(target_os = "windows")]
-const BIN_NAME: &str = "java.exe";
+const JAVA_BIN_NAME: &str = "java.exe";
 #[cfg(not(target_os = "windows"))]
-const BIN_NAME: &str = "java";
+const JAVA_BIN_NAME: &str = "java";
+
+impl Instance {
+    pub async fn install_java(
+        &self,
+        java: impl JavaDownload,
+        downloader: &Downloader,
+        storage: &Storage,
+    ) -> Result<()> {
+        if BuildInRuntime::new(storage)
+            .list()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .find(|x| x.major == self.manifest.java_version.major_version)
+            .is_some()
+        {
+            return Ok(());
+        }
+        let task = java
+            .get_major(
+                self.manifest.java_version.major_version,
+                downloader,
+                storage,
+            )
+            .await?;
+        downloader.download(task).await
+    }
+    pub async fn find_java(&self, storage: &Storage) -> Vec<JavaRuntime> {
+        let build_in = BuildInRuntime::new(storage)
+            .list()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|x| x.major == self.manifest.java_version.major_version);
+        let system = detect()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|x| x.major == self.manifest.java_version.major_version);
+        build_in.chain(system).collect()
+    }
+}
+
+impl VersionManifest {
+    pub fn java_major(&self) -> u32 {
+        self.java_version.major_version
+    }
+}
 
 #[derive(Debug)]
 pub struct JavaRuntime {
-    name: String,
-    major: usize,
-    version: String,
-    path: PathBuf,
+    pub name: String,
+    pub major: u32,
+    pub version: String,
+    pub path: PathBuf,
 }
 
 impl JavaRuntime {

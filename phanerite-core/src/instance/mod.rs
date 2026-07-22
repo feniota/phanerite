@@ -7,17 +7,21 @@ use crate::storage::Storage;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::error;
 
 pub mod arguments;
 pub mod instance_info;
 
 pub struct Instance {
+    pub instance_dir: PathBuf,
     pub manifest: VersionManifest,
 }
 
 impl Instance {
+    pub fn client_file(&self) -> PathBuf {
+        self.instance_dir.join(format!("{}.jar", self.manifest.jar))
+    }
     pub async fn create(
         version: VersionInfo,
         name: &str,
@@ -83,12 +87,13 @@ impl Instance {
                     .read_to_end(&mut json)
                     .await?;
                 return Ok(Self {
+                    instance_dir: path,
                     manifest: serde_json::from_slice(&json)?,
                 });
             }
         }
 
-        let jsons = async_fs::read_dir(path)
+        let jsons = async_fs::read_dir(&path)
             .await?
             .filter_map(|entry| async move {
                 let entry = entry.ok()?;
@@ -109,6 +114,7 @@ impl Instance {
                 .read_to_end(&mut json)
                 .await?;
             return Ok(Self {
+                instance_dir: path,
                 manifest: serde_json::from_slice(&json)?,
             });
         }

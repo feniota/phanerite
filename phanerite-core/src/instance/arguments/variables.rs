@@ -1,11 +1,13 @@
 use crate::error::Result;
-use crate::instance::instance_info::{VersionManifest, VersionType};
+use crate::instance::instance_info::VersionType;
+use crate::instance::Instance;
 use crate::storage::Storage;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct Variables {
     vars: HashMap<&'static str, String>,
+
     pub(super) feat: HashSet<&'static str>,
 }
 
@@ -224,7 +226,7 @@ struct Generated {
     /// 资源索引名
     assets_index_name: String,
     /// 游戏位置
-    classpath: PathBuf,
+    classpath: String,
     /// 二进制库位置
     natives_directory: PathBuf,
     /// 启动器名称
@@ -236,19 +238,27 @@ struct Generated {
 }
 
 impl Generated {
-    fn from_manifest(
-        manifest: &VersionManifest,
-        instance_dir: impl AsRef<Path>,
-        storage: &Storage,
-    ) -> Result<Self> {
-        let instance_dir = instance_dir.as_ref();
+    fn from_instance(instance: &Instance, storage: &Storage) -> Result<Self> {
+        let instance_dir = &instance.instance_dir;
+
+        let cp = instance
+            .manifest
+            .libraries
+            .iter()
+            .map(|lib| storage.libraries_dir().join(&lib.downloads.artifact.path))
+            .chain(std::iter::once(instance.client_file()))
+            .filter_map(|p| std::fs::canonicalize(p).ok())
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(if cfg!(windows) { ";" } else { ":" });
+
         Ok(Self {
-            version_name: manifest.id.clone(),
-            version_type: manifest.version_type,
+            version_name: instance.manifest.id.clone(),
+            version_type: instance.manifest.version_type,
             game_directory: std::path::absolute(instance_dir)?,
             assets_root: std::path::absolute(storage.assets_dir())?,
-            assets_index_name: manifest.assets.clone(),
-            classpath: std::path::absolute(instance_dir.join(&manifest.jar))?,
+            assets_index_name: instance.manifest.assets.clone(),
+            classpath: cp,
             natives_directory: instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
@@ -265,7 +275,7 @@ impl Generated {
         vars.insert("version_type", self.version_type.to_string());
         vars.insert("assets_root", self.assets_root.to_string_lossy().into());
         vars.insert("assets_index_name", self.assets_index_name.clone());
-        vars.insert("classpath", self.classpath.to_string_lossy().into());
+        vars.insert("classpath", self.classpath.clone());
         vars.insert(
             "natives_directory",
             self.natives_directory.to_string_lossy().into(),
@@ -298,12 +308,7 @@ macro_rules! insert_fields {
 
 /// 旧版配置
 impl VariablesBuilder<String, String, Missing> {
-    pub fn build(
-        self,
-        manifest: &VersionManifest,
-        instance_dir: impl AsRef<Path>,
-        storage: &Storage,
-    ) -> Result<Variables> {
+    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -318,7 +323,7 @@ impl VariablesBuilder<String, String, Missing> {
             ]
         );
 
-        let generated = Generated::from_manifest(manifest, instance_dir, storage)?;
+        let generated = Generated::from_instance(instance, storage)?;
         generated.insert_into(&mut vars);
 
         Ok(Variables {
@@ -330,12 +335,7 @@ impl VariablesBuilder<String, String, Missing> {
 
 /// 新版配置
 impl VariablesBuilder<String, Missing, String> {
-    pub fn build(
-        self,
-        manifest: &VersionManifest,
-        instance_dir: impl AsRef<Path>,
-        storage: &Storage,
-    ) -> Result<Variables> {
+    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -363,7 +363,7 @@ impl VariablesBuilder<String, Missing, String> {
             ]
         );
 
-        let generated = Generated::from_manifest(manifest, instance_dir, storage)?;
+        let generated = Generated::from_instance(instance, storage)?;
         generated.insert_into(&mut vars);
 
         Ok(Variables {

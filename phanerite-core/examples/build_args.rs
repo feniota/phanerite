@@ -1,5 +1,4 @@
 use phanerite_core::instance::arguments::variables::Variables;
-use phanerite_core::instance::arguments::LaunchArguments;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
 use std::error::Error;
@@ -10,9 +9,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        let instance_dir = ".minecraft/versions/26.2";
+        let instance_dir = ".minecraft/versions/latest";
         let storage = Storage::new(".minecraft")?;
-        let manifest = Instance::open(instance_dir).await?;
+        let instance = Instance::open(instance_dir).await?;
         let variables = Variables::builder()
             .required(
                 "Steve",
@@ -23,11 +22,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "30000000-0000-0000-0000-000000000000",
                 "40000000-0000-0000-0000-000000000000",
             )
-            .build(&manifest.manifest, instance_dir, &storage)?;
-        let arguments = LaunchArguments::from_vars(&manifest.manifest, variables);
+            .feature("is_demo_user")
+            .build(&instance, &storage)?;
+        let arguments = instance.to_arguments(variables);
 
-        for i in arguments.args {
-            println!("{} {}", i.0, i.1.unwrap_or_default())
+        for i in arguments.flatten_iter() {
+            println!("{}", i)
         }
 
         Ok::<(), phanerite_core::error::Error>(())

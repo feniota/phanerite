@@ -113,7 +113,7 @@ impl Downloader {
         Err(Error::other("download failed after retries"))
     }
     /// 下载文件到储存
-    async fn download(&self, task: DownloadTask) -> Result<()> {
+    pub async fn download(&self, task: DownloadTask) -> Result<()> {
         // 申请缓存并等待
         let mut buf = self.alloc_buf().await;
 

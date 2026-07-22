@@ -16,6 +16,7 @@ impl Library {
         if !self.allowed_env(features) {
             return None;
         }
+
         let a = self.downloads.as_ref()?.artifact.clone()?;
         Some(
             DownloadTask::builder()
@@ -100,10 +101,10 @@ fn native_download(
     extract: Option<&Extract>,
 ) -> DownloadTask {
     let mut builder = ExtractTask::builder().target(native_dir).zip().flatten();
-    if let Some(ex) = extract {
-        if let Some(ref patterns) = ex.exclude {
-            builder = builder.exclude(patterns.iter().cloned());
-        }
+    if let Some(ex) = extract
+        && let Some(ref patterns) = ex.exclude
+    {
+        builder = builder.exclude(patterns.iter().cloned());
     }
     DownloadTask::builder()
         .url(artifact.url.clone())

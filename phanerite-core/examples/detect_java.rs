@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::num::NonZeroU8;
 use tracing::Level;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -7,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        phanerite_core::java::system::detect(NonZeroU8::new(4).unwrap())
+        phanerite_core::java::system::detect()
             .await?
             .iter()
             .for_each(|x| println!("{x:?}"));

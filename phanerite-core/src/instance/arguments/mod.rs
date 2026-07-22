@@ -1,5 +1,6 @@
 use crate::instance::arguments::variables::Variables;
-use crate::instance::instance_info::{Action, Argument, VersionManifest};
+use crate::instance::instance_info::{Action, Argument};
+use crate::instance::Instance;
 use std::collections::HashSet;
 use std::iter::Peekable;
 
@@ -9,10 +10,12 @@ pub struct LaunchArguments {
     pub args: Vec<(String, Option<String>)>,
 }
 
-impl LaunchArguments {
-    pub fn from_vars(manifest: &VersionManifest, variables: Variables) -> Self {
-        if let Some(args) = &manifest.arguments {
-            let raw = args.jvm.iter().chain(args.game.iter());
+impl Instance {
+    pub fn to_arguments(&self, variables: Variables) -> LaunchArguments {
+        let main_class = Argument::String(self.manifest.main_class.to_string());
+        let main_class = std::iter::once(&main_class);
+        if let Some(args) = &self.manifest.arguments {
+            let raw = args.jvm.iter().chain(main_class).chain(args.game.iter());
             let flattened = flatten_arguments(raw, &variables.feat).peekable();
             let chunked = chunk_arguments(flattened);
             let args = chunked
@@ -24,16 +27,24 @@ impl LaunchArguments {
                     },
                 })
                 .collect();
-            Self { args }
-        } else if let Some(args) = &manifest.minecraft_arguments
+            LaunchArguments { args }
+        } else if let Some(args) = &self.manifest.minecraft_arguments
             && let Some(args) = variables.resolve(args)
         {
-            Self {
+            LaunchArguments {
                 args: vec![(args, None)],
             }
         } else {
-            Self { args: vec![] }
+            LaunchArguments { args: vec![] }
         }
+    }
+}
+
+impl LaunchArguments {
+    pub fn flatten_iter(self) -> impl IntoIterator<Item = String> {
+        self.args
+            .into_iter()
+            .flat_map(|(x, y)| std::iter::once(x).chain(y))
     }
 }
 

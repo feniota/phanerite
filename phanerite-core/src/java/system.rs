@@ -1,21 +1,20 @@
 use crate::error::Result;
-use crate::java::{BIN_NAME, JavaRuntime};
+use crate::java::{JavaRuntime, JAVA_BIN_NAME};
 use futures::StreamExt;
 use std::collections::HashSet;
 use std::env;
-use std::num::NonZeroU8;
 use std::path::PathBuf;
 use tracing::debug;
 
-pub async fn detect(concurrent: NonZeroU8) -> Result<Vec<JavaRuntime>> {
+pub async fn detect() -> Result<Vec<JavaRuntime>> {
     debug!("detect java");
     let paths = env::var_os("PATH").unwrap_or_default();
     let java_home = env::var_os("JAVA_HOME")
         .map(PathBuf::from)
-        .map(|x| x.join("bin").join(BIN_NAME))
+        .map(|x| x.join("bin").join(JAVA_BIN_NAME))
         .unwrap_or_default();
     let javas = env::split_paths(&paths)
-        .map(|x| x.join(BIN_NAME))
+        .map(|x| x.join(JAVA_BIN_NAME))
         .chain(std::iter::once(java_home))
         .filter(|x| x.is_file())
         .map(|x| std::path::absolute(&x).unwrap_or(x));
@@ -36,7 +35,7 @@ pub async fn detect(concurrent: NonZeroU8) -> Result<Vec<JavaRuntime>> {
     };
 
     futures::stream::iter(javas)
-        .for_each_concurrent(concurrent.get() as usize, async |path| {
+        .for_each_concurrent(4, async |path| {
             let _ = check_java(path).await;
         })
         .await;

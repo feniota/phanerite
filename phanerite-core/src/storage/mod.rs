@@ -1,3 +1,5 @@
+pub mod bucket;
+
 use crate::error::Result;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

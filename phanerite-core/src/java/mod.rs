@@ -1,8 +1,8 @@
 use crate::download::downloader::Downloader;
 use crate::download::java::JavaDownload;
 use crate::error::Result;
-use crate::instance::instance_info::VersionManifest;
 use crate::instance::Instance;
+use crate::instance::instance_info::VersionManifest;
 use crate::java::buildin::BuildInRuntime;
 use crate::java::system::detect;
 use crate::storage::Storage;

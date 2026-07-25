@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::java::{JavaRuntime, JAVA_BIN_NAME};
+use crate::java::{JAVA_BIN_NAME, JavaRuntime};
 use crate::storage::Storage;
 use futures::stream::StreamExt;
 use std::path::PathBuf;

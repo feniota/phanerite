@@ -94,11 +94,10 @@ impl Downloader {
     pub fn builder(storage: &Storage) -> DownloaderBuilder {
         DownloaderBuilder::new(storage)
     }
-    /// 下载到内存
-    pub async fn fetch(&self, url: impl Into<String>, hash: Option<Hash>) -> Result<Vec<u8>> {
-        let url = url.into();
+    /// 下载到内存（GET）
+    pub async fn fetch(&self, url: impl AsRef<str>, hash: Option<Hash>) -> Result<Vec<u8>> {
         for _ in 0..self.retries {
-            let res = self.client.get_async(&url).await?.bytes().await?;
+            let res = self.client.get_async(url.as_ref()).await?.bytes().await?;
             if let Some(h) = &hash {
                 let mut hasher = h.hasher();
                 hasher.update(&res);
@@ -111,6 +110,15 @@ impl Downloader {
             return Ok(res);
         }
         Err(Error::other("download failed after retries"))
+    }
+    /// 封装 POST
+    pub async fn post(&self, url: impl AsRef<str>, body: impl AsRef<str>) -> Result<Vec<u8>> {
+        Ok(self
+            .client
+            .post_async(url.as_ref(), body.as_ref())
+            .await?
+            .bytes()
+            .await?)
     }
     /// 下载文件到储存
     pub async fn download(&self, task: DownloadTask) -> Result<()> {

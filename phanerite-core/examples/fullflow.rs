@@ -2,12 +2,12 @@ use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionInfo;
 use phanerite_core::error::Error;
-use phanerite_core::instance::arguments::variables::Variables;
 use phanerite_core::instance::Instance;
+use phanerite_core::instance::arguments::variables::Variables;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 fn main() -> error::Result<()> {
     tracing_subscriber::fmt()
@@ -34,8 +34,8 @@ fn main() -> error::Result<()> {
         .await;
 
         let instance_dir = storage.versions_dir().join("latest");
-
         let instance = Instance::open(&instance_dir).await?;
+
         let javas = instance.find_java(&storage).await;
         if javas.is_empty() {
             info!("Install java");

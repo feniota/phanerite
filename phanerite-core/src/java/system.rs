@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::java::{JavaRuntime, JAVA_BIN_NAME};
+use crate::java::{JAVA_BIN_NAME, JavaRuntime};
 use futures::StreamExt;
 use std::collections::HashSet;
 use std::env;

@@ -195,6 +195,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base64"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1233,11 +1239,13 @@ dependencies = [
  "async-fs",
  "async-lock",
  "async-process",
+ "base64",
  "blake3",
  "chrono",
  "event-listener",
  "futures",
  "hex",
+ "http",
  "indicatif",
  "isahc",
  "secrecy",

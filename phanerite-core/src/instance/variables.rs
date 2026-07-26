@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::instance_info::VersionType;
+use crate::instance::Instance;
 use crate::storage::Storage;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -115,12 +115,12 @@ impl<Required, Legacy, Modern> VariablesBuilder<Required, Legacy, Modern> {
 // 旧版必选配置
 // ————————————————————————————————————————
 
-impl<Legacy> VariablesBuilder<String, Legacy, Missing> {
+impl<Modern> VariablesBuilder<String, Missing, Modern> {
     pub fn legacy(
         self,
         auth_session: impl Into<String>,
         user_type: impl Into<String>,
-    ) -> VariablesBuilder<String, String, Missing> {
+    ) -> VariablesBuilder<String, String, Modern> {
         VariablesBuilder {
             auth_player_name: self.auth_player_name,
             auth_uuid: self.auth_uuid,
@@ -144,12 +144,12 @@ impl<Legacy> VariablesBuilder<String, Legacy, Missing> {
 // 新版必选配置
 // ————————————————————————————————————————
 
-impl<Modern> VariablesBuilder<String, Missing, Modern> {
+impl<Legacy> VariablesBuilder<String, Legacy, Missing> {
     pub fn modern(
         self,
         clientid: impl Into<String>,
         auth_xuid: impl Into<String>,
-    ) -> VariablesBuilder<String, Missing, String> {
+    ) -> VariablesBuilder<String, Legacy, String> {
         VariablesBuilder {
             auth_player_name: self.auth_player_name,
             auth_uuid: self.auth_uuid,

@@ -2,12 +2,12 @@ use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
-use phanerite_core::instance::Instance;
 use phanerite_core::instance::variables::Variables;
+use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
-use tracing::{Level, info};
+use tracing::{info, Level};
 
 fn main() -> error::Result<()> {
     tracing_subscriber::fmt()
@@ -58,7 +58,7 @@ fn main() -> error::Result<()> {
             )
             .feature("is_demo_user")
             .build(&instance, &storage)?;
-        let arguments = instance.to_arguments(variables);
+        let arguments = variables.to_arguments(&instance);
 
         async_process::Command::new(&java.path)
             .args(arguments.iter())

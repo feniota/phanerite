@@ -1,5 +1,5 @@
-use phanerite_core::instance::Instance;
 use phanerite_core::instance::variables::Variables;
+use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
 use std::error::Error;
 use tracing::Level;
@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             )
             .feature("is_demo_user")
             .build(&instance, &storage)?;
-        let arguments = instance.to_arguments(variables);
+        let arguments = variables.to_arguments(&instance);
 
         for i in arguments.iter() {
             println!("{}", i)

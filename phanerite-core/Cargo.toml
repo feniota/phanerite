@@ -8,11 +8,13 @@ async-channel = "2.5"
 async-fs = "2.2"
 async-lock = "3.4"
 async-process = "2.5"
+base64 = "0.23"
 blake3 = { version = "1.8", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 event-listener = "5.4"
 futures = "0.3"
 hex = "0.4"
+http = "1.4"
 isahc = "2.0"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }

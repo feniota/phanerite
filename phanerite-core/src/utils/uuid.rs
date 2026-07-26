@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -34,5 +35,11 @@ impl<'de> Deserialize<'de> for UnhyphenatedUuid {
         let s = String::deserialize(deserializer)?;
         let uuid = Uuid::parse_str(&s).map_err(serde::de::Error::custom)?;
         Ok(UnhyphenatedUuid(uuid))
+    }
+}
+
+impl Display for UnhyphenatedUuid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.simple())
     }
 }

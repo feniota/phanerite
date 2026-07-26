@@ -1,6 +1,6 @@
-use crate::instance::Instance;
 use crate::instance::instance_info::{Action, Argument};
 use crate::instance::variables::Variables;
+use crate::instance::Instance;
 use std::collections::HashSet;
 use std::iter::Peekable;
 
@@ -10,27 +10,27 @@ pub struct LaunchArguments {
     game: Vec<(String, Option<String>)>,
 }
 
-impl Instance {
-    pub fn to_arguments(&self, variables: Variables) -> LaunchArguments {
-        let main_class = self.manifest.main_class.to_string();
-        if let Some(args) = &self.manifest.arguments {
-            let flattened_jvm = flatten_arguments(args.jvm.iter(), &variables.feat).peekable();
-            let flattened_game = flatten_arguments(args.jvm.iter(), &variables.feat).peekable();
+impl Variables {
+    pub fn to_arguments(&self, instance: &Instance) -> LaunchArguments {
+        let main_class = instance.manifest.main_class.to_string();
+        if let Some(args) = &instance.manifest.arguments {
+            let flattened_jvm = flatten_arguments(args.jvm.iter(), &self.feat).peekable();
+            let flattened_game = flatten_arguments(args.jvm.iter(), &self.feat).peekable();
             let chunked_jvm = chunk_arguments(flattened_jvm);
             let chunked_game = chunk_arguments(flattened_game);
             let jvm = chunked_jvm
-                .filter_map(|(x, y)| filter_none(&variables, x, y))
+                .filter_map(|(x, y)| filter_none(&self, x, y))
                 .collect();
             let game = chunked_game
-                .filter_map(|(x, y)| filter_none(&variables, x, y))
+                .filter_map(|(x, y)| filter_none(&self, x, y))
                 .collect();
             LaunchArguments {
                 main_class,
                 jvm,
                 game,
             }
-        } else if let Some(args) = &self.manifest.minecraft_arguments
-            && let Some(args) = variables.resolve(args)
+        } else if let Some(args) = &instance.manifest.minecraft_arguments
+            && let Some(args) = self.resolve(args)
         {
             LaunchArguments {
                 main_class,

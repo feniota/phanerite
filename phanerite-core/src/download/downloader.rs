@@ -5,6 +5,7 @@ use crate::storage::{ShareStrategy, Storage};
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
+use http::{HeaderMap, StatusCode};
 use isahc::{AsyncReadResponseExt, HttpClient};
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
@@ -112,13 +113,22 @@ impl Downloader {
         Err(Error::other("download failed after retries"))
     }
     /// 封装 POST
-    pub async fn post(&self, url: impl AsRef<str>, body: impl AsRef<str>) -> Result<Vec<u8>> {
+    pub async fn post(
+        &self,
+        url: impl AsRef<str>,
+        body: impl AsRef<str>,
+    ) -> Result<(StatusCode, Vec<u8>)> {
+        let mut res = self.client.post_async(url.as_ref(), body.as_ref()).await?;
+        Ok((res.status(), res.bytes().await?))
+    }
+    /// 封装 HEAD
+    pub async fn head(&self, url: impl AsRef<str>) -> Result<HeaderMap> {
         Ok(self
             .client
-            .post_async(url.as_ref(), body.as_ref())
+            .head_async(url.as_ref())
             .await?
-            .bytes()
-            .await?)
+            .headers()
+            .clone())
     }
     /// 下载文件到储存
     pub async fn download(&self, task: DownloadTask) -> Result<()> {

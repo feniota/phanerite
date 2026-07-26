@@ -1,6 +1,12 @@
 use crate::download::downloader::Downloader;
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::instance::arguments::LaunchArguments;
+use crate::instance::variables::Variables;
+use crate::instance::Instance;
+use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -15,6 +21,11 @@ pub struct Authentication {
     selected_profile: Option<GameProfile>,
     /// 用户档案
     user: GameProfile,
+
+    /// 邮箱
+    username: String,
+    /// 密码
+    password: SecretString,
 
     /// 服务器 base URL
     server: String,
@@ -43,7 +54,8 @@ pub struct Login<'a, S, U, P> {
 pub struct Missing;
 
 impl Authentication {
-    pub fn login(downloader: &Downloader) -> Login<'_, Missing, Missing, Missing> {
+    /// 创建登录会话
+    pub fn new_login(downloader: &Downloader) -> Login<'_, Missing, Missing, Missing> {
         Login {
             downloader,
             server: Missing,
@@ -59,6 +71,7 @@ impl Authentication {
             password: Missing,
         }
     }
+    /// 刷新令牌
     pub async fn refresh(
         &mut self,
         update_user: bool,
@@ -94,7 +107,7 @@ impl Authentication {
         };
         let req = serde_json::to_string(&req)?;
 
-        let res = downloader
+        let (_, res) = downloader
             .post(format!("{}/authserver/refresh", self.server), req)
             .await?;
         let res = serde_json::from_slice::<ResponseRefresh>(&res)?;
@@ -108,15 +121,117 @@ impl Authentication {
 
         Ok(())
     }
+    /// 检验令牌
+    pub async fn validate(&self, downloader: &Downloader) -> Result<bool> {
+        #[derive(Serialize)]
+        struct RequestValidate<'a> {
+            access_token: &'a str,
+            client_token: &'a str,
+        }
+
+        let req = RequestValidate {
+            access_token: self.access_token.expose_secret(),
+            client_token: self.client_token.expose_secret(),
+        };
+        let req = serde_json::to_string(&req)?;
+
+        let (status, _) = downloader
+            .post(format!("{}/authserver/validate", self.server), req)
+            .await?;
+
+        if status == 204 { Ok(true) } else { Ok(false) }
+    }
+    /// 吊销令牌
+    pub async fn invalidate(&self, downloader: &Downloader) -> Result<()> {
+        #[derive(Serialize)]
+        struct RequestInvalidate<'a> {
+            access_token: &'a str,
+            client_token: &'a str,
+        }
+
+        let req = RequestInvalidate {
+            access_token: self.access_token.expose_secret(),
+            client_token: self.client_token.expose_secret(),
+        };
+        let req = serde_json::to_string(&req)?;
+
+        let (_, _) = downloader
+            .post(format!("{}/authserver/invalidate", self.server), req)
+            .await?;
+
+        Ok(())
+    }
+    /// 退出登录
+    pub async fn signout(&self, downloader: &Downloader) -> Result<()> {
+        #[derive(Serialize)]
+        struct RequestSignout<'a> {
+            username: &'a str,
+            password: &'a str,
+        }
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ResponseSignout {
+            // error: String,
+            error_message: String,
+            // cause: Option<String>,
+        }
+
+        let req = RequestSignout {
+            username: &self.username,
+            password: self.password.expose_secret(),
+        };
+        let req = serde_json::to_string(&req)?;
+
+        let (status, err) = downloader
+            .post(format!("{}/authserver/signout", self.server), req)
+            .await?;
+
+        if status == 204 {
+            Ok(())
+        } else {
+            let err = serde_json::from_slice::<ResponseSignout>(&err)?;
+            Err(Error::other(format!(
+                "signout failed: {}",
+                err.error_message
+            )))
+        }
+    }
+
+    /// 配置预获取
+    pub fn meta_base64(&self) -> Result<String> {
+        let meta = FullMeta {
+            meta: self.meta_info.clone(),
+            skin_domains: self.skin_domains.clone(),
+            signature_publickey: self.signature_publickey.clone(),
+        };
+        let meta = serde_json::to_vec(&meta)?;
+        let encoded = BASE64_STANDARD.encode(&meta);
+        Ok(encoded)
+    }
+    pub fn args(&self, instance: &Instance, storage: &Storage) -> Result<LaunchArguments> {
+        let Some(profile) = &self.selected_profile else {
+            return Err(Error::other("No selected profile"));
+        };
+
+        let variables = Variables::builder()
+            .required(
+                profile.name.clone(),
+                profile.id.to_string(),
+                self.access_token.expose_secret(),
+            )
+            .legacy(self.access_token.expose_secret(), "mojang")
+            .build(instance, storage)?;
+
+        let arguments = variables.to_arguments(instance);
+        Ok(arguments)
+    }
 }
 
 impl<'a, U, P> Login<'a, Missing, U, P> {
-    pub async fn official(self) -> Result<Login<'a, String, U, P>> {
-        self.custom("https://authserver.mojang.com").await
-    }
     pub async fn custom(mut self, url: impl AsRef<str>) -> Result<Login<'a, String, U, P>> {
-        let url = url
-            .as_ref()
+        let url = self
+            .get_ali(url.as_ref())
+            .await?
             .strip_suffix('/')
             .unwrap_or(url.as_ref())
             .to_string();
@@ -131,9 +246,18 @@ impl<'a, U, P> Login<'a, Missing, U, P> {
             password: self.password,
         })
     }
+    async fn get_ali(&self, url: impl AsRef<str>) -> Result<String> {
+        Ok(self
+            .downloader
+            .head(url.as_ref())
+            .await?
+            .get("X-Authlib-Injector-API-Location")
+            .map(|t| t.to_str().unwrap_or(url.as_ref()).to_string())
+            .unwrap_or(url.as_ref().to_string()))
+    }
     async fn update_meta(&mut self, url: impl AsRef<str>) -> Result<()> {
         let res = self.downloader.fetch(url, None).await?;
-        let res = serde_json::from_slice::<ResponseMeta>(&res)?;
+        let res = serde_json::from_slice::<FullMeta>(&res)?;
 
         self.skin_domains = res.skin_domains;
         self.signature_publickey = Some(res.signature_publickey);
@@ -173,15 +297,15 @@ impl<'a, S, U> Login<'a, S, U, Missing> {
 
 // ———————————————————— 登录服务器元信息 ————————————————————
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResponseMeta {
+pub struct FullMeta {
     meta: MetaInfo,
     skin_domains: Vec<String>,
     signature_publickey: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MetaInfo {
     server_name: Option<String>,
@@ -190,7 +314,7 @@ struct MetaInfo {
     links: Option<LinksInfo>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LinksInfo {
     homepage: Option<String>,
@@ -223,7 +347,7 @@ impl<'a> Login<'a, String, String, SecretString> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct RequestLogin<'a> {
-            username: String,
+            username: &'a str,
             password: &'a str,
             client_token: &'a str,
             request_user: bool,
@@ -246,7 +370,7 @@ impl<'a> Login<'a, String, String, SecretString> {
         }
 
         let req = RequestLogin {
-            username: self.username,
+            username: &self.username,
             password: self.password.expose_secret(),
             client_token: client_token.expose_secret(),
             request_user: false,
@@ -257,7 +381,7 @@ impl<'a> Login<'a, String, String, SecretString> {
         };
         let req = serde_json::to_string(&req)?;
 
-        let res = self
+        let (_, res) = self
             .downloader
             .post(format!("{}/authserver/authenticate", self.server), &req)
             .await?;
@@ -269,6 +393,8 @@ impl<'a> Login<'a, String, String, SecretString> {
             available_profiles: res.available_profiles,
             selected_profile: res.selected_profile,
             user: res.user,
+            username: self.username,
+            password: self.password,
             server: self.server,
             skin_domains: self.skin_domains,
             signature_publickey: self

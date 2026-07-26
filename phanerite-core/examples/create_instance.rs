@@ -1,5 +1,5 @@
 use phanerite_core::download::vanilla::version_index::VersionIndex;
-use phanerite_core::download::vanilla::version_info::VersionInfo;
+use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
@@ -19,7 +19,7 @@ fn main() -> error::Result<()> {
             .await?;
 
         Instance::create(
-            VersionInfo::get(
+            VersionManifest::get(
                 VersionIndex::sync(&downloader).await?.latest_release()?,
                 &downloader,
             )

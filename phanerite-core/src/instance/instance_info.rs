@@ -1,5 +1,5 @@
 use crate::download::vanilla::libraries::Library as RemoteLibrary;
-use crate::download::vanilla::version_info::VersionInfo;
+use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::Result;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
@@ -14,7 +14,7 @@ use strum::{Display, EnumString};
 /// Top-level Minecraft version manifest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VersionManifest {
+pub struct InstanceManifest {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Arguments>,
@@ -289,9 +289,9 @@ pub enum VersionType {
     OldAlpha,
 }
 
-impl VersionManifest {
+impl InstanceManifest {
     /// Build an instance manifest from the remote version metadata.
-    pub fn from_remote(remote: VersionInfo) -> Self {
+    pub fn from_remote(remote: VersionManifest) -> Self {
         let assets = remote.asset_index.id.clone();
         let id = remote.id;
         let mut manifest = Self {

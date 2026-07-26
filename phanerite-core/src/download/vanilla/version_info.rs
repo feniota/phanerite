@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 use std::path::{Path, PathBuf};
 
-impl VersionInfo {
+impl VersionManifest {
     pub async fn get(version: &Version, downloader: &Downloader) -> Result<Self> {
         let body = downloader
             .fetch(version.url.clone(), Some(version.sha1.clone().into()))
@@ -76,7 +76,7 @@ impl VersionInfo {
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VersionInfo {
+pub struct VersionManifest {
     pub id: String,
 
     #[serde(rename = "type")]

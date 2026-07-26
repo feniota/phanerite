@@ -1,8 +1,8 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::filter_existed;
-use crate::download::vanilla::version_info::VersionInfo;
+use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
-use crate::instance::instance_info::VersionManifest;
+use crate::instance::instance_info::InstanceManifest;
 use crate::storage::Storage;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -12,10 +12,11 @@ use tracing::error;
 
 pub mod arguments;
 pub mod instance_info;
+pub mod variables;
 
 pub struct Instance {
     pub instance_dir: PathBuf,
-    pub manifest: VersionManifest,
+    pub manifest: InstanceManifest,
 }
 
 impl Instance {
@@ -23,7 +24,7 @@ impl Instance {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
     pub async fn create(
-        version: VersionInfo,
+        version: VersionManifest,
         name: &str,
         storage: &Storage,
         downloader: &Downloader,
@@ -44,7 +45,7 @@ impl Instance {
         let mut index_file = async_fs::File::create(index_file).await?;
 
         // versions/{name}/{name}.json
-        let manifest = VersionManifest::from_remote(version.clone()).rename(name.to_string());
+        let manifest = InstanceManifest::from_remote(version.clone()).rename(name.to_string());
         let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
         drop(manifest);

@@ -262,7 +262,7 @@ impl Generated {
             natives_directory: instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            path: std::path::absolute(instance_dir.join("logs"))?,
+            path: std::path::absolute(instance_dir.join("../../../logs"))?,
         })
     }
 
@@ -345,6 +345,47 @@ impl VariablesBuilder<String, Missing, String> {
                 auth_player_name,
                 auth_uuid,
                 auth_access_token,
+                clientid,
+                auth_xuid
+            ]
+        );
+
+        insert_fields!(
+            vars,
+            self,
+            optional [
+                resolution_width,
+                resolution_height,
+                quick_play_path,
+                quick_play_singleplayer,
+                quick_play_multiplayer,
+                quick_play_realms,
+            ]
+        );
+
+        let generated = Generated::from_instance(instance, storage)?;
+        generated.insert_into(&mut vars);
+
+        Ok(Variables {
+            vars,
+            feat: self.features,
+        })
+    }
+}
+
+impl VariablesBuilder<String, String, String> {
+    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
+        let mut vars = HashMap::new();
+
+        insert_fields!(
+            vars,
+            self,
+            [
+                auth_player_name,
+                auth_uuid,
+                auth_access_token,
+                auth_session,
+                user_type,
                 clientid,
                 auth_xuid
             ]

@@ -1,9 +1,9 @@
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
-use phanerite_core::download::vanilla::version_info::VersionInfo;
+use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
-use phanerite_core::instance::arguments::variables::Variables;
+use phanerite_core::instance::variables::Variables;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
@@ -22,7 +22,7 @@ fn main() -> error::Result<()> {
             .await?;
 
         let _ = Instance::create(
-            VersionInfo::get(
+            VersionManifest::get(
                 VersionIndex::sync(&downloader).await?.latest_release()?,
                 &downloader,
             )
@@ -61,7 +61,7 @@ fn main() -> error::Result<()> {
         let arguments = instance.to_arguments(variables);
 
         async_process::Command::new(&java.path)
-            .args(arguments.flatten_iter())
+            .args(arguments.iter())
             .spawn()?;
 
         Ok::<(), Error>(())

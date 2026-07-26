@@ -1,10 +1,8 @@
 use crate::download::extract::ExtractTask;
 use crate::download::task::DownloadTask;
-use crate::instance::instance_info::{Action, Rule};
+use crate::instance::instance_info::{Action, Artifact, Extract, Library};
 use crate::storage::Storage;
-use crate::utils::Sha1Hash;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 
 impl Library {
@@ -16,7 +14,6 @@ impl Library {
         if !self.allowed_env(features) {
             return None;
         }
-
         let a = self.downloads.as_ref()?.artifact.clone()?;
         Some(
             DownloadTask::builder()
@@ -31,8 +28,8 @@ impl Library {
 
     pub fn to_native_task(
         &self,
-        native_dir: &Path,
         features: &HashSet<&'static str>,
+        native_dir: &Path,
     ) -> Option<DownloadTask> {
         if !self.allowed_env(features) {
             return None;
@@ -114,46 +111,4 @@ fn native_download(
         .hash(artifact.sha1.clone())
         .share()
         .build()
-}
-
-/// Library
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Library {
-    pub name: String,
-
-    pub downloads: Option<LibraryDownloads>,
-
-    pub rules: Option<Vec<Rule>>,
-
-    pub natives: Option<HashMap<String, String>>,
-
-    pub extract: Option<Extract>,
-
-    pub classifiers: Option<HashMap<String, Artifact>>,
-
-    #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct LibraryDownloads {
-    pub artifact: Option<Artifact>,
-
-    pub classifiers: Option<HashMap<String, Artifact>>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Artifact {
-    pub path: String,
-
-    pub sha1: Sha1Hash,
-
-    pub size: u64,
-
-    pub url: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Extract {
-    pub exclude: Option<Vec<String>>,
 }

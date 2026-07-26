@@ -9,16 +9,16 @@ use std::path::PathBuf;
 
 const AUTHLIB_INJECTOR_API: &str = "https://authlib-injector.yushi.moe";
 
-#[derive(Deserialize)]
-struct Index {
-    latest_build_number: usize,
-    artifacts: Vec<Artifact>,
-}
+// #[derive(Deserialize)]
+// struct Index {
+//     latest_build_number: usize,
+//     artifacts: Vec<Artifact>,
+// }
 
 #[derive(Deserialize)]
 struct Artifact {
     build_number: usize,
-    version: String,
+    // version: String,
     download_url: Option<String>,
     checksums: Option<Checksums>,
 }
@@ -36,12 +36,9 @@ impl<'a> AuthlibInjector<'a> {
     pub fn new(storage: &'a Storage) -> Self {
         Self { storage }
     }
-    pub async fn update(&self, downloader: &Downloader) -> Result<()> {
+    pub async fn update(&self, downloader: &Downloader) -> Result<Option<DownloadTask>> {
         match self.find_latest().await {
-            Err(_) => {
-                let task = self.install_latest(downloader).await?;
-                downloader.download(task).await?;
-            }
+            Err(_) => Ok(Some(self.install_latest(downloader).await?)),
             Ok(v) => {
                 let res = downloader
                     .fetch(
@@ -51,12 +48,12 @@ impl<'a> AuthlibInjector<'a> {
                     .await?;
                 let res = serde_json::from_slice::<Artifact>(&res)?;
                 if res.build_number != v {
-                    let task = self.install_latest(downloader).await?;
-                    downloader.download(task).await?;
+                    Ok(Some(self.install_latest(downloader).await?))
+                } else {
+                    Ok(None)
                 }
             }
         }
-        Ok(())
     }
     pub async fn get(&self) -> Result<PathBuf> {
         Ok(self.storage.authlib_injector().join(format!(

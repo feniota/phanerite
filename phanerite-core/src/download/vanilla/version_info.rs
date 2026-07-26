@@ -1,9 +1,9 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::DownloadTask;
 use crate::download::vanilla::assets::{AssetIndex, AssetIndexList};
-use crate::download::vanilla::libraries::Library;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::{Error, Result};
+use crate::instance::instance_info::Library;
 use crate::instance::instance_info::{Arguments, JavaVersion, Logging};
 use crate::storage::Storage;
 use crate::utils::Sha1Hash;
@@ -55,7 +55,7 @@ impl VersionManifest {
             .flat_map(|x| {
                 [
                     x.to_task(storage, features),
-                    x.to_native_task(native_dir, features),
+                    x.to_native_task(features, native_dir),
                 ]
             })
             .flatten()

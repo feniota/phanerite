@@ -78,7 +78,7 @@ impl DownloaderBuilder {
 
 pub struct Downloader {
     retries: usize,
-    max_concurrent: usize,
+    pub max_concurrent: usize,
     cache: PathBuf,
     bucket: PathBuf,
     strategy: ShareStrategy,
@@ -262,6 +262,32 @@ impl Downloader {
 
         task.process.finish();
         Ok(())
+    }
+    /// 校验文件 Hash
+    pub async fn hash_file(&self, task: &DownloadTask) -> Result<()> {
+        let Target::File(path) = &task.target else {
+            return Ok(());
+        };
+
+        let mut buf = self.alloc_buf().await;
+        let mut hasher = task.file_hash.hasher();
+        let mut file = async_fs::File::open(path).await?;
+
+        loop {
+            let n = file.read(&mut buf).await?;
+
+            if n == 0 {
+                break;
+            }
+
+            hasher.update(&buf[..n]);
+        }
+
+        if hasher.finalize() == task.file_hash {
+            Ok(())
+        } else {
+            Err(Error::other("Hash mismatch"))
+        }
     }
     /// 并发下载文件到储存
     pub async fn download_concurrent(

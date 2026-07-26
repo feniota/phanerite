@@ -1,4 +1,3 @@
-use crate::download::vanilla::libraries::Library as RemoteLibrary;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::Result;
 use crate::utils::Sha1Hash;
@@ -200,31 +199,45 @@ pub struct JavaVersion {
 }
 
 /// A single library dependency.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {
-    /// Maven-style coordinate, e.g. `com.google.code.gson:gson:2.14.0`
     pub name: String,
-    pub downloads: LibraryDownloads,
-    #[serde(skip_serializing_if = "Option::is_none")]
+
+    pub downloads: Option<LibraryDownloads>,
+
     pub rules: Option<Vec<Rule>>,
+
+    pub natives: Option<HashMap<String, String>>,
+
+    pub extract: Option<Extract>,
+
+    pub classifiers: Option<HashMap<String, Artifact>>,
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
-/// Download information for a library artifact.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryDownloads {
-    pub artifact: Artifact,
+    pub artifact: Option<Artifact>,
+
+    pub classifiers: Option<HashMap<String, Artifact>>,
 }
 
-/// A downloadable file with a Maven-style path (used for libraries).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Artifact {
     pub path: String,
-    pub url: String,
+
     pub sha1: Sha1Hash,
+
     pub size: u64,
+
+    pub url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Extract {
+    pub exclude: Option<Vec<String>>,
 }
 
 /// A download without a path field (used for client / server jars).
@@ -306,11 +319,7 @@ impl InstanceManifest {
                 component: "java-runtime-alpha".into(),
                 major_version: 8,
             }),
-            libraries: remote
-                .libraries
-                .into_iter()
-                .filter_map(convert_library)
-                .collect(),
+            libraries: remote.libraries,
             downloads: Downloads {
                 client: remote.downloads.client.map(|d| DownloadInfo {
                     url: d.url,
@@ -384,24 +393,6 @@ fn convert_asset_index(ai: crate::download::vanilla::assets::AssetIndex) -> Asse
         sha1: ai.sha1,
         size: ai.size,
     }
-}
-
-// ── Library conversion ───────────────────────────────────────────────
-
-fn convert_library(lib: RemoteLibrary) -> Option<Library> {
-    let artifact = lib.downloads?.artifact?;
-    Some(Library {
-        name: lib.name,
-        downloads: LibraryDownloads {
-            artifact: Artifact {
-                path: artifact.path,
-                url: artifact.url,
-                sha1: artifact.sha1,
-                size: artifact.size,
-            },
-        },
-        rules: lib.rules,
-    })
 }
 
 // ── Custom deserializer: accept both `"str"` and `["a","b"]` ──────

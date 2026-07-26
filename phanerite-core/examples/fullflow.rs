@@ -41,7 +41,10 @@ fn main() {
         let javas = instance.find_java(&storage).await;
         if javas.is_empty() {
             info!("Install java");
-            instance.install_java(Zulu, &downloader, &storage).await?;
+            let task = instance.install_java(Zulu, &downloader, &storage).await?;
+            downloader
+                .download(task.expect("Failed to download java"))
+                .await?
         }
         let javas = instance.find_java(&storage).await;
         let Some(java) = javas.first() else {
@@ -63,7 +66,9 @@ fn main() {
             .await?;
 
         let injector = AuthlibInjector::new(&storage);
-        injector.update(&downloader).await?;
+        if let Some(t) = injector.update(&downloader).await? {
+            downloader.download(t).await?
+        }
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;
 

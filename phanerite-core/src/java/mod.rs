@@ -1,5 +1,6 @@
 use crate::download::downloader::Downloader;
 use crate::download::java::JavaDownload;
+use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::instance_info::InstanceManifest;
@@ -23,7 +24,7 @@ impl Instance {
         java: impl JavaDownload,
         downloader: &Downloader,
         storage: &Storage,
-    ) -> Result<()> {
+    ) -> Result<Option<DownloadTask>> {
         if BuildInRuntime::new(storage)
             .list()
             .await
@@ -32,7 +33,7 @@ impl Instance {
             .find(|x| x.major == self.manifest.java_version.major_version)
             .is_some()
         {
-            return Ok(());
+            return Ok(None);
         }
         let task = java
             .get_major(
@@ -41,7 +42,7 @@ impl Instance {
                 storage,
             )
             .await?;
-        downloader.download(task).await
+        Ok(Some(task))
     }
     pub async fn find_java(&self, storage: &Storage) -> Vec<JavaRuntime> {
         let build_in = BuildInRuntime::new(storage)

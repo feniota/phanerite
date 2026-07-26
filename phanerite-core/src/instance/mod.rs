@@ -1,5 +1,6 @@
 use crate::download::downloader::Downloader;
-use crate::download::task::filter_existed;
+use crate::download::task::{DownloadTask, filter_existed};
+use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
 use crate::instance::instance_info::InstanceManifest;
@@ -122,7 +123,75 @@ impl Instance {
 
         Err(Error::other("No instance found"))
     }
-    // pub async fn check(&self) -> Result<impl Iterator<Item = DownloadTask>> {
-    //     todo!()
-    // }
+    pub async fn check_exist(&self, storage: &Storage) -> Result<Vec<DownloadTask>> {
+        let features = HashSet::new();
+        let tasks = self.build_all_task(&features, storage).await?;
+        let tasks = filter_existed(tasks);
+
+        Ok(tasks.collect())
+    }
+    // TODO: Inelegant implementation, plan rewrite
+    pub async fn check_hash(
+        &self,
+        storage: &Storage,
+        downloader: &Downloader,
+    ) -> Result<Vec<DownloadTask>> {
+        let features = HashSet::new();
+        let tasks = self.build_all_task(&features, storage).await?;
+        let res = async_lock::Mutex::new(Vec::new());
+        for task in tasks {
+            if downloader.hash_file(&task).await.is_err() {
+                res.lock().await.push(task)
+            }
+        }
+        Ok(res.into_inner())
+    }
+    async fn build_all_task(
+        &self,
+        features: &HashSet<&'static str>,
+        storage: &Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        // Assets
+        let assets_index = storage
+            .assets_indexes()
+            .join(format!("{}.json", self.manifest.assets));
+        let mut assets_manifest = Vec::new();
+        async_fs::File::open(assets_index)
+            .await?
+            .read_to_end(&mut assets_manifest)
+            .await?;
+        let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
+        let assets_task = assets_manifest.build_assets_task(storage);
+
+        // Libraries
+        let libraries_task = self
+            .manifest
+            .libraries
+            .iter()
+            .flat_map(|x| {
+                [
+                    x.to_task(storage, features),
+                    x.to_native_task(features, &self.instance_dir.join("native")),
+                ]
+            })
+            .flatten();
+
+        // Client
+        let file_name = format!("{}.jar", self.manifest.id);
+        let client_task = self.manifest.downloads.client.as_ref().map(|c| {
+            DownloadTask::builder()
+                .url(c.url.clone())
+                .to_path(self.instance_dir.join(&file_name))
+                .share()
+                .file_name(file_name)
+                .file_size(c.size)
+                .hash(c.sha1.clone())
+                .build()
+        });
+
+        Ok(client_task
+            .into_iter()
+            .chain(assets_task)
+            .chain(libraries_task))
+    }
 }

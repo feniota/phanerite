@@ -1,40 +1,72 @@
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
+use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use uuid::Uuid;
+
+#[derive(Deserialize, Debug)]
+pub struct YggdrasilError {
+    pub error: String,
+    pub error_message: String,
+    pub cause: Option<String>,
+}
+
+impl Display for YggdrasilError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error_message)
+    }
+}
+
+impl std::error::Error for YggdrasilError {}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum Response<T> {
+    Success(T),
+    Error(YggdrasilError),
+}
+
+impl<T> Response<T> {
+    fn into_result(self) -> Result<T> {
+        match self {
+            Response::Success(v) => Ok(v),
+            Response::Error(e) => Err(e.into()),
+        }
+    }
+}
 
 pub struct Authentication {
     access_token: SecretString,
     client_token: SecretString,
 
     /// 可用的玩家档案
-    available_profiles: Vec<GameProfile>,
+    pub available_profiles: Vec<GameProfile>,
     /// 当前选择的玩家档案
-    selected_profile: Option<GameProfile>,
+    pub selected_profile: Option<GameProfile>,
     /// 用户档案
-    user: GameProfile,
+    pub user: GameProfile,
 
     /// 邮箱
-    username: String,
+    pub username: String,
     /// 密码
     password: SecretString,
 
     /// 服务器 base URL
-    server: String,
+    pub server: String,
     /// 材质域名白名单
-    skin_domains: Vec<String>,
+    pub skin_domains: Vec<String>,
     /// 验证角色属性的数字签名公钥
-    signature_publickey: String,
+    pub signature_publickey: String,
     /// 服务器元信息
-    meta_info: MetaInfo,
+    pub meta_info: MetaInfo,
 }
 
 pub struct Login<'a, S, U, P> {
@@ -108,9 +140,9 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (_, res) = downloader
-            .post(format!("{}/authserver/refresh", self.server), req)
+            .post_json(format!("{}/authserver/refresh", self.server), req)
             .await?;
-        let res = serde_json::from_slice::<ResponseRefresh>(&res)?;
+        let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
 
         self.access_token = res.access_token;
         self.client_token = res.client_token;
@@ -136,7 +168,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (status, _) = downloader
-            .post(format!("{}/authserver/validate", self.server), req)
+            .post_json(format!("{}/authserver/validate", self.server), req)
             .await?;
 
         if status == 204 { Ok(true) } else { Ok(false) }
@@ -156,7 +188,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (_, _) = downloader
-            .post(format!("{}/authserver/invalidate", self.server), req)
+            .post_json(format!("{}/authserver/invalidate", self.server), req)
             .await?;
 
         Ok(())
@@ -168,13 +200,6 @@ impl Authentication {
             username: &'a str,
             password: &'a str,
         }
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ResponseSignout {
-            // error: String,
-            error_message: String,
-            // cause: Option<String>,
-        }
 
         let req = RequestSignout {
             username: &self.username,
@@ -183,17 +208,14 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (status, err) = downloader
-            .post(format!("{}/authserver/signout", self.server), req)
+            .post_json(format!("{}/authserver/signout", self.server), req)
             .await?;
 
         if status == 204 {
             Ok(())
         } else {
-            let err = serde_json::from_slice::<ResponseSignout>(&err)?;
-            Err(Error::other(format!(
-                "signout failed: {}",
-                err.error_message
-            )))
+            let err = serde_json::from_slice::<YggdrasilError>(&err)?;
+            Err(err.into())
         }
     }
 
@@ -208,6 +230,7 @@ impl Authentication {
         let encoded = BASE64_STANDARD.encode(&meta);
         Ok(encoded)
     }
+    /// 生成启动参数
     pub fn args(&self, instance: &Instance, storage: &Storage) -> Result<LaunchArguments> {
         let Some(profile) = &self.selected_profile else {
             return Err(Error::other("No selected profile"));
@@ -215,7 +238,7 @@ impl Authentication {
 
         let variables = Variables::builder()
             .required(
-                profile.name.clone(),
+                profile.name.clone().unwrap_or_default(),
                 profile.id.to_string(),
                 self.access_token.expose_secret(),
             )
@@ -257,7 +280,7 @@ impl<'a, U, P> Login<'a, Missing, U, P> {
     }
     async fn update_meta(&mut self, url: impl AsRef<str>) -> Result<()> {
         let res = self.downloader.fetch(url, None).await?;
-        let res = serde_json::from_slice::<FullMeta>(&res)?;
+        let res = serde_json::from_slice::<Response<FullMeta>>(&res)?.into_result()?;
 
         self.skin_domains = res.skin_domains;
         self.signature_publickey = Some(res.signature_publickey);
@@ -307,7 +330,7 @@ pub struct FullMeta {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MetaInfo {
+pub struct MetaInfo {
     server_name: Option<String>,
     implementation_name: Option<String>,
     implementation_version: Option<String>,
@@ -326,7 +349,7 @@ struct LinksInfo {
 #[derive(Serialize, Deserialize)]
 pub struct GameProfile {
     pub id: UnhyphenatedUuid,
-    pub name: String,
+    pub name: Option<String>,
     pub properties: Option<Vec<ProfileProperty>>,
 }
 
@@ -373,7 +396,7 @@ impl<'a> Login<'a, String, String, SecretString> {
             username: &self.username,
             password: self.password.expose_secret(),
             client_token: client_token.expose_secret(),
-            request_user: false,
+            request_user: true,
             agent: LoginAgent {
                 name: "Minecraft",
                 version: 1,
@@ -383,9 +406,9 @@ impl<'a> Login<'a, String, String, SecretString> {
 
         let (_, res) = self
             .downloader
-            .post(format!("{}/authserver/authenticate", self.server), &req)
+            .post_json(format!("{}/authserver/authenticate", self.server), &req)
             .await?;
-        let res = serde_json::from_slice::<ResponseLogin>(&res)?;
+        let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
 
         Ok(Authentication {
             access_token: res.access_token,

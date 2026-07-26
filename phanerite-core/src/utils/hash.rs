@@ -40,6 +40,7 @@ pub enum Hash {
     Empty(EmptyHash),
     Blake3(Blake3Hash),
     Sha1(Sha1Hash),
+    Sha256(Sha256Hash),
 }
 
 impl Hash {
@@ -48,6 +49,7 @@ impl Hash {
             Self::Empty(v) => v.as_ref(),
             Self::Blake3(v) => v.as_ref(),
             Self::Sha1(v) => v.as_ref(),
+            Self::Sha256(v) => v.as_ref(),
         }
     }
 
@@ -56,16 +58,16 @@ impl Hash {
             Self::Empty(_) => EmptyHash::NAME,
             Self::Blake3(_) => Blake3Hash::NAME,
             Self::Sha1(_) => Sha1Hash::NAME,
+            Self::Sha256(_) => Sha256Hash::NAME,
         }
     }
 
     pub fn hasher(&self) -> HashHasher {
         match self {
             Self::Empty(_) => HashHasher::Empty(EmptyAlgorithm::create()),
-
             Self::Blake3(_) => HashHasher::Blake3(Blake3Algorithm::create()),
-
             Self::Sha1(_) => HashHasher::Sha1(Sha1Algorithm::create()),
+            Self::Sha256(_) => HashHasher::Sha256(Sha256Algorithm::create()),
         }
     }
 }
@@ -90,6 +92,7 @@ pub enum HashHasher {
     Empty(EmptyHasher),
     Blake3(blake3::Hasher),
     Sha1(Sha1),
+    Sha256(Sha256),
 }
 
 impl HashHasher {
@@ -98,6 +101,7 @@ impl HashHasher {
             Self::Empty(v) => v.update(data),
             Self::Blake3(v) => Hasher::update(v, data),
             Self::Sha1(v) => Hasher::update(v, data),
+            Self::Sha256(v) => Hasher::update(v, data),
         }
     }
 
@@ -106,6 +110,7 @@ impl HashHasher {
             Self::Empty(v) => v.finalize().into(),
             Self::Blake3(v) => Hasher::finalize(v).into(),
             Self::Sha1(v) => Hasher::finalize(v).into(),
+            Self::Sha256(v) => Hasher::finalize(v).into(),
         }
     }
 }
@@ -328,6 +333,8 @@ pub struct Blake3Algorithm;
 
 pub struct Sha1Algorithm;
 
+pub struct Sha256Algorithm;
+
 // =======================
 // Hash Types
 // =======================
@@ -335,6 +342,8 @@ pub struct Sha1Algorithm;
 impl_hash_value!(Blake3Hash, 32, "blake3", Blake3Algorithm, Blake3);
 
 impl_hash_value!(Sha1Hash, 20, "sha1", Sha1Algorithm, Sha1);
+
+impl_hash_value!(Sha256Hash, 32, "sha256", Sha256Algorithm, Sha256);
 
 // =======================
 // Blake3
@@ -391,5 +400,35 @@ impl Hasher for Sha1 {
 
     fn finalize(self) -> Self::Value {
         Sha1Hash(<Sha1 as Digest>::finalize(self).into())
+    }
+}
+
+// =======================
+// Sha256
+// =======================
+
+use sha2::{Digest as Sha2Digest, Sha256};
+
+impl HashAlgorithm for Sha256Algorithm {
+    const NAME: &'static str = "sha256";
+
+    type Value = Sha256Hash;
+
+    type Hasher = Sha256;
+
+    fn create() -> Self::Hasher {
+        Sha256::new()
+    }
+}
+
+impl Hasher for Sha256 {
+    type Value = Sha256Hash;
+
+    fn update(&mut self, data: &[u8]) {
+        <Sha256 as Sha2Digest>::update(self, data);
+    }
+
+    fn finalize(self) -> Self::Value {
+        Sha256Hash(<Sha256 as Sha2Digest>::finalize(self).into())
     }
 }

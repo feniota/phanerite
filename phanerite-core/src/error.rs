@@ -1,9 +1,12 @@
+use crate::auth::yggdrasil::YggdrasilError;
+
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
     Http(isahc::Error),
     SerdeJson(serde_json::Error),
     Zip(zip::result::ZipError),
+    Yggdrasil(YggdrasilError),
     Cancelled,
     Other(String),
 }
@@ -14,6 +17,7 @@ impl std::fmt::Display for Error {
             Error::Io(e) => write!(f, "I/O error: {e}"),
             Error::Http(status) => write!(f, "HTTP {status}"),
             Error::SerdeJson(e) => write!(f, "Serde JSON error: {e}"),
+            Error::Yggdrasil(e) => write!(f, "{}", e),
             Error::Cancelled => write!(f, "Operation cancelled"),
             Error::Zip(e) => write!(f, "ZIP error: {e}"),
             Error::Other(msg) => f.write_str(msg),
@@ -21,15 +25,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::Io(e) => Some(e),
-            Error::Zip(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+impl std::error::Error for Error {}
 
 impl Error {
     pub fn other(msg: impl Into<String>) -> Self {
@@ -58,6 +54,12 @@ impl From<serde_json::Error> for Error {
 impl From<zip::result::ZipError> for Error {
     fn from(e: zip::result::ZipError) -> Self {
         Error::Zip(e)
+    }
+}
+
+impl From<YggdrasilError> for Error {
+    fn from(e: YggdrasilError) -> Self {
+        Error::Yggdrasil(e)
     }
 }
 

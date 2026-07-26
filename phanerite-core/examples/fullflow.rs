@@ -1,19 +1,21 @@
+use phanerite_core::auth::yggdrasil::Authentication;
+use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
-use phanerite_core::instance::variables::Variables;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
-use tracing::{info, Level};
+use tracing::log::error;
+use tracing::{Level, info};
 
-fn main() -> error::Result<()> {
+fn main() {
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
         .init();
-    smol::block_on(async {
+    if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
         let downloader = download::downloader::Downloader::builder(&storage)
             .concurrent(NonZeroU8::new(16).unwrap())
@@ -46,24 +48,33 @@ fn main() -> error::Result<()> {
             return Err(Error::other("Failed to install java"));
         };
 
-        let variables = Variables::builder()
-            .required(
-                "Steve",
-                "10000000-0000-0000-0000-000000000000",
-                "20000000-0000-0000-0000-000000000000",
+        let injector = AuthlibInjector::new(&storage);
+        injector.update(&downloader).await?;
+
+        let auth = Authentication::new_login(&downloader)
+            .custom("https://littleskin.cn/api/yggdrasil")
+            .await?
+            .username(
+                std::env::var("USERNAME")
+                    .expect("Fill in the login credentials in the environment variable"),
             )
-            .modern(
-                "30000000-0000-0000-0000-000000000000",
-                "40000000-0000-0000-0000-000000000000",
+            .password(
+                std::env::var("PASSWORD")
+                    .expect("Fill in the login credentials in the environment variable"),
             )
-            .feature("is_demo_user")
-            .build(&instance, &storage)?;
-        let arguments = variables.to_arguments(&instance);
+            .login()
+            .await?;
+
+        let arguments = auth.injected_args(&instance, &storage, &injector).await?;
+
+        arguments.iter().for_each(|x| println!("{}", x));
 
         async_process::Command::new(&java.path)
             .args(arguments.iter())
             .spawn()?;
 
         Ok::<(), Error>(())
-    })
+    }) {
+        error!("{}", e)
+    }
 }

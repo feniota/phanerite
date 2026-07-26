@@ -1,13 +1,13 @@
+use crate::instance::Instance;
 use crate::instance::instance_info::{Action, Argument};
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use std::collections::HashSet;
 use std::iter::Peekable;
 
 pub struct LaunchArguments {
-    main_class: String,
-    jvm: Vec<(String, Option<String>)>,
-    game: Vec<(String, Option<String>)>,
+    pub(crate) main_class: String,
+    pub(crate) jvm: Vec<(String, Option<String>)>,
+    pub(crate) game: Vec<(String, Option<String>)>,
 }
 
 impl Variables {
@@ -15,14 +15,14 @@ impl Variables {
         let main_class = instance.manifest.main_class.to_string();
         if let Some(args) = &instance.manifest.arguments {
             let flattened_jvm = flatten_arguments(args.jvm.iter(), &self.feat).peekable();
-            let flattened_game = flatten_arguments(args.jvm.iter(), &self.feat).peekable();
+            let flattened_game = flatten_arguments(args.game.iter(), &self.feat).peekable();
             let chunked_jvm = chunk_arguments(flattened_jvm);
             let chunked_game = chunk_arguments(flattened_game);
             let jvm = chunked_jvm
-                .filter_map(|(x, y)| filter_none(&self, x, y))
+                .filter_map(|(x, y)| filter_none(self, x, y))
                 .collect();
             let game = chunked_game
-                .filter_map(|(x, y)| filter_none(&self, x, y))
+                .filter_map(|(x, y)| filter_none(self, x, y))
                 .collect();
             LaunchArguments {
                 main_class,

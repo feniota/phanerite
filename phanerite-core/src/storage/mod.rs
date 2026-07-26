@@ -15,6 +15,8 @@ pub struct Storage {
     assets_objects: OnceLock<PathBuf>,
     assets_indexes: OnceLock<PathBuf>,
 
+    authlib_injector: OnceLock<PathBuf>,
+
     pub(crate) share_strategy: ShareStrategy,
 }
 
@@ -34,6 +36,7 @@ impl Storage {
             assets_dir: OnceLock::new(),
             assets_objects: OnceLock::new(),
             assets_indexes: OnceLock::new(),
+            authlib_injector: OnceLock::new(),
             share_strategy: ShareStrategy::Prefer,
         })
     }
@@ -74,6 +77,10 @@ impl Storage {
     pub fn assets_indexes(&self) -> &Path {
         self.assets_indexes
             .get_or_init(|| dir(&self.root_dir, "assets/indexes"))
+    }
+    pub fn authlib_injector(&self) -> &Path {
+        self.authlib_injector
+            .get_or_init(|| dir(&self.root_dir, "authlib-injector"))
     }
 }
 

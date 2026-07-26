@@ -113,12 +113,16 @@ impl Downloader {
         Err(Error::other("download failed after retries"))
     }
     /// 封装 POST
-    pub async fn post(
+    pub async fn post_json(
         &self,
         url: impl AsRef<str>,
         body: impl AsRef<str>,
     ) -> Result<(StatusCode, Vec<u8>)> {
-        let mut res = self.client.post_async(url.as_ref(), body.as_ref()).await?;
+        let req = isahc::Request::post(url.as_ref())
+            .header("Content-Type", "application/json")
+            .body(body.as_ref())
+            .unwrap();
+        let mut res = self.client.send_async(req).await?;
         Ok((res.status(), res.bytes().await?))
     }
     /// 封装 HEAD

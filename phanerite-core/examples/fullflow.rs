@@ -9,7 +9,7 @@ use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
 use tracing::log::error;
-use tracing::{Level, info};
+use tracing::{info, Level};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -48,9 +48,6 @@ fn main() {
             return Err(Error::other("Failed to install java"));
         };
 
-        let injector = AuthlibInjector::new(&storage);
-        injector.update(&downloader).await?;
-
         let auth = Authentication::new_login(&downloader)
             .custom("https://littleskin.cn/api/yggdrasil")
             .await?
@@ -65,9 +62,10 @@ fn main() {
             .login()
             .await?;
 
-        let arguments = auth.injected_args(&instance, &storage, &injector).await?;
+        let injector = AuthlibInjector::new(&storage);
+        injector.update(&downloader).await?;
 
-        arguments.iter().for_each(|x| println!("{}", x));
+        let arguments = auth.injected_args(&instance, &storage, &injector).await?;
 
         async_process::Command::new(&java.path)
             .args(arguments.iter())

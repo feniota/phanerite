@@ -1,5 +1,6 @@
 use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
+use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionManifest;
@@ -12,9 +13,7 @@ use tracing::log::error;
 use tracing::{info, Level};
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
         let downloader = download::downloader::Downloader::builder(&storage)
@@ -22,34 +21,34 @@ fn main() {
             .retries(3)
             .build()
             .await?;
+        let mut group = DownloadGroup::new();
 
-        let tasks = Instance::create(
-            VersionManifest::get(
-                VersionIndex::sync(&downloader).await?.latest_release()?,
+        group.extend(
+            Instance::create(
+                VersionManifest::get(
+                    VersionIndex::sync(&downloader).await?.latest_release()?,
+                    &downloader,
+                )
+                .await?,
+                "latest",
+                &storage,
                 &downloader,
             )
             .await?,
-            "latest",
-            &storage,
-            &downloader,
-        )
-        .await?;
+        );
 
         let instance_dir = storage.versions_dir().join("latest");
         let instance = Instance::open(&instance_dir).await?;
 
-        let javas = instance.find_java(&storage).await;
-        if javas.is_empty() {
+        if instance.find_java(&storage).await.is_empty() {
             info!("Install java");
-            let task = instance.install_java(Zulu, &downloader, &storage).await?;
-            downloader
-                .download(task.expect("Failed to download java"))
-                .await?
+            group.extend(
+                instance
+                    .install_java(Zulu, &downloader, &storage)
+                    .await?
+                    .into_iter(),
+            );
         }
-        let javas = instance.find_java(&storage).await;
-        let Some(java) = javas.first() else {
-            return Err(Error::other("Failed to install java"));
-        };
 
         let auth = Authentication::new_login(&downloader)
             .custom("https://littleskin.cn/api/yggdrasil")
@@ -66,15 +65,41 @@ fn main() {
             .await?;
 
         let injector = AuthlibInjector::new(&storage);
-        if let Some(t) = injector.update(&downloader).await? {
-            downloader.download(t).await?
+        group.extend(injector.update(&downloader).await?.into_iter());
+
+        let processes = group.processes();
+
+        smol::spawn(async move {
+            loop {
+                println!("Downloading: {}", processes.downloading());
+                println!(
+                    "Speed: {:.2} MiB/s",
+                    processes
+                        .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
+                        .await as f64
+                        / 1024.0
+                        / 1024.0
+                )
+            }
+        })
+        .detach();
+
+        let errs = group.exec(&downloader).await;
+        if !errs.is_empty() {
+            errs.iter().for_each(|e| error!("{}", e))
         }
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;
 
-        async_process::Command::new(&java.path)
-            .args(arguments.iter())
-            .spawn()?;
+        async_process::Command::new(
+            instance
+                .find_java(&storage)
+                .await
+                .first()
+                .expect("No available java"),
+        )
+        .args(arguments.iter())
+        .spawn()?;
 
         Ok::<(), Error>(())
     }) {

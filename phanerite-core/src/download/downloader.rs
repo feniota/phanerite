@@ -1,10 +1,9 @@
 use crate::download::task::{DownloadTask, Target};
-use crate::error::Error;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::storage::{ShareStrategy, Storage};
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
-use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
+use futures::{AsyncReadExt, AsyncWriteExt, Stream, StreamExt};
 use http::{HeaderMap, StatusCode};
 use isahc::{AsyncReadResponseExt, HttpClient};
 use std::num::NonZeroU8;
@@ -293,13 +292,11 @@ impl Downloader {
     pub async fn download_concurrent(
         &self,
         tasks: impl Iterator<Item = DownloadTask>,
-    ) -> Vec<Error> {
+    ) -> impl Stream<Item = Error> {
         futures::stream::iter(tasks)
             .map(async |task| self.download(task).await)
             .buffer_unordered(self.max_concurrent)
             .filter_map(async |res| res.err())
-            .collect()
-            .await
     }
     /// 申请下载缓存，限制总并发量
     async fn alloc_buf(&self) -> BufferGuard {

@@ -2,11 +2,12 @@ use crate::download::downloader::Downloader;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::instance_info::InstanceManifest;
+use crate::instance::Instance;
 use crate::java::buildin::BuildInRuntime;
 use crate::java::system::detect;
 use crate::storage::Storage;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use tracing::trace;
 
@@ -72,6 +73,12 @@ pub struct JavaRuntime {
     pub major: u32,
     pub version: String,
     pub path: PathBuf,
+}
+
+impl AsRef<OsStr> for JavaRuntime {
+    fn as_ref(&self) -> &OsStr {
+        self.path.as_ref()
+    }
 }
 
 impl JavaRuntime {

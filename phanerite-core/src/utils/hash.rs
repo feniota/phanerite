@@ -88,6 +88,8 @@ pub trait Hasher {
 // Runtime Hasher
 // =======================
 
+// 傻逼 Clippy，32B 会炸栈再来找我
+#[allow(clippy::large_enum_variant)]
 pub enum HashHasher {
     Empty(EmptyHasher),
     Blake3(blake3::Hasher),

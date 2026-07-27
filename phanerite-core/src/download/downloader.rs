@@ -263,7 +263,7 @@ impl Downloader {
         task.process.finish();
         Ok(())
     }
-    /// 校验文件 Hash
+    /// 校验文件 Hash，不检验压缩包
     pub async fn hash_file(&self, task: &DownloadTask) -> Result<()> {
         let Target::File(path) = &task.target else {
             return Ok(());

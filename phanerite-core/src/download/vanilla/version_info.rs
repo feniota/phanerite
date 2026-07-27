@@ -11,7 +11,7 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ops::Add;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 impl VersionManifest {
     pub async fn get(version: &Version, downloader: &Downloader) -> Result<Self> {
@@ -24,8 +24,8 @@ impl VersionManifest {
     pub async fn build_all_task(
         self,
         client_path: PathBuf,
-        native_path: &Path,
-        features: &HashSet<&'static str>,
+        native_path: PathBuf,
+        features: HashSet<&'static str>,
         storage: &Storage,
         downloader: &Downloader,
     ) -> Result<(impl Iterator<Item = DownloadTask>, AssetIndexList)> {
@@ -47,17 +47,15 @@ impl VersionManifest {
     pub fn build_libraries_task(
         self,
         storage: &Storage,
-        native_dir: &Path,
-        features: &HashSet<&'static str>,
+        native_dir: PathBuf,
+        features: HashSet<&'static str>,
     ) -> impl Iterator<Item = DownloadTask> {
         self.libraries
             .into_iter()
-            .flat_map(|x| {
-                [
-                    x.to_task(storage, features),
-                    x.to_native_task(features, native_dir),
-                ]
+            .scan((features, native_dir), |(f, n), x| {
+                Some([x.to_task(storage, f), x.to_native_task(f, n)])
             })
+            .flatten()
             .flatten()
     }
     pub fn build_client_task(&self, path: PathBuf) -> Option<DownloadTask> {

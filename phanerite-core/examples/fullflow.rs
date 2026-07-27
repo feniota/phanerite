@@ -9,7 +9,7 @@ use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
 use tracing::log::error;
-use tracing::{Level, info};
+use tracing::{info, Level};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -23,7 +23,7 @@ fn main() {
             .build()
             .await?;
 
-        let _ = Instance::create(
+        let tasks = Instance::create(
             VersionManifest::get(
                 VersionIndex::sync(&downloader).await?.latest_release()?,
                 &downloader,
@@ -33,7 +33,7 @@ fn main() {
             &storage,
             &downloader,
         )
-        .await;
+        .await?;
 
         let instance_dir = storage.versions_dir().join("latest");
         let instance = Instance::open(&instance_dir).await?;

@@ -1,15 +1,14 @@
 use crate::download::downloader::Downloader;
-use crate::download::task::{DownloadTask, filter_existed};
+use crate::download::task::{filter_existed, DownloadTask};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
 use crate::instance::instance_info::InstanceManifest;
 use crate::storage::Storage;
-use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use futures::{Stream, StreamExt};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tracing::error;
 
 pub mod arguments;
 pub mod instance_info;
@@ -21,15 +20,17 @@ pub struct Instance {
 }
 
 impl Instance {
+    /// 获取当前实例的游戏文件路径
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
-    pub async fn create(
+    /// 创建实例
+    pub async fn create<'a>(
         version: VersionManifest,
         name: &str,
-        storage: &Storage,
-        downloader: &Downloader,
-    ) -> Result<()> {
+        storage: &'a Storage,
+        downloader: &'a Downloader,
+    ) -> Result<impl Iterator<Item = DownloadTask> + 'a> {
         // 准备实例目录
         let path = storage.versions_dir().join(name);
         if path.exists() {
@@ -54,10 +55,10 @@ impl Instance {
 
         // 构造下载任务
         let native_dir = path.join("native");
-        let features = HashSet::new(); // 下载大概不需要启用 features
+        let features = HashSet::new(); // 下载应该不需要 features
         let game_file = path.join(format!("{}.jar", name));
         let (downloads, assets_index) = version
-            .build_all_task(game_file, &native_dir, &features, storage, downloader)
+            .build_all_task(game_file, native_dir, features, storage, downloader)
             .await?;
         let downloads = filter_existed(downloads);
 
@@ -66,16 +67,9 @@ impl Instance {
         index_file.write_all(&index_json).await?;
         drop(index_json);
 
-        // 执行下载
-        let errors = downloader.download_concurrent(downloads).await;
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            errors.iter().for_each(|e| error!("{e}"));
-            Err(Error::other("download errors"))
-        }
+        Ok(downloads)
     }
+    /// 打开本地实例
     pub async fn open(instance_dir: impl AsRef<Path>) -> Result<Self> {
         let path = std::path::absolute(instance_dir)?;
 
@@ -123,32 +117,36 @@ impl Instance {
 
         Err(Error::other("No instance found"))
     }
-    pub async fn check_exist(&self, storage: &Storage) -> Result<Vec<DownloadTask>> {
-        let features = HashSet::new();
-        let tasks = self.build_all_task(&features, storage).await?;
-        let tasks = filter_existed(tasks);
-
-        Ok(tasks.collect())
-    }
-    // TODO: Inelegant implementation, plan rewrite
-    pub async fn check_hash(
+    /// 根据存在检查游戏完整性
+    pub async fn check_exist(
         &self,
         storage: &Storage,
-        downloader: &Downloader,
-    ) -> Result<Vec<DownloadTask>> {
-        let features = HashSet::new();
-        let tasks = self.build_all_task(&features, storage).await?;
-        let res = async_lock::Mutex::new(Vec::new());
-        for task in tasks {
-            if downloader.hash_file(&task).await.is_err() {
-                res.lock().await.push(task)
-            }
-        }
-        Ok(res.into_inner())
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let tasks = self.build_all_task(HashSet::new(), storage).await?;
+        let tasks = filter_existed(tasks);
+        Ok(tasks)
     }
-    async fn build_all_task(
+    /// 根据 Hash 检查游戏完整性
+    pub async fn check_hash<'a>(
+        &'a self,
+        storage: &'a Storage,
+        downloader: &'a Downloader,
+    ) -> Result<impl Stream<Item = DownloadTask> + 'a> {
+        let tasks = self.build_all_task(HashSet::new(), storage).await?;
+        let stream = futures::stream::iter(tasks)
+            .map(move |x| async move {
+                let result = downloader.hash_file(&x).await;
+                (x, result)
+            })
+            .buffer_unordered(downloader.max_concurrent)
+            .filter(|(_, result)| futures::future::ready(result.is_err()))
+            .map(|(x, _)| x);
+        Ok(stream)
+    }
+    /// 构建完整下载任务
+    pub async fn build_all_task(
         &self,
-        features: &HashSet<&'static str>,
+        features: HashSet<&'static str>,
         storage: &Storage,
     ) -> Result<impl Iterator<Item = DownloadTask>> {
         // Assets
@@ -164,16 +162,15 @@ impl Instance {
         let assets_task = assets_manifest.build_assets_task(storage);
 
         // Libraries
+        let native_dir = self.instance_dir.join("native");
         let libraries_task = self
             .manifest
             .libraries
             .iter()
-            .flat_map(|x| {
-                [
-                    x.to_task(storage, features),
-                    x.to_native_task(features, &self.instance_dir.join("native")),
-                ]
+            .scan((features, native_dir), |(f, n), x| {
+                Some([x.to_task(storage, f), x.to_native_task(f, n)])
             })
+            .flatten()
             .flatten();
 
         // Client

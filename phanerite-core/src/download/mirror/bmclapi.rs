@@ -19,17 +19,47 @@ BMCLAPI 使用声明：
 
 5. 禁止在 BMCLAPI 上二次封装其他协议。
 "#;
+
     fn resolve(&self, task: &mut DownloadTask) {
         let url = &mut task.url;
 
+        // Mojang libraries
         if let Some(path) = url.strip_prefix("https://libraries.minecraft.net/") {
             *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        } else if let Some(path) = url.strip_prefix("https://resources.download.minecraft.net/") {
+        }
+        // Minecraft assets
+        else if let Some(path) = url.strip_prefix("https://resources.download.minecraft.net/") {
             *url = format!("https://bmclapi2.bangbang93.com/assets/{path}");
-        } else if let Some(path) = url.strip_prefix("https://piston-meta.mojang.com/") {
+        }
+        // Minecraft version metadata
+        else if let Some(path) = url.strip_prefix("https://piston-meta.mojang.com/") {
             *url = format!("https://bmclapi2.bangbang93.com/{path}");
         } else if let Some(path) = url.strip_prefix("https://launchermeta.mojang.com/") {
             *url = format!("https://bmclapi2.bangbang93.com/{path}");
+        }
+        // Fabric meta
+        else if let Some(path) = url.strip_prefix("https://meta.fabricmc.net/") {
+            *url = format!("https://bmclapi2.bangbang93.com/fabric-meta/{path}");
+        }
+        // Fabric Maven
+        else if let Some(path) = url.strip_prefix("https://maven.fabricmc.net/") {
+            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
+        }
+        // Forge Maven
+        else if let Some(path) = url.strip_prefix("https://maven.minecraftforge.net/") {
+            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
+        }
+        // NeoForge Maven
+        else if let Some(path) = url.strip_prefix("https://maven.neoforged.net/") {
+            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
+        }
+        // Authlib Injector Maven
+        else if let Some(path) = url.strip_prefix("https://authlib-injector.yushi.moe/") {
+            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
+        }
+        // Minecraft Forge files
+        else if let Some(path) = url.strip_prefix("https://files.minecraftforge.net/") {
+            *url = format!("https://bmclapi2.bangbang93.com/forge/{path}");
         }
     }
 }

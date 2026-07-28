@@ -10,7 +10,7 @@ use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
 use tracing::log::error;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();

@@ -79,10 +79,10 @@ fn main() {
         })
         .detach();
 
-        // let errs = group
-        //     .exec_with_mirror(&downloader, download::mirror::bmclapi::Bmclapi)
-        //     .await;
-        let errs = group.exec(&downloader).await;
+        let errs = group
+            .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
+            .await;
+        // let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;

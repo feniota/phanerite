@@ -1,4 +1,5 @@
 pub mod bmclapi;
+pub mod granodiorite;
 
 use crate::download::task::DownloadTask;
 use url::Url;

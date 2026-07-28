@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 use std::path::PathBuf;
+use url::Url;
 
 impl VersionManifest {
     pub async fn get(version: &Version, downloader: &Downloader) -> Result<Self> {
@@ -117,5 +118,5 @@ pub struct Downloads {
 pub struct Download {
     pub sha1: Sha1Hash,
     pub size: u64,
-    pub url: String,
+    pub url: Url,
 }

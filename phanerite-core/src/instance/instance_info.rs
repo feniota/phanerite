@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 use strum::{Display, EnumString};
+use url::Url;
 
 /// Top-level Minecraft version manifest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,7 +186,7 @@ impl OsInfo {
 pub struct AssetIndex {
     pub total_size: u64,
     pub id: String,
-    pub url: String,
+    pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,
 }
@@ -232,7 +233,7 @@ pub struct Artifact {
 
     pub size: u64,
 
-    pub url: String,
+    pub url: Url,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -244,7 +245,7 @@ pub struct Extract {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadInfo {
-    pub url: String,
+    pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,
 }
@@ -284,7 +285,7 @@ pub struct LoggingClient {
 #[serde(rename_all = "camelCase")]
 pub struct LoggingFileInfo {
     pub id: String,
-    pub url: String,
+    pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,
 }

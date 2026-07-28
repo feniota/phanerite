@@ -5,6 +5,7 @@ use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::storage::Storage;
 use serde::Deserialize;
+use url::Url;
 
 pub struct Zulu;
 
@@ -14,7 +15,7 @@ impl JavaDownload for Zulu {
         downloader: &Downloader,
         storage: &Storage,
     ) -> Result<DownloadTask> {
-        let mut url = url::Url::parse("https://api.azul.com/metadata/v1/zulu/packages/")
+        let mut url = Url::parse("https://api.azul.com/metadata/v1/zulu/packages/")
             .map_err(|e| Error::other(e.to_string()))?;
 
         url.query_pairs_mut()
@@ -87,7 +88,7 @@ struct ZuluPackage {
     /// Azul Zulu 构建版本，例如 [21, 52, 15, 0]
     distro_version: Vec<u32>,
     /// 下载地址
-    download_url: String,
+    download_url: Url,
     /// Java 版本，例如 [21, 0, 12]
     java_version: Vec<u32>,
     // /// 是否最新版本

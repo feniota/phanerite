@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, OnceLock};
+use url::Url;
 
 pub struct Missing;
 
@@ -36,7 +37,7 @@ pub struct DownloadTaskBuilder<U, T> {
 }
 
 pub struct DownloadTask {
-    pub(crate) url: String,
+    pub(crate) url: Url,
     pub(crate) target: Target,
     pub(crate) share: bool,
     pub(crate) file_hash: Hash,
@@ -80,7 +81,7 @@ impl DownloadTask {
 }
 
 impl<T> DownloadTaskBuilder<Missing, T> {
-    pub fn url(self, url: impl Into<String>) -> DownloadTaskBuilder<String, T> {
+    pub fn url(self, url: impl Into<Url>) -> DownloadTaskBuilder<Url, T> {
         DownloadTaskBuilder {
             url: url.into(),
             target: self.target,
@@ -162,7 +163,7 @@ impl<U, P> DownloadTaskBuilder<U, P> {
     }
 }
 
-impl<P: Into<Target>> DownloadTaskBuilder<String, P> {
+impl<P: Into<Target>> DownloadTaskBuilder<Url, P> {
     pub fn build(self) -> DownloadTask {
         DownloadTask {
             url: self.url,

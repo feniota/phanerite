@@ -1,5 +1,5 @@
 use crate::download::mirror::Mirror;
-use crate::download::task::DownloadTask;
+use url::Url;
 
 pub struct Bmclapi;
 
@@ -20,46 +20,63 @@ BMCLAPI 使用声明：
 5. 禁止在 BMCLAPI 上二次封装其他协议。
 "#;
 
-    fn resolve(&self, task: &mut DownloadTask) {
-        let url = &mut task.url;
+    fn resolve(&self, url: &mut Url) {
+        match url.host_str() {
+            Some("launchermeta.mojang.com") | Some("launcher.mojang.com") => {
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+            }
 
-        // Mojang libraries
-        if let Some(path) = url.strip_prefix("https://libraries.minecraft.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        }
-        // Minecraft assets
-        else if let Some(path) = url.strip_prefix("https://resources.download.minecraft.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/assets/{path}");
-        }
-        // Minecraft version metadata
-        else if let Some(path) = url.strip_prefix("https://piston-meta.mojang.com/") {
-            *url = format!("https://bmclapi2.bangbang93.com/{path}");
-        } else if let Some(path) = url.strip_prefix("https://launchermeta.mojang.com/") {
-            *url = format!("https://bmclapi2.bangbang93.com/{path}");
-        }
-        // Fabric meta
-        else if let Some(path) = url.strip_prefix("https://meta.fabricmc.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/fabric-meta/{path}");
-        }
-        // Fabric Maven
-        else if let Some(path) = url.strip_prefix("https://maven.fabricmc.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        }
-        // Forge Maven
-        else if let Some(path) = url.strip_prefix("https://maven.minecraftforge.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        }
-        // NeoForge Maven
-        else if let Some(path) = url.strip_prefix("https://maven.neoforged.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        }
-        // Authlib Injector Maven
-        else if let Some(path) = url.strip_prefix("https://authlib-injector.yushi.moe/") {
-            *url = format!("https://bmclapi2.bangbang93.com/maven/{path}");
-        }
-        // Minecraft Forge files
-        else if let Some(path) = url.strip_prefix("https://files.minecraftforge.net/") {
-            *url = format!("https://bmclapi2.bangbang93.com/forge/{path}");
+            Some("resources.download.minecraft.net") => {
+                let path = url.path().to_string();
+
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/assets{}", path));
+            }
+
+            Some("libraries.minecraft.net") => {
+                let path = url.path().to_string();
+
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/maven{}", path));
+            }
+
+            Some("files.minecraftforge.net") => {
+                let path = url.path().to_string();
+
+                if path.starts_with("/maven") {
+                    url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+                }
+            }
+
+            Some("authlib-injector.yushi.moe") => {
+                let path = url.path().to_string();
+
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/mirrors/authlib-injector{}", path));
+            }
+
+            Some("meta.fabricmc.net") => {
+                let path = url.path().to_string();
+
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/fabric-meta{}", path));
+            }
+
+            Some("maven.fabricmc.net")
+            | Some("maven.neoforged.net")
+            | Some("maven.quiltmc.org") => {
+                let path = url.path().to_string();
+
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/maven{}", path));
+            }
+
+            _ => (),
         }
     }
 }

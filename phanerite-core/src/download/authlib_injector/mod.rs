@@ -6,6 +6,7 @@ use crate::utils::Sha256Hash;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::path::PathBuf;
+use url::Url;
 
 const AUTHLIB_INJECTOR_API: &str = "https://authlib-injector.yushi.moe";
 
@@ -19,7 +20,7 @@ const AUTHLIB_INJECTOR_API: &str = "https://authlib-injector.yushi.moe";
 struct Artifact {
     build_number: usize,
     // version: String,
-    download_url: Option<String>,
+    download_url: Option<Url>,
     checksums: Option<Checksums>,
 }
 

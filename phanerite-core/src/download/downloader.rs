@@ -168,7 +168,8 @@ impl Downloader {
             };
 
             // 构造和发送请求
-            let mut res = self.client.get_async(&task.url).await?;
+            let uri = task.url.as_str();
+            let mut res = self.client.get_async(uri).await?;
 
             // 补充文件大小（如果不存在）
             if let Ok(len) = res

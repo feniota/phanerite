@@ -22,61 +22,152 @@ BMCLAPI 使用声明：
 
     fn resolve(&self, url: &mut Url) {
         match url.host_str() {
+            // ----------------------------------------
+            // Mojang version / json / java runtime
+            // ----------------------------------------
             Some("launchermeta.mojang.com") | Some("launcher.mojang.com") => {
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
             }
 
+            // ----------------------------------------
+            // Assets
+            // http(s)://resources.download.minecraft.net
+            // ->
+            // https://bmclapi2.bangbang93.com/assets
+            // ----------------------------------------
             Some("resources.download.minecraft.net") => {
                 let path = url.path().to_string();
 
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/assets{}", path));
+                url.set_path(&format!("/assets{path}"));
             }
 
+            // ----------------------------------------
+            // Minecraft Libraries
+            // ----------------------------------------
             Some("libraries.minecraft.net") => {
                 let path = url.path().to_string();
 
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/maven{}", path));
+                url.set_path(&format!("/maven{path}"));
             }
 
+            // ----------------------------------------
+            // Forge
+            // https://files.minecraftforge.net/maven
+            // ->
+            // https://bmclapi2.bangbang93.com/maven
+            // ----------------------------------------
             Some("files.minecraftforge.net") => {
                 let path = url.path().to_string();
 
-                if path.starts_with("/maven") {
+                if let Some(path) = path.strip_prefix("/maven") {
+                    url.set_scheme("https").ok();
                     url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                    url.set_path(&format!("/maven{path}"));
                 }
             }
 
+            // ----------------------------------------
+            // LiteLoader
+            // http://dl.liteloader.com/versions/versions.json
+            // ->
+            // https://bmclapi.bangbang93.com/maven/com/mumfrey/liteloader/versions.json
+            // ----------------------------------------
+            Some("dl.liteloader.com") => {
+                let path = url.path().to_string();
+
+                url.set_scheme("https").ok();
+                url.set_host(Some("bmclapi.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/maven{path}"));
+            }
+
+            // ----------------------------------------
+            // Authlib Injector
+            // ----------------------------------------
             Some("authlib-injector.yushi.moe") => {
                 let path = url.path().to_string();
 
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/mirrors/authlib-injector{}", path));
+                url.set_path(&format!("/mirrors/authlib-injector{path}"));
             }
 
+            // ----------------------------------------
+            // Fabric meta
+            // ----------------------------------------
             Some("meta.fabricmc.net") => {
                 let path = url.path().to_string();
 
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/fabric-meta{}", path));
+                url.set_path(&format!("/fabric-meta{path}"));
             }
 
-            Some("maven.fabricmc.net")
-            | Some("maven.neoforged.net")
-            | Some("maven.quiltmc.org") => {
+            // Fabric Maven
+            Some("maven.fabricmc.net") => {
                 let path = url.path().to_string();
 
+                url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/maven{}", path));
+                url.set_path(&format!("/maven{path}"));
             }
 
-            _ => (),
+            // ----------------------------------------
+            // NeoForge
+            // /releases 需要去掉
+            // ----------------------------------------
+            Some("maven.neoforged.net") => {
+                let path = url
+                    .path()
+                    .strip_prefix("/releases")
+                    .unwrap_or(url.path())
+                    .to_string();
+
+                url.set_scheme("https").ok();
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/maven{path}"));
+            }
+
+            // ----------------------------------------
+            // Quilt Maven
+            // /repository/release 需要去掉
+            // ----------------------------------------
+            Some("maven.quiltmc.org") => {
+                let path = url
+                    .path()
+                    .strip_prefix("/repository/release")
+                    .unwrap_or("")
+                    .to_string();
+
+                url.set_scheme("https").ok();
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/maven{path}"));
+            }
+
+            // Quilt Meta
+            Some("meta.quiltmc.org") => {
+                let path = url.path().to_string();
+
+                url.set_scheme("https").ok();
+                url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
+
+                url.set_path(&format!("/quilt-meta{path}"));
+            }
+
+            _ => {}
         }
     }
 }

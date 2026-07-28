@@ -2,7 +2,6 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
-use phanerite_core::download::mirror::bmclapi::Bmclapi;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
@@ -11,7 +10,7 @@ use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::num::NonZeroU8;
 use tracing::log::error;
-use tracing::{Level, info};
+use tracing::{info, Level};
 
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
@@ -80,7 +79,8 @@ fn main() {
         })
         .detach();
 
-        let errs = group.exec_with_mirror(&downloader, Bmclapi).await;
+        // let errs = group.exec_with_mirror(&downloader, Bmclapi).await;
+        let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;

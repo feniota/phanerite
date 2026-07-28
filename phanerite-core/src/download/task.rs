@@ -5,7 +5,7 @@ use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use std::sync::atomic::{AtomicU8, AtomicU64};
+use std::sync::atomic::{AtomicU64, AtomicU8};
 use std::sync::{Arc, OnceLock};
 use url::Url;
 
@@ -208,22 +208,27 @@ impl DownloadProcess {
         self.inner.state.store(STATE_CANCELLED, Release);
         self.inner.event.notify(usize::MAX);
     }
-
+    /// 下载任务未开始
     pub fn is_pending(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_PENDING
     }
+    /// 下载任务开始，以及开始后的状态
     pub fn is_started(&self) -> bool {
         self.inner.state.load(Acquire) >= STATE_STARTED
     }
+    /// 下载任务正在解压
     pub fn is_extracting(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_EXTRACTING
     }
+    /// 下载任务正常完成
     pub fn is_finished(&self) -> bool {
-        self.inner.state.load(Acquire) >= STATE_FINISHED
+        self.inner.state.load(Acquire) == STATE_FINISHED
     }
+    /// 下载任务失败
     pub fn is_failed(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_FAILED
     }
+    /// 下载任务取消
     pub fn is_canceled(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_CANCELLED
     }

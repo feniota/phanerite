@@ -208,6 +208,10 @@ impl DownloadProcess {
         self.inner.state.store(STATE_CANCELLED, Release);
         self.inner.event.notify(usize::MAX);
     }
+
+    pub fn is_pending(&self) -> bool {
+        self.inner.state.load(Acquire) == STATE_PENDING
+    }
     pub fn is_started(&self) -> bool {
         self.inner.state.load(Acquire) >= STATE_STARTED
     }
@@ -215,7 +219,7 @@ impl DownloadProcess {
         self.inner.state.load(Acquire) == STATE_EXTRACTING
     }
     pub fn is_finished(&self) -> bool {
-        self.inner.state.load(Acquire) == STATE_FINISHED
+        self.inner.state.load(Acquire) >= STATE_FINISHED
     }
     pub fn is_failed(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_FAILED
@@ -223,10 +227,6 @@ impl DownloadProcess {
     pub fn is_canceled(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_CANCELLED
     }
-    pub fn is_pending(&self) -> bool {
-        self.inner.state.load(Acquire) == STATE_PENDING
-    }
-
     pub(super) fn set_total(&self, total: u64) -> bool {
         if self.inner.total.set(total).is_ok() {
             self.inner.event.notify(usize::MAX);

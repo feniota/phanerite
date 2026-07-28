@@ -5,7 +5,7 @@ use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use std::sync::atomic::{AtomicU64, AtomicU8};
+use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, OnceLock};
 use url::Url;
 

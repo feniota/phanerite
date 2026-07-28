@@ -67,7 +67,9 @@ impl ProcessGroup {
             .count()
     }
     pub fn is_finished(&self) -> bool {
-        self.processes.iter().all(|x| x.is_finished())
+        self.processes
+            .iter()
+            .all(|x| x.is_finished() || x.is_failed() || x.is_canceled())
     }
     pub async fn speed_by_timer(&self, timer: impl Future) -> u64 {
         let start = self.current();

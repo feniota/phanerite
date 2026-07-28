@@ -5,6 +5,7 @@ use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, Stream, StreamExt};
 use http::{HeaderMap, StatusCode};
+use isahc::config::{Configurable, RedirectPolicy};
 use isahc::{AsyncReadResponseExt, HttpClient};
 use std::mem::forget;
 use std::num::NonZeroU8;
@@ -69,7 +70,9 @@ impl DownloaderBuilder {
             cache: self.cache,
             bucket: self.bucket,
             strategy: self.strategy,
-            client: HttpClient::builder().build()?,
+            client: HttpClient::builder()
+                .redirect_policy(RedirectPolicy::Limit(10))
+                .build()?,
             pool_rx,
             pool_tx,
         })

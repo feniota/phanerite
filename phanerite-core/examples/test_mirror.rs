@@ -21,18 +21,21 @@ fn main() -> error::Result<()> {
         let mut group = DownloadGroup::new();
 
         // 下载最新正式版
-        let version_id = std::env::args().nth(1).unwrap_or_else(|| "1.20.1".to_string());
+        let version_id = std::env::args()
+            .nth(1)
+            .unwrap_or_else(|| "1.20.1".to_string());
 
         let index = VersionIndex::sync(&downloader).await?;
-        let version = index.iter().find(|v| v.id == version_id).expect("Version not found");
+        let version = index
+            .iter()
+            .find(|v| v.id == version_id)
+            .expect("Version not found");
         println!("Downloading: {} ({})", version.id, version.version_type);
 
         let manifest = VersionManifest::get(version, &downloader).await?;
         let name = version.id.clone();
 
-        group.extend(
-            Instance::create(manifest, &name, &storage, &downloader).await?,
-        );
+        group.extend(Instance::create(manifest, &name, &storage, &downloader).await?);
 
         let processes = std::sync::Arc::new(group.processes());
         let total = processes.total();
@@ -63,9 +66,7 @@ fn main() -> error::Result<()> {
         // 使用 Granodiorite 镜像下载
 
         // 使用 Granodiorite 镜像下载
-        let errs = group
-            .exec_with_mirror(&downloader, Granodiorite)
-            .await;
+        let errs = group.exec_with_mirror(&downloader, Granodiorite).await;
 
         println!("Errors: {}", errs.len());
         for e in &errs {

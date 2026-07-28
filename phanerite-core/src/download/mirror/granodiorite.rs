@@ -16,7 +16,12 @@ impl Mirror for Granodiorite {
     fn resolve(&self, url: &mut Url) {
         match url.host_str() {
             // ── Minecraft 原版 ──
-            Some("launchermeta.mojang.com" | "launcher.mojang.com" | "piston-meta.mojang.com" | "piston-data.mojang.com") => {
+            Some(
+                "launchermeta.mojang.com"
+                | "launcher.mojang.com"
+                | "piston-meta.mojang.com"
+                | "piston-data.mojang.com",
+            ) => {
                 url.set_host(Some("granodiorite.ferris.love")).unwrap();
             }
 

@@ -79,7 +79,9 @@ fn main() {
         })
         .detach();
 
-        // let errs = group.exec_with_mirror(&downloader, Bmclapi).await;
+        // let errs = group
+        //     .exec_with_mirror(&downloader, download::mirror::bmclapi::Bmclapi)
+        //     .await;
         let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 

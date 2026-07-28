@@ -1,4 +1,4 @@
-use crate::download::task::{DownloadTask, Target};
+use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
 use crate::storage::{ShareStrategy, Storage};
 use crate::utils::{Hash, Hasher};
@@ -6,6 +6,7 @@ use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, Stream, StreamExt};
 use http::{HeaderMap, StatusCode};
 use isahc::{AsyncReadResponseExt, HttpClient};
+use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -137,6 +138,17 @@ impl Downloader {
     pub async fn download(&self, task: DownloadTask) -> Result<()> {
         // 申请缓存并等待
         let mut buf = self.alloc_buf().await;
+        struct FailGuard<'a> {
+            process: &'a DownloadProcess,
+        }
+        impl Drop for FailGuard<'_> {
+            fn drop(&mut self) {
+                self.process.fail()
+            }
+        }
+        let guard = FailGuard {
+            process: &task.process,
+        };
 
         // 准备工作
         debug!(
@@ -209,7 +221,10 @@ impl Downloader {
                     last_res = Ok(v);
                     break;
                 }
-                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Err(Error::Cancelled) => {
+                    forget(guard);
+                    return Err(Error::Cancelled);
+                }
                 Err(e) => last_res = Err(e),
             }
             let _ = async_fs::remove_file(&cache).await;
@@ -260,6 +275,7 @@ impl Downloader {
         } // Save or Extract
 
         task.process.finish();
+        forget(guard);
         Ok(())
     }
     /// 校验文件 Hash，不检验压缩包

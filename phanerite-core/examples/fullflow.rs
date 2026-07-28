@@ -2,6 +2,7 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
+use phanerite_core::download::mirror::bmclapi::Bmclapi;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
@@ -23,6 +24,8 @@ fn main() {
             .await?;
         let mut group = DownloadGroup::new();
 
+        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
+
         group.extend(
             Instance::create(
                 VersionManifest::get(
@@ -37,17 +40,11 @@ fn main() {
             .await?,
         );
 
-        let instance_dir = storage.versions_dir().join("latest");
-        let instance = Instance::open(&instance_dir).await?;
+        let instance = Instance::open(storage.versions_dir().join("latest")).await?;
 
         if instance.find_java(&storage).await.is_empty() {
             info!("Install java");
-            group.extend(
-                instance
-                    .install_java(Zulu, &downloader, &storage)
-                    .await?
-                    .into_iter(),
-            );
+            group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
         }
 
         let auth = Authentication::new_login(&downloader)
@@ -65,10 +62,9 @@ fn main() {
             .await?;
 
         let injector = AuthlibInjector::new(&storage);
-        group.extend(injector.update(&downloader).await?.into_iter());
+        group.extend(injector.update(&downloader).await?);
 
         let processes = group.processes();
-
         smol::spawn(async move {
             loop {
                 println!("Downloading: {}", processes.downloading());
@@ -84,22 +80,15 @@ fn main() {
         })
         .detach();
 
-        let errs = group.exec(&downloader).await;
-        if !errs.is_empty() {
-            errs.iter().for_each(|e| error!("{}", e))
-        }
+        let errs = group.exec_with_mirror(&downloader, Bmclapi).await;
+        errs.iter().for_each(|e| error!("{}", e));
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;
+        let java = instance.find_java(&storage).await.remove(0);
 
-        async_process::Command::new(
-            instance
-                .find_java(&storage)
-                .await
-                .first()
-                .expect("No available java"),
-        )
-        .args(arguments.iter())
-        .spawn()?;
+        async_process::Command::new(java)
+            .args(arguments.iter())
+            .spawn()?;
 
         Ok::<(), Error>(())
     }) {

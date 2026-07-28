@@ -5,7 +5,7 @@ use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, OnceLock};
 
 pub struct Missing;
@@ -36,10 +36,10 @@ pub struct DownloadTaskBuilder<U, T> {
 }
 
 pub struct DownloadTask {
-    pub(super) url: String,
-    pub(super) target: Target,
-    pub(super) share: bool,
-    pub(super) file_hash: Hash,
+    pub(crate) url: String,
+    pub(crate) target: Target,
+    pub(crate) share: bool,
+    pub(crate) file_hash: Hash,
 
     pub process: DownloadProcess,
 }
@@ -56,11 +56,15 @@ struct DownloadProcessInner {
     current: AtomicU64,
     total: OnceLock<u64>,
 
-    started: AtomicBool,
-    extracting: AtomicBool,
-    finished: AtomicBool,
-    cancelled: AtomicBool,
+    state: AtomicU8,
 }
+
+const STATE_PENDING: u8 = 0;
+const STATE_STARTED: u8 = 1;
+const STATE_EXTRACTING: u8 = 2;
+const STATE_FINISHED: u8 = 3;
+const STATE_FAILED: u8 = 4;
+const STATE_CANCELLED: u8 = 5;
 
 impl DownloadTask {
     pub fn builder() -> DownloadTaskBuilder<Missing, Missing> {
@@ -179,10 +183,7 @@ impl<P: Into<Target>> DownloadTaskBuilder<String, P> {
                         OnceLock::new()
                     },
 
-                    started: AtomicBool::new(false),
-                    extracting: AtomicBool::new(false),
-                    finished: AtomicBool::new(false),
-                    cancelled: AtomicBool::new(false),
+                    state: AtomicU8::new(STATE_PENDING),
                 }),
             },
         }
@@ -203,20 +204,26 @@ impl DownloadProcess {
         self.inner.event.listen().await;
     }
     pub fn cancel(&self) {
-        self.inner.cancelled.store(true, Release);
+        self.inner.state.store(STATE_CANCELLED, Release);
         self.inner.event.notify(usize::MAX);
     }
     pub fn is_started(&self) -> bool {
-        self.inner.started.load(Acquire)
+        self.inner.state.load(Acquire) >= STATE_STARTED
     }
     pub fn is_extracting(&self) -> bool {
-        self.inner.extracting.load(Acquire)
+        self.inner.state.load(Acquire) == STATE_EXTRACTING
     }
     pub fn is_finished(&self) -> bool {
-        self.inner.finished.load(Acquire)
+        self.inner.state.load(Acquire) == STATE_FINISHED
+    }
+    pub fn is_failed(&self) -> bool {
+        self.inner.state.load(Acquire) == STATE_FAILED
     }
     pub fn is_canceled(&self) -> bool {
-        self.inner.cancelled.load(Acquire)
+        self.inner.state.load(Acquire) == STATE_CANCELLED
+    }
+    pub fn is_pending(&self) -> bool {
+        self.inner.state.load(Acquire) == STATE_PENDING
     }
 
     pub(super) fn set_total(&self, total: u64) -> bool {
@@ -232,15 +239,19 @@ impl DownloadProcess {
         self.inner.event.notify(usize::MAX);
     }
     pub(super) fn start(&self) {
-        self.inner.started.store(true, Release);
+        self.inner.state.store(STATE_STARTED, Release);
         self.inner.event.notify(usize::MAX);
     }
     pub(super) fn extracting(&self) {
-        self.inner.extracting.store(true, Release);
+        self.inner.state.store(STATE_EXTRACTING, Release);
         self.inner.event.notify(usize::MAX);
     }
     pub(super) fn finish(&self) {
-        self.inner.finished.store(true, Release);
+        self.inner.state.store(STATE_FINISHED, Release);
+        self.inner.event.notify(usize::MAX);
+    }
+    pub(super) fn fail(&self) {
+        self.inner.state.store(STATE_FAILED, Release);
         self.inner.event.notify(usize::MAX);
     }
 }

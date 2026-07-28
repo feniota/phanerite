@@ -10,7 +10,6 @@ pub struct Zulu;
 
 impl JavaDownload for Zulu {
     async fn get_major(
-        &self,
         major: u32,
         downloader: &Downloader,
         storage: &Storage,

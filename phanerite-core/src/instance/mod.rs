@@ -1,5 +1,6 @@
 use crate::download::downloader::Downloader;
-use crate::download::task::{filter_existed, DownloadTask};
+use crate::download::task::Target::File;
+use crate::download::task::{filter_existed, DownloadTask, Target};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
@@ -123,7 +124,10 @@ impl Instance {
         storage: &Storage,
     ) -> Result<impl Iterator<Item = DownloadTask>> {
         let tasks = self.build_all_task(HashSet::new(), storage).await?;
-        let tasks = filter_existed(tasks);
+        let tasks = filter_existed(tasks).filter(|x| match x.target {
+            File(_) => true,
+            Target::Extract(_) => false, // 无法检查解压后文件完整性
+        });
         Ok(tasks)
     }
     /// 根据 Hash 检查游戏完整性

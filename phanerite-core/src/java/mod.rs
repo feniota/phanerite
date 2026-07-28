@@ -20,9 +20,8 @@ const JAVA_BIN_NAME: &str = "java.exe";
 const JAVA_BIN_NAME: &str = "java";
 
 impl Instance {
-    pub async fn install_java(
+    pub async fn install_java<J: JavaDownload>(
         &self,
-        java: impl JavaDownload,
         downloader: &Downloader,
         storage: &Storage,
     ) -> Result<Option<DownloadTask>> {
@@ -36,13 +35,12 @@ impl Instance {
         {
             return Ok(None);
         }
-        let task = java
-            .get_major(
-                self.manifest.java_version.major_version,
-                downloader,
-                storage,
-            )
-            .await?;
+        let task = J::get_major(
+            self.manifest.java_version.major_version,
+            downloader,
+            storage,
+        )
+        .await?;
         Ok(Some(task))
     }
     pub async fn find_java(&self, storage: &Storage) -> Vec<JavaRuntime> {

@@ -9,7 +9,6 @@ use crate::storage::Storage;
 #[allow(async_fn_in_trait)]
 pub trait JavaDownload {
     async fn get_major(
-        &self,
         major: u32,
         downloader: &Downloader,
         storage: &Storage,

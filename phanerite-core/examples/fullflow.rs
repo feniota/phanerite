@@ -8,8 +8,7 @@ use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
-use tracing::log::error;
-use tracing::{Level, info};
+use tracing::{Level, error, info};
 
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();

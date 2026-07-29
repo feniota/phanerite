@@ -11,6 +11,7 @@ use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -43,9 +44,9 @@ impl DownloaderBuilder {
         Self {
             retries: 3,
             concurrency: 64,
-            threshold: 1024 * 1024,
+            threshold: 2 * 1024 * 1024,
             large_parallelism: 4,
-            small_parallelism: 16,
+            small_parallelism: 32,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
             cache: storage.cache_dir().to_path_buf(),
@@ -110,8 +111,12 @@ impl DownloaderBuilder {
             strategy: self.strategy,
             threshold: self.threshold,
             client: HttpClient::builder()
-                .max_connections_per_host(self.concurrency)
                 .redirect_policy(RedirectPolicy::Limit(10))
+                .tcp_keepalive(Duration::from_secs(60))
+                .low_speed_timeout(1024, Duration::from_secs(30))
+                .dns_cache(Duration::from_secs(300))
+                .connection_cache_size(self.concurrency * 2)
+                .tcp_nodelay()
                 .build()?,
             large_tx,
             large_rx,

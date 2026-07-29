@@ -5,7 +5,7 @@ use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
-use std::num::NonZeroU8;
+use std::time::Instant;
 use tracing::Level;
 
 fn main() -> error::Result<()> {
@@ -13,8 +13,6 @@ fn main() -> error::Result<()> {
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
         let downloader = download::downloader::Downloader::builder(&storage)
-            .concurrent(NonZeroU8::new(8).unwrap())
-            .retries(3)
             .build()
             .await?;
 
@@ -38,8 +36,8 @@ fn main() -> error::Result<()> {
         group.extend(Instance::create(manifest, &name, &storage, &downloader).await?);
 
         let processes = std::sync::Arc::new(group.processes());
-        let total = processes.total();
-        println!("Total size: {:.2} MiB", total as f64 / 1024.0 / 1024.0);
+        let total = processes.total() as f64 / 1024.0 / 1024.0;
+        println!("Total size: {:.2} MiB", total);
 
         // 显示下载速度和进度
         let monitor = processes.clone();
@@ -50,8 +48,8 @@ fn main() -> error::Result<()> {
                     .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
                     .await;
                 let current = monitor.current();
-                let pct = if total > 0 {
-                    current as f64 / total as f64 * 100.0
+                let pct = if processes.total() > 0 {
+                    current as f64 / processes.total() as f64 * 100.0
                 } else {
                     0.0
                 };
@@ -64,16 +62,21 @@ fn main() -> error::Result<()> {
         .detach();
 
         // 使用 Granodiorite 镜像下载
-
-        // 使用 Granodiorite 镜像下载
+        let instant = Instant::now();
         let errs = group.exec_with_mirror(&downloader, Granodiorite).await;
+        let spend = instant.elapsed().as_secs_f64();
 
         println!("Errors: {}", errs.len());
         for e in &errs {
             eprintln!("  Error: {}", e);
         }
 
-        println!("Done!");
+        println!(
+            "Done! Download {:.2} MB in {:.2} s, avg:{:.2} MB/s",
+            total,
+            spend,
+            total / spend
+        );
         Ok::<(), error::Error>(())
     })
 }

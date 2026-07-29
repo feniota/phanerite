@@ -142,7 +142,7 @@ impl Instance {
                 let result = downloader.hash_file(&x).await;
                 (x, result)
             })
-            .buffer_unordered(downloader.max_concurrent)
+            .buffer_unordered(downloader.concurrency)
             .filter(|(_, result)| futures::future::ready(result.is_err()))
             .map(|(x, _)| x);
         Ok(stream)

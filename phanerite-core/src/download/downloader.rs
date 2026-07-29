@@ -11,16 +11,24 @@ use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 pub struct DownloaderBuilder {
     /// 重试次数
     retries: usize,
     /// 最大并发数,
-    max_concurrent: usize,
-    /// 单个缓冲大小
-    buffer_per_thread: usize,
+    concurrency: usize,
+    /// 大文件阈值
+    threshold: u64,
+    /// 大文件并行度
+    large_parallelism: usize,
+    /// 小文件并行度
+    small_parallelism: usize,
+    /// 大文件缓冲大小
+    large_buffer: usize,
+    /// 小文件缓冲大小
+    small_buffer: usize,
     /// 缓存目录
     cache: PathBuf,
     /// 共享储存目录
@@ -34,8 +42,12 @@ impl DownloaderBuilder {
     fn new(storage: &Storage) -> Self {
         Self {
             retries: 3,
-            max_concurrent: 4,
-            buffer_per_thread: 64 * 1024,
+            concurrency: 64,
+            threshold: 1024 * 1024,
+            large_parallelism: 4,
+            small_parallelism: 32,
+            large_buffer: 512 * 1024,
+            small_buffer: 64 * 1024,
             cache: storage.cache_dir().to_path_buf(),
             bucket: storage.share_dir().to_path_buf(),
             strategy: storage.share_strategy,
@@ -46,52 +58,87 @@ impl DownloaderBuilder {
         self.retries = retries;
         self
     }
-    /// 设置并发数
-    pub fn concurrent(mut self, max: NonZeroU8) -> Self {
-        self.max_concurrent = max.get() as usize;
+    /// 设置并发度
+    pub fn concurrency(mut self, max: NonZeroU8) -> Self {
+        self.concurrency = max.get() as usize;
         self
     }
-    /// 设置下载缓存
-    pub fn buffer(mut self, buffer: usize) -> Self {
-        self.buffer_per_thread = buffer;
+    /// 设置大文件阈值
+    pub fn threshold(mut self, threshold: u64) -> Self {
+        self.threshold = threshold;
+        self
+    }
+    /// 设置大文件并行度
+    pub fn large_parallelism(mut self, max: NonZeroU8) -> Self {
+        self.large_parallelism = max.get() as usize;
+        self
+    }
+    /// 设置小文件并行度
+    pub fn small_parallelism(mut self, max: NonZeroU8) -> Self {
+        self.small_parallelism = max.get() as usize;
+        self
+    }
+    /// 设置大文件下载缓冲
+    pub fn large_buffer(mut self, buffer: usize) -> Self {
+        self.large_buffer = buffer;
+        self
+    }
+    /// 设置大文件下载缓冲
+    pub fn small_buffer(mut self, buffer: usize) -> Self {
+        self.small_buffer = buffer;
         self
     }
     pub async fn build(self) -> Result<Downloader> {
-        let (pool_tx, pool_rx) = async_channel::bounded(self.max_concurrent);
-        for _ in 0..self.max_concurrent {
-            pool_tx
-                .send(vec![0u8; self.buffer_per_thread])
-                .await
-                .unwrap()
+        let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
+        for _ in 0..self.large_parallelism {
+            large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
+        }
+        let (small_tx, small_rx) = async_channel::bounded(self.small_parallelism);
+        for _ in 0..self.large_parallelism {
+            small_tx.send(vec![0u8; self.small_buffer]).await.unwrap()
+        }
+        if self.small_parallelism + self.large_parallelism > self.concurrency {
+            warn!(
+                "The parallelism is greater than the concurrency, and thus the buffer cannot be fully utilized."
+            )
         }
         Ok(Downloader {
             retries: self.retries,
-            max_concurrent: self.max_concurrent,
+            concurrency: self.concurrency,
             cache: self.cache,
             bucket: self.bucket,
             strategy: self.strategy,
+            threshold: self.threshold,
             client: HttpClient::builder()
+                .max_connections_per_host(self.concurrency)
                 .redirect_policy(RedirectPolicy::Limit(10))
                 .build()?,
-            pool_rx,
-            pool_tx,
+            large_tx,
+            large_rx,
+            small_tx,
+            small_rx,
         })
     }
 }
 
 pub struct Downloader {
     retries: usize,
-    pub max_concurrent: usize,
+    pub(crate) concurrency: usize,
     cache: PathBuf,
     bucket: PathBuf,
     strategy: ShareStrategy,
+    threshold: u64,
 
     /// HTTP 客户端
     client: HttpClient,
-    /// 获取缓冲
-    pool_rx: Receiver<Vec<u8>>,
-    /// 归还缓冲
-    pool_tx: Sender<Vec<u8>>,
+    /// 获取大缓冲
+    large_rx: Receiver<Vec<u8>>,
+    /// 归还大缓冲
+    large_tx: Sender<Vec<u8>>,
+    /// 获取小缓冲
+    small_rx: Receiver<Vec<u8>>,
+    /// 归还小缓冲
+    small_tx: Sender<Vec<u8>>,
 }
 
 impl Downloader {
@@ -139,8 +186,6 @@ impl Downloader {
     }
     /// 下载文件到储存
     pub async fn download(&self, task: DownloadTask) -> Result<()> {
-        // 申请缓存并等待
-        let mut buf = self.alloc_buf().await;
         struct FailGuard<'a> {
             process: &'a DownloadProcess,
         }
@@ -162,7 +207,7 @@ impl Downloader {
         let cache = self.cache.join(Uuid::now_v7().to_string());
 
         // 下载文件
-        let mut retry_body = async || {
+        let retry_body = async || {
             // 共享储存桶 Hasher
             let mut bucket_hasher = match task.target {
                 Target::File(_) => task.share.then_some(blake3::Hasher::new()),
@@ -190,6 +235,8 @@ impl Downloader {
             let reader = res.body_mut();
             let mut hasher = task.file_hash.hasher();
 
+            // 申请缓存并等待
+            let mut buf = self.alloc_buf(task.process.total()).await;
             // 流式下载
             loop {
                 let n = reader.read(&mut buf).await?;
@@ -208,6 +255,7 @@ impl Downloader {
                 }
                 task.process.step(n as u64);
             }
+            drop(buf);
             file.flush().await?;
 
             // 校验文件
@@ -272,7 +320,6 @@ impl Downloader {
                         &cache,
                         task.share.then_some(self.bucket.clone()),
                         self.strategy,
-                        &mut buf,
                     )
                     .await?
             }
@@ -288,7 +335,7 @@ impl Downloader {
             return Ok(());
         };
 
-        let mut buf = self.alloc_buf().await;
+        let mut buf = self.alloc_buf(task.process.total()).await;
         let mut hasher = task.file_hash.hasher();
         let mut file = async_fs::File::open(path).await?;
 
@@ -315,14 +362,24 @@ impl Downloader {
     ) -> impl Stream<Item = Error> {
         futures::stream::iter(tasks)
             .map(async |task| self.download(task).await)
-            .buffer_unordered(self.max_concurrent)
+            .buffer_unordered(self.concurrency)
             .filter_map(async |res| res.err())
     }
-    /// 申请下载缓存，限制总并发量
-    async fn alloc_buf(&self) -> BufferGuard {
-        BufferGuard {
-            buf: Some(self.pool_rx.recv().await.expect("Failed to alloc buffer")),
-            pool: self.pool_tx.clone(),
+    /// 申请下载缓存，限制总并行度
+    async fn alloc_buf(&self, size: Option<u64>) -> BufferGuard {
+        match size {
+            Some(size) if size >= self.threshold => BufferGuard {
+                buf: Some(self.large_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.large_tx.clone(),
+            }, // >=阈值
+            Some(size) if size >= self.threshold => BufferGuard {
+                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.small_tx.clone(),
+            }, // >=阈值
+            _ => BufferGuard {
+                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.small_tx.clone(),
+            }, // 默认小文件
         }
     }
 }

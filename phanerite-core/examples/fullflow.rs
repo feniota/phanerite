@@ -8,7 +8,6 @@ use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
-use std::num::NonZeroU8;
 use tracing::log::error;
 use tracing::{Level, info};
 
@@ -17,8 +16,6 @@ fn main() {
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
         let downloader = download::downloader::Downloader::builder(&storage)
-            .concurrent(NonZeroU8::new(16).unwrap())
-            .retries(3)
             .build()
             .await?;
         let mut group = DownloadGroup::new();

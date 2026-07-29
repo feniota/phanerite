@@ -73,9 +73,9 @@ impl Mirror for Granodiorite {
             Some("files.minecraftforge.net") => {
                 let path = url.path().to_string();
 
-                if path.starts_with("/maven") {
+                if let Some(path) = path.strip_prefix("/maven") {
                     url.set_host(Some("granodiorite.ferris.love")).unwrap();
-                    url.set_path(&format!("/maven/forge-legacy{}", &path[6..]));
+                    url.set_path(&format!("/maven/forge-legacy{}", path));
                 }
             }
 

@@ -53,7 +53,6 @@ impl ExtractTask {
         archive_file: impl AsRef<Path>,
         bucket: Option<PathBuf>,
         strategy: ShareStrategy,
-        _buf: &mut [u8],
     ) -> Result<()> {
         let archive_path = archive_file.as_ref().to_path_buf();
         let target = self.path.clone();

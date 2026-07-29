@@ -45,29 +45,6 @@ pub struct DownloadTask {
     pub process: DownloadProcess,
 }
 
-#[cfg(debug_assertions)]
-impl crate::debug::DebugClone for Target {
-    fn debug_clone(&self) -> Self {
-        match self {
-            File(v) => File(v.clone()),
-            Extract(v) => Extract(v.debug_clone()),
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-impl crate::debug::DebugClone for DownloadTask {
-    fn debug_clone(&self) -> Self {
-        Self {
-            url: self.url.clone(),
-            target: self.target.debug_clone(),
-            share: self.share,
-            file_hash: self.file_hash.clone(),
-            process: self.process.clone(),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct DownloadProcess {
     inner: Arc<DownloadProcessInner>,
@@ -145,10 +122,10 @@ impl<U> DownloadTaskBuilder<U, Missing> {
             file_hash: self.file_hash,
         }
     }
-    pub fn to_path(self, path: impl Into<PathBuf>) -> DownloadTaskBuilder<U, PathBuf> {
+    pub fn to_path(self, path: PathBuf) -> DownloadTaskBuilder<U, PathBuf> {
         DownloadTaskBuilder {
             url: self.url,
-            target: path.into(),
+            target: path,
             share: self.share,
             file_name: self.file_name,
             file_size: self.file_size,

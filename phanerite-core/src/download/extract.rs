@@ -21,18 +21,6 @@ pub struct ExtractTask {
     exclude: Vec<ExcludePattern>,
 }
 
-#[cfg(debug_assertions)]
-impl crate::debug::DebugClone for ExtractTask {
-    fn debug_clone(&self) -> Self {
-        Self {
-            path: self.path.clone(),
-            format: self.format,
-            auto_flattens: self.auto_flattens,
-            exclude: self.exclude.clone(),
-        }
-    }
-}
-
 /// A simple exclusion pattern for archive entries.
 /// Mojang convention: `META-INF/` = prefix, `*.SF` = suffix.
 #[derive(Clone)]

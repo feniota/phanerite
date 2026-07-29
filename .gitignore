@@ -3,7 +3,3 @@
 /.minecraft
 /logs
 /authlib-injector.log
-/test_data
-/test_output
-/dhat-heap.json
-/result.txt

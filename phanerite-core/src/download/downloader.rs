@@ -43,10 +43,10 @@ impl DownloaderBuilder {
     fn new(storage: &Storage) -> Self {
         Self {
             retries: 3,
-            concurrency: 32,
+            concurrency: 64,
             threshold: 2 * 1024 * 1024,
-            large_parallelism: 2,
-            small_parallelism: 16,
+            large_parallelism: 4,
+            small_parallelism: 32,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
             cache: storage.cache_dir().to_path_buf(),

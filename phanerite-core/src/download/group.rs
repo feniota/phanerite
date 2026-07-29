@@ -1,3 +1,4 @@
+use crate::debug::DebugClone;
 use crate::download::downloader::Downloader;
 use crate::download::mirror::Mirror;
 use crate::download::task::{DownloadProcess, DownloadTask};
@@ -6,6 +7,15 @@ use futures::StreamExt;
 
 pub struct DownloadGroup {
     tasks: Vec<DownloadTask>,
+}
+
+#[cfg(debug_assertions)]
+impl DebugClone for DownloadGroup {
+    fn debug_clone(&self) -> Self {
+        Self {
+            tasks: self.tasks.iter().map(|x| x.debug_clone()).collect(),
+        }
+    }
 }
 
 pub struct ProcessGroup {

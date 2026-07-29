@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "windows", feature(windows_by_handle))]
 
 pub mod auth;
+pub mod debug;
 pub mod download;
 pub mod error;
 pub mod instance;

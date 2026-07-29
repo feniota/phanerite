@@ -1,5 +1,5 @@
 // 硬链接检测引用计数
-#![feature(windows_by_handle)]
+#![cfg_attr(target_os = "windows", feature(windows_by_handle))]
 
 pub mod auth;
 pub mod download;

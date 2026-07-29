@@ -45,9 +45,9 @@ impl DownloaderBuilder {
             concurrency: 64,
             threshold: 1024 * 1024,
             large_parallelism: 4,
-            small_parallelism: 32,
+            small_parallelism: 16,
             large_buffer: 512 * 1024,
-            small_buffer: 64 * 1024,
+            small_buffer: 128 * 1024,
             cache: storage.cache_dir().to_path_buf(),
             bucket: storage.share_dir().to_path_buf(),
             strategy: storage.share_strategy,
@@ -94,7 +94,7 @@ impl DownloaderBuilder {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
         }
         let (small_tx, small_rx) = async_channel::bounded(self.small_parallelism);
-        for _ in 0..self.large_parallelism {
+        for _ in 0..self.small_parallelism {
             small_tx.send(vec![0u8; self.small_buffer]).await.unwrap()
         }
         if self.small_parallelism + self.large_parallelism > self.concurrency {
@@ -255,8 +255,10 @@ impl Downloader {
                 }
                 task.process.step(n as u64);
             }
-            drop(buf);
             file.flush().await?;
+            drop(buf);
+            drop(res);
+            drop(file);
 
             // 校验文件
             if task.file_hash == hasher.finalize() {
@@ -368,14 +370,14 @@ impl Downloader {
     /// 申请下载缓存，限制总并行度
     async fn alloc_buf(&self, size: Option<u64>) -> BufferGuard {
         match size {
-            Some(size) if size >= self.threshold => BufferGuard {
+            Some(size) if size > self.threshold => BufferGuard {
                 buf: Some(self.large_rx.recv().await.expect("Failed to alloc buffer")),
                 pool: self.large_tx.clone(),
             }, // >=阈值
-            Some(size) if size >= self.threshold => BufferGuard {
+            Some(size) if size <= self.threshold => BufferGuard {
                 buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
                 pool: self.small_tx.clone(),
-            }, // >=阈值
+            }, // <=阈值
             _ => BufferGuard {
                 buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
                 pool: self.small_tx.clone(),
@@ -409,7 +411,9 @@ impl Drop for BufferGuard {
             match self.pool.try_send(buf) {
                 Ok(_) => {}
                 Err(async_channel::TrySendError::Full(_))
-                | Err(async_channel::TrySendError::Closed(_)) => {}
+                | Err(async_channel::TrySendError::Closed(_)) => {
+                    error!("Buffer loss")
+                }
             }
         }
     }

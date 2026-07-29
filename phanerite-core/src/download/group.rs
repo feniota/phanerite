@@ -54,6 +54,12 @@ impl DownloadGroup {
 }
 
 impl ProcessGroup {
+    pub fn len(&self) -> usize {
+        self.processes.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.processes.is_empty()
+    }
     pub fn total(&self) -> u64 {
         self.processes.iter().filter_map(|x| x.total()).sum()
     }
@@ -65,6 +71,9 @@ impl ProcessGroup {
             .iter()
             .filter(|x| x.is_started() && !x.is_finished() && !x.is_canceled() && !x.is_failed())
             .count()
+    }
+    pub fn finished(&self) -> usize {
+        self.processes.iter().filter(|x| x.is_finished()).count()
     }
     pub fn is_finished(&self) -> bool {
         self.processes

@@ -37,7 +37,7 @@ fn main() -> error::Result<()> {
 
         let processes = std::sync::Arc::new(group.processes());
         let total = processes.total() as f64 / 1024.0 / 1024.0;
-        println!("Total size: {:.2} MiB", total);
+        println!("Total size: {:.2} MiB ({} tasks)", total, processes.len());
 
         // 显示下载速度和进度
         let monitor = processes.clone();
@@ -48,13 +48,14 @@ fn main() -> error::Result<()> {
                     .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
                     .await;
                 let current = monitor.current();
-                let pct = if processes.total() > 0 {
-                    current as f64 / processes.total() as f64 * 100.0
+                let pct = if monitor.total() > 0 {
+                    current as f64 / monitor.total() as f64 * 100.0
                 } else {
                     0.0
                 };
+                let finished = monitor.finished();
                 println!(
-                    "Progress: {pct:.1}%  Downloading: {downloading}  {:.2} MiB/s",
+                    "Progress: {pct:.1}% ({finished} finished) Downloading: {downloading}  {:.2} MiB/s",
                     speed as f64 / 1024.0 / 1024.0,
                 );
             }

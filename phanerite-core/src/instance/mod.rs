@@ -1,6 +1,6 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::Target::File;
-use crate::download::task::{DownloadTask, Target, filter_existed};
+use crate::download::task::{filter_existed, DownloadTask, Target};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
@@ -12,8 +12,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub mod arguments;
-pub mod inherits;
 pub mod instance_info;
+pub mod overlay;
 pub mod variables;
 
 pub struct Instance {

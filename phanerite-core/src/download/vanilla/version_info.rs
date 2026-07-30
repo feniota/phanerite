@@ -12,7 +12,7 @@ use url::Url;
 impl VersionManifest {
     pub async fn get(version: &Version, downloader: &Downloader) -> Result<Self> {
         let body = downloader
-            .fetch(version.url.clone(), Some(version.sha1.clone().into()))
+            .fetch(&version.url, Some(version.sha1.clone().into()))
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)

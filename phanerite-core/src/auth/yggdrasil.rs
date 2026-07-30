@@ -10,6 +10,7 @@ use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use url::Url;
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug)]
@@ -60,7 +61,7 @@ pub struct Authentication {
     password: SecretString,
 
     /// 服务器 base URL
-    pub server: String,
+    pub server: Url,
     /// 材质域名白名单
     pub skin_domains: Vec<String>,
     /// 验证角色属性的数字签名公钥
@@ -140,7 +141,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (_, res) = downloader
-            .post_json(format!("{}/authserver/refresh", self.server), req)
+            .post_json(&self.server.join("authserver/refresh")?, req)
             .await?;
         let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
 
@@ -168,7 +169,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (status, _) = downloader
-            .post_json(format!("{}/authserver/validate", self.server), req)
+            .post_json(&self.server.join("/authserver/validate")?, req)
             .await?;
 
         if status == 204 { Ok(true) } else { Ok(false) }
@@ -188,7 +189,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (_, _) = downloader
-            .post_json(format!("{}/authserver/invalidate", self.server), req)
+            .post_json(&self.server.join("/authserver/invalidate")?, req)
             .await?;
 
         Ok(())
@@ -208,7 +209,7 @@ impl Authentication {
         let req = serde_json::to_string(&req)?;
 
         let (status, err) = downloader
-            .post_json(format!("{}/authserver/signout", self.server), req)
+            .post_json(&self.server.join("/authserver/signout")?, req)
             .await?;
 
         if status == 204 {
@@ -251,13 +252,8 @@ impl Authentication {
 }
 
 impl<'a, U, P> Login<'a, Missing, U, P> {
-    pub async fn custom(mut self, url: impl AsRef<str>) -> Result<Login<'a, String, U, P>> {
-        let url = self
-            .get_ali(url.as_ref())
-            .await?
-            .strip_suffix('/')
-            .unwrap_or(url.as_ref())
-            .to_string();
+    pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P>> {
+        let url = self.get_ali(url.into()).await;
         self.update_meta(&url).await?;
         Ok(Login {
             downloader: self.downloader,
@@ -269,16 +265,18 @@ impl<'a, U, P> Login<'a, Missing, U, P> {
             password: self.password,
         })
     }
-    async fn get_ali(&self, url: impl AsRef<str>) -> Result<String> {
-        Ok(self
-            .downloader
-            .head(url.as_ref())
-            .await?
+    async fn get_ali(&self, url: Url) -> Url {
+        let response = match self.downloader.head(&url).await {
+            Ok(v) => v,
+            Err(_) => return url,
+        };
+        response
             .get("X-Authlib-Injector-API-Location")
-            .map(|t| t.to_str().unwrap_or(url.as_ref()).to_string())
-            .unwrap_or(url.as_ref().to_string()))
+            .and_then(|t| t.to_str().ok())
+            .and_then(|t| t.parse().ok())
+            .unwrap_or(url)
     }
-    async fn update_meta(&mut self, url: impl AsRef<str>) -> Result<()> {
+    async fn update_meta(&mut self, url: &Url) -> Result<()> {
         let res = self.downloader.fetch(url, None).await?;
         let res = serde_json::from_slice::<Response<FullMeta>>(&res)?.into_result()?;
 
@@ -363,7 +361,7 @@ pub struct ProfileProperty {
     pub signature: Option<String>,
 }
 
-impl<'a> Login<'a, String, String, SecretString> {
+impl<'a> Login<'a, Url, String, SecretString> {
     pub async fn login(self) -> Result<Authentication> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
 
@@ -406,7 +404,7 @@ impl<'a> Login<'a, String, String, SecretString> {
 
         let (_, res) = self
             .downloader
-            .post_json(format!("{}/authserver/authenticate", self.server), &req)
+            .post_json(&self.server.join("/authserver/authenticate")?, &req)
             .await?;
         let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
 

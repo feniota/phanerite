@@ -5,12 +5,18 @@ use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use std::slice::Iter;
+use std::sync::LazyLock;
+use url::Url;
 
-const VERSION_INDEX_URL: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
+static VERSION_INDEX_URL: LazyLock<Url> = LazyLock::new(|| {
+    "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
+        .parse()
+        .unwrap()
+});
 
 impl VersionIndex {
     pub async fn sync(downloader: &Downloader) -> Result<Self> {
-        let body = downloader.fetch(VERSION_INDEX_URL, None).await?;
+        let body = downloader.fetch(&VERSION_INDEX_URL, None).await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)
     }
@@ -49,7 +55,7 @@ pub struct Version {
     pub id: String,
     #[serde(rename = "type")]
     pub version_type: VersionType,
-    pub url: String,
+    pub url: Url,
     pub time: DateTime<FixedOffset>,
     pub release_time: DateTime<FixedOffset>,
     pub sha1: Sha1Hash,

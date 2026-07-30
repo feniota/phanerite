@@ -110,7 +110,7 @@ BMCLAPI 使用声明：
                 url.set_scheme("https").ok();
                 url.set_host(Some("bmclapi2.bangbang93.com")).unwrap();
 
-                url.set_path(&format!("/fabric-meta{path}"));
+                url.set_path(&format!("/mod_loader-meta{path}"));
             }
 
             // Fabric Maven

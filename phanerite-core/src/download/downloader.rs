@@ -13,6 +13,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{debug, error, warn};
+use url::Url;
 use uuid::Uuid;
 
 pub struct DownloaderBuilder {
@@ -151,9 +152,9 @@ impl Downloader {
         DownloaderBuilder::new(storage)
     }
     /// 下载到内存（GET）
-    pub async fn fetch(&self, url: impl AsRef<str>, hash: Option<Hash>) -> Result<Vec<u8>> {
+    pub async fn fetch(&self, url: &Url, hash: Option<Hash>) -> Result<Vec<u8>> {
         for _ in 0..self.retries {
-            let res = self.client.get_async(url.as_ref()).await?.bytes().await?;
+            let res = self.client.get_async(url.as_str()).await?.bytes().await?;
             if let Some(h) = &hash {
                 let mut hasher = h.hasher();
                 hasher.update(&res);
@@ -170,10 +171,10 @@ impl Downloader {
     /// 封装 POST
     pub async fn post_json(
         &self,
-        url: impl AsRef<str>,
+        url: &Url,
         body: impl AsRef<str>,
     ) -> Result<(StatusCode, Vec<u8>)> {
-        let req = isahc::Request::post(url.as_ref())
+        let req = isahc::Request::post(url.as_str())
             .header("Content-Type", "application/json")
             .body(body.as_ref())
             .unwrap();
@@ -181,7 +182,7 @@ impl Downloader {
         Ok((res.status(), res.bytes().await?))
     }
     /// 封装 HEAD
-    pub async fn head(&self, url: impl AsRef<str>) -> Result<HeaderMap> {
+    pub async fn head(&self, url: &Url) -> Result<HeaderMap> {
         Ok(self
             .client
             .head_async(url.as_ref())

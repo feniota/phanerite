@@ -16,7 +16,7 @@ static RESOURCES_URL: LazyLock<Url> =
 impl AssetIndexList {
     pub async fn get(index: &AssetIndex, downloader: &Downloader) -> Result<Self> {
         let body = downloader
-            .fetch(index.url.clone(), Some(index.sha1.clone().into()))
+            .fetch(&index.url, Some(index.sha1.clone().into()))
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)

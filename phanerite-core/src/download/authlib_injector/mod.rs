@@ -6,9 +6,14 @@ use crate::utils::Sha256Hash;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use url::Url;
 
-const AUTHLIB_INJECTOR_API: &str = "https://authlib-injector.yushi.moe";
+static AUTHLIB_INJECTOR_LATEST_META: LazyLock<Url> = LazyLock::new(|| {
+    "https://authlib-injector.yushi.moe/artifact/latest.json"
+        .parse()
+        .unwrap()
+});
 
 // #[derive(Deserialize)]
 // struct Index {
@@ -42,10 +47,7 @@ impl<'a> AuthlibInjector<'a> {
             Err(_) => Ok(Some(self.install_latest(downloader).await?)),
             Ok(v) => {
                 let res = downloader
-                    .fetch(
-                        format!("{}/artifact/latest.json", AUTHLIB_INJECTOR_API),
-                        None,
-                    )
+                    .fetch(&AUTHLIB_INJECTOR_LATEST_META, None)
                     .await?;
                 let res = serde_json::from_slice::<Artifact>(&res)?;
                 if res.build_number != v {
@@ -85,10 +87,7 @@ impl<'a> AuthlibInjector<'a> {
     }
     async fn install_latest(&self, downloader: &Downloader) -> Result<DownloadTask> {
         let res = downloader
-            .fetch(
-                format!("{}/artifact/latest.json", AUTHLIB_INJECTOR_API),
-                None,
-            )
+            .fetch(&AUTHLIB_INJECTOR_LATEST_META, None)
             .await?;
         let res = serde_json::from_slice::<Artifact>(&res)?;
 

@@ -1,0 +1,158 @@
+use crate::download::downloader::Downloader;
+use crate::download::task::DownloadTask;
+use crate::download::vanilla::maven::MavenArtifact;
+use crate::download::vanilla::version_index::Version;
+use crate::error::{Error, Result};
+use crate::instance::Instance;
+use crate::instance::overlay::InheritsManifest;
+use crate::storage::Storage;
+use crate::utils::Sha256Hash;
+use serde::Deserialize;
+use std::sync::LazyLock;
+use url::Url;
+
+static FABRIC_META: LazyLock<Url> = LazyLock::new(|| "https://meta.fabricmc.net".parse().unwrap());
+
+fn fabric_intermediary_url(game_version: &str) -> Url {
+    let mut url = FABRIC_META.clone();
+
+    url.path_segments_mut()
+        .unwrap()
+        .extend(["v2", "versions", "intermediary", game_version]);
+
+    url
+}
+
+fn fabric_profile_url(game_version: &str, loader_version: &str) -> Url {
+    let mut url = FABRIC_META.clone();
+
+    url.path_segments_mut().unwrap().extend([
+        "v2",
+        "versions",
+        "loader",
+        game_version,
+        loader_version,
+        "profile",
+        "json",
+    ]);
+
+    url
+}
+
+impl LoaderList {
+    /// 根据游戏版本查询
+    pub async fn from_game(version: &Version, downloader: &Downloader) -> Result<Self> {
+        let body = downloader
+            .fetch(&fabric_intermediary_url(&version.id), None)
+            .await?;
+        let json = serde_json::from_slice(&body)?;
+        Ok(json)
+    }
+    /// 选择版本并下载 Profile
+    pub async fn select_version(
+        &self,
+        version: &Version,
+        downloader: &Downloader,
+        find: impl FnMut(&&Loader) -> bool,
+    ) -> Result<InheritsManifest> {
+        let Some(selected) = self.list.iter().map(|x| &x.loader).find(find) else {
+            return Err(Error::other("fabric version not found"));
+        };
+        let body = downloader
+            .fetch(&fabric_profile_url(&version.id, &selected.version), None)
+            .await?;
+        let json = serde_json::from_slice(&body)?;
+        Ok(json)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct LoaderList {
+    pub list: Vec<LoaderMeta>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoaderMeta {
+    pub loader: Loader,
+    // intermediary: Intermediary,
+    // launcher_meta: LauncherMeta,
+}
+
+#[derive(Deserialize)]
+pub struct Loader {
+    pub separator: String,
+    pub build: usize,
+    pub maven: MavenArtifact,
+    pub version: String,
+    pub stable: bool,
+}
+
+// #[derive(Deserialize)]
+// struct Intermediary {
+//     maven: MavenArtifact,
+//     version: String,
+//     stable: bool,
+// }
+
+// #[derive(Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// struct LauncherMeta {
+//     version: usize,
+//     min_java_version: usize,
+//     libraries: Libraries,
+//     main_class: MainClass,
+// }
+
+// #[derive(Deserialize)]
+// struct Libraries {
+//     client: Vec<Library>,
+//     common: Vec<Library>,
+//     server: Vec<Library>,
+// }
+
+#[derive(Deserialize)]
+pub struct FabricLibrary {
+    name: MavenArtifact,
+    url: Url,
+    sha256: Sha256Hash,
+    size: u64,
+}
+
+impl FabricLibrary {
+    pub fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
+        Ok(DownloadTask::builder()
+            .url(self.name.url(&self.url)?)
+            .to_library(self.name.path(), storage)
+            .file_name(self.name)
+            .file_size(self.size)
+            .hash(self.sha256)
+            .build())
+    }
+}
+
+impl Instance {
+    /// 查找 Fabric 库
+    pub fn fabric_libraries(&self) -> impl Iterator<Item = FabricLibrary> {
+        let libraries = self.manifest.libraries.iter();
+        libraries.filter_map(|x| {
+            Some(FabricLibrary {
+                name: x.name.clone(),
+                url: serde_json::from_value(x.extra.get("url")?.clone()).ok()?,
+                sha256: serde_json::from_value(x.extra.get("sha256")?.clone()).ok()?,
+                size: serde_json::from_value(x.extra.get("size")?.clone()).ok()?,
+            })
+        })
+    }
+    /// 下载 Fabric 库
+    pub fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
+        self.fabric_libraries()
+            .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
+    }
+}
+
+// #[derive(Deserialize)]
+// struct MainClass {
+//     client: String,
+//     server: String,
+// }

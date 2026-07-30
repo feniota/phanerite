@@ -5,9 +5,16 @@ use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::storage::Storage;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use url::Url;
 
 pub struct Zulu;
+
+static ZULU_PACKAGE_META: LazyLock<Url> = LazyLock::new(|| {
+    "https://api.azul.com/metadata/v1/zulu/packages/"
+        .parse()
+        .unwrap()
+});
 
 impl JavaDownload for Zulu {
     async fn get_major(
@@ -15,8 +22,7 @@ impl JavaDownload for Zulu {
         downloader: &Downloader,
         storage: &Storage,
     ) -> Result<DownloadTask> {
-        let mut url = Url::parse("https://api.azul.com/metadata/v1/zulu/packages/")
-            .map_err(|e| Error::other(e.to_string()))?;
+        let mut url = ZULU_PACKAGE_META.clone();
 
         url.query_pairs_mut()
             .append_pair("java_version", &major.to_string())
@@ -37,7 +43,7 @@ impl JavaDownload for Zulu {
             .append_pair("latest", "true")
             .finish();
 
-        let body = downloader.fetch(url, None).await?;
+        let body = downloader.fetch(&url, None).await?;
         let json: Vec<ZuluPackage> = serde_json::from_slice(&body)?;
 
         let choice = json

@@ -1,9 +1,9 @@
 pub mod authlib_injector;
 pub mod downloader;
 pub mod extract;
-pub mod fabric;
 pub mod group;
 pub mod java;
 pub mod mirror;
+pub mod mod_loader;
 pub mod task;
 pub mod vanilla;

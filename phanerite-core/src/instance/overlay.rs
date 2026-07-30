@@ -36,6 +36,12 @@ impl RawManifest {
 }
 
 impl InheritsManifest {
+    /// 更改继承对象
+    pub fn inherits(mut self, id: impl Into<String>) -> Self {
+        self.inherits_from = id.into();
+        self
+    }
+    /// 合并到完整清单
     fn merge_from(mut self, base: InstanceManifest) -> InstanceManifest {
         InstanceManifest {
             id: self.id,

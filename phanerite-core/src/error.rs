@@ -7,6 +7,7 @@ pub enum Error {
     SerdeJson(serde_json::Error),
     Zip(zip::result::ZipError),
     Yggdrasil(YggdrasilError),
+    UrlParseErr(url::ParseError),
     Cancelled,
     Other(String),
 }
@@ -20,6 +21,7 @@ impl std::fmt::Display for Error {
             Error::Yggdrasil(e) => write!(f, "{}", e),
             Error::Cancelled => write!(f, "Operation cancelled"),
             Error::Zip(e) => write!(f, "ZIP error: {e}"),
+            Error::UrlParseErr(e) => write!(f, "Url parse error: {e}"),
             Error::Other(msg) => f.write_str(msg),
         }
     }
@@ -60,6 +62,12 @@ impl From<zip::result::ZipError> for Error {
 impl From<YggdrasilError> for Error {
     fn from(e: YggdrasilError) -> Self {
         Error::Yggdrasil(e)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Error::UrlParseErr(e)
     }
 }
 

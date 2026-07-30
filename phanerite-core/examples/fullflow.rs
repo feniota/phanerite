@@ -10,6 +10,7 @@ use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::HashSet;
 use tracing::{Level, error};
+use url::Url;
 
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
@@ -62,7 +63,7 @@ fn main() {
         errs.iter().for_each(|e| error!("{}", e));
 
         let auth = Authentication::new_login(&downloader)
-            .custom("https://littleskin.cn/api/yggdrasil")
+            .custom("https://littleskin.cn/api/yggdrasil".parse::<Url>()?)
             .await?
             .username(
                 std::env::var("USERNAME")

@@ -1,17 +1,12 @@
 use crate::download::downloader::Downloader;
-use crate::download::task::DownloadTask;
-use crate::download::vanilla::assets::{AssetIndex, AssetIndexList};
 use crate::download::vanilla::version_index::{Version, VersionType};
-use crate::error::{Error, Result};
-use crate::instance::instance_info::Library;
+use crate::error::Result;
 use crate::instance::instance_info::{Arguments, JavaVersion, Logging};
-use crate::storage::Storage;
+use crate::instance::instance_info::{AssetIndex, Library};
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::ops::Add;
-use std::path::PathBuf;
+use std::collections::HashMap;
 use url::Url;
 
 impl VersionManifest {
@@ -21,55 +16,6 @@ impl VersionManifest {
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)
-    }
-    pub async fn build_all_task(
-        self,
-        client_path: PathBuf,
-        native_path: PathBuf,
-        features: HashSet<&'static str>,
-        storage: &Storage,
-        downloader: &Downloader,
-    ) -> Result<(impl Iterator<Item = DownloadTask>, AssetIndexList)> {
-        let client = self.build_client_task(client_path);
-
-        let assets_list = AssetIndexList::get(&self.asset_index, downloader).await?;
-        let assets = assets_list.clone().build_assets_task(storage);
-
-        let library = self.build_libraries_task(storage, native_path, features);
-
-        let chain = if let Some(c) = client {
-            library.chain(assets).chain(std::iter::once(c))
-        } else {
-            return Err(Error::other("No downloadable client"));
-        };
-
-        Ok((chain, assets_list))
-    }
-    pub fn build_libraries_task(
-        self,
-        storage: &Storage,
-        native_dir: PathBuf,
-        features: HashSet<&'static str>,
-    ) -> impl Iterator<Item = DownloadTask> {
-        self.libraries
-            .into_iter()
-            .scan((features, native_dir), |(f, n), x| {
-                Some([x.to_task(storage, f), x.to_native_task(f, n)])
-            })
-            .flatten()
-            .flatten()
-    }
-    pub fn build_client_task(&self, path: PathBuf) -> Option<DownloadTask> {
-        self.downloads.client.as_ref().map(|c| {
-            DownloadTask::builder()
-                .url(c.url.clone())
-                .to_path(path)
-                .share()
-                .file_name(self.id.clone().add(".jar"))
-                .file_size(c.size)
-                .hash(c.sha1.clone())
-                .build()
-        })
     }
 }
 

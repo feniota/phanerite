@@ -55,7 +55,7 @@ impl Library {
 
         // ── v2: classifier suffix in Maven name ──────────
         // e.g. `org.lwjgl:lwjgl:3.4.1:natives-windows`
-        if let Some(classifier) = self.name.split(':').nth(3)
+        if let Some(classifier) = &self.name.classifier
             && classifier.starts_with("natives-")
         {
             // v2 rules alone don't filter by OS — the classifier name acts
@@ -74,7 +74,7 @@ impl Library {
             return Some(native_download(
                 &a,
                 native_dir,
-                &self.name,
+                &self.name.to_string(),
                 self.extract.as_ref(),
             ));
         }

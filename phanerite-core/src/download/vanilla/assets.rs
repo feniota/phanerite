@@ -1,6 +1,7 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
+use crate::instance::instance_info::AssetIndex;
 use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use serde::{Deserialize, Serialize};
@@ -35,17 +36,6 @@ impl AssetIndexList {
                 .build()
         })
     }
-}
-
-/// 资源索引
-#[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AssetIndex {
-    pub id: String,
-    pub sha1: Sha1Hash,
-    pub size: u64,
-    pub total_size: Option<u64>,
-    pub url: Url,
 }
 
 #[derive(Deserialize, Serialize, Clone)]

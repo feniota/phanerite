@@ -12,6 +12,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub mod arguments;
+pub mod inherits;
 pub mod instance_info;
 pub mod variables;
 
@@ -27,11 +28,11 @@ impl Instance {
     }
     /// 创建实例
     pub async fn create<'a>(
-        version: VersionManifest,
+        version: &'a VersionManifest,
         name: &str,
         storage: &'a Storage,
         downloader: &'a Downloader,
-    ) -> Result<impl Iterator<Item = DownloadTask> + 'a> {
+    ) -> Result<Self> {
         // 准备实例目录
         let path = storage.versions_dir().join(name);
         if path.exists() {
@@ -51,24 +52,13 @@ impl Instance {
         let manifest = InstanceManifest::from_remote(version.clone()).rename(name.to_string());
         let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
-        drop(manifest);
-        drop(info_json);
-
-        // 构造下载任务
-        let native_dir = path.join("native");
-        let features = HashSet::new(); // 下载应该不需要 features
-        let game_file = path.join(format!("{}.jar", name));
-        let (downloads, assets_index) = version
-            .build_all_task(game_file, native_dir, features, storage, downloader)
-            .await?;
-        let downloads = filter_existed(downloads);
 
         // assets/indexes/{id}.json
+        let assets_index = AssetIndexList::get(&manifest.asset_index, downloader).await?;
         let index_json = serde_json::to_vec_pretty(&assets_index)?;
         index_file.write_all(&index_json).await?;
-        drop(index_json);
 
-        Ok(downloads)
+        Self::open(path).await
     }
     /// 打开本地实例
     pub async fn open(instance_dir: impl AsRef<Path>) -> Result<Self> {
@@ -123,7 +113,7 @@ impl Instance {
         &self,
         storage: &Storage,
     ) -> Result<impl Iterator<Item = DownloadTask>> {
-        let tasks = self.build_all_task(HashSet::new(), storage).await?;
+        let tasks = self.install(HashSet::new(), storage).await?;
         let tasks = filter_existed(tasks).filter(|x| match x.target {
             File(_) => true,
             Target::Extract(_) => false, // 无法检查解压后文件完整性
@@ -136,7 +126,7 @@ impl Instance {
         storage: &'a Storage,
         downloader: &'a Downloader,
     ) -> Result<impl Stream<Item = DownloadTask> + 'a> {
-        let tasks = self.build_all_task(HashSet::new(), storage).await?;
+        let tasks = self.install(HashSet::new(), storage).await?;
         let stream = futures::stream::iter(tasks)
             .map(move |x| async move {
                 let result = downloader.hash_file(&x).await;
@@ -148,7 +138,7 @@ impl Instance {
         Ok(stream)
     }
     /// 构建完整下载任务
-    pub async fn build_all_task(
+    pub async fn install(
         &self,
         features: HashSet<&'static str>,
         storage: &Storage,

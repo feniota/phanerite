@@ -5,6 +5,7 @@ use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
+use std::collections::HashSet;
 use std::time::Instant;
 use tracing::Level;
 
@@ -33,7 +34,12 @@ fn main() -> error::Result<()> {
         let manifest = VersionManifest::get(version, &downloader).await?;
         let name = version.id.clone();
 
-        group.extend(Instance::create(manifest, &name, &storage, &downloader).await?);
+        group.extend(
+            Instance::create(&manifest, &name, &storage, &downloader)
+                .await?
+                .install(HashSet::new(), &storage)
+                .await?,
+        );
 
         let processes = std::sync::Arc::new(group.processes());
         let total = processes.total() as f64 / 1024.0 / 1024.0;

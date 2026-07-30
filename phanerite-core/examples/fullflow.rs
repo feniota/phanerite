@@ -8,6 +8,7 @@ use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
+use std::collections::HashSet;
 use tracing::{Level, error, info};
 
 fn main() {
@@ -21,19 +22,18 @@ fn main() {
 
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
-        group.extend(
-            Instance::create(
-                VersionManifest::get(
-                    VersionIndex::sync(&downloader).await?.latest_release()?,
-                    &downloader,
-                )
-                .await?,
-                "latest",
-                &storage,
+        let instance = Instance::create(
+            &VersionManifest::get(
+                VersionIndex::sync(&downloader).await?.latest_release()?,
                 &downloader,
             )
             .await?,
-        );
+            "latest",
+            &storage,
+            &downloader,
+        )
+        .await?;
+        group.extend(instance.install(HashSet::new(), &storage).await?);
 
         let instance = Instance::open(storage.versions_dir().join("latest")).await?;
 
@@ -41,20 +41,6 @@ fn main() {
             info!("Install java");
             group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
         }
-
-        let auth = Authentication::new_login(&downloader)
-            .custom("https://littleskin.cn/api/yggdrasil")
-            .await?
-            .username(
-                std::env::var("USERNAME")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            .password(
-                std::env::var("PASSWORD")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            .login()
-            .await?;
 
         let injector = AuthlibInjector::new(&storage);
         group.extend(injector.update(&downloader).await?);
@@ -80,6 +66,20 @@ fn main() {
             .await;
         // let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
+
+        let auth = Authentication::new_login(&downloader)
+            .custom("https://littleskin.cn/api/yggdrasil")
+            .await?
+            .username(
+                std::env::var("USERNAME")
+                    .expect("Fill in the login credentials in the environment variable"),
+            )
+            .password(
+                std::env::var("PASSWORD")
+                    .expect("Fill in the login credentials in the environment variable"),
+            )
+            .login()
+            .await?;
 
         let arguments = auth.injected_args(&instance, &storage, &injector).await?;
         let java = instance.find_java(&storage).await.remove(0);

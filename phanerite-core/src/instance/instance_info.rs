@@ -1,3 +1,4 @@
+use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::Result;
 use crate::utils::Sha1Hash;
@@ -202,7 +203,7 @@ pub struct JavaVersion {
 /// A single library dependency.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {
-    pub name: String,
+    pub name: MavenArtifact,
 
     pub downloads: Option<LibraryDownloads>,
 
@@ -313,7 +314,7 @@ impl InstanceManifest {
             arguments: remote.arguments,
             main_class: remote.main_class,
             jar: id,
-            asset_index: convert_asset_index(remote.asset_index),
+            asset_index: remote.asset_index,
             assets,
             compliance_level: 1,
             java_version: remote.java_version.unwrap_or(JavaVersion {
@@ -381,18 +382,6 @@ impl InstanceManifest {
         self.id = name.clone();
         self.jar = name;
         self
-    }
-}
-
-// ── Asset index conversion ───────────────────────────────────────────
-
-fn convert_asset_index(ai: crate::download::vanilla::assets::AssetIndex) -> AssetIndex {
-    AssetIndex {
-        total_size: ai.total_size.unwrap_or(0),
-        id: ai.id,
-        url: ai.url,
-        sha1: ai.sha1,
-        size: ai.size,
     }
 }
 

@@ -43,10 +43,10 @@ impl DownloaderBuilder {
     fn new(storage: &Storage) -> Self {
         Self {
             retries: 3,
-            concurrency: 64,
+            concurrency: 32,
             threshold: 2 * 1024 * 1024,
             large_parallelism: 4,
-            small_parallelism: 32,
+            small_parallelism: 16,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
             cache: storage.cache_dir().to_path_buf(),
@@ -335,32 +335,6 @@ impl Downloader {
         task.process.finish();
         forget(guard);
         Ok(())
-    }
-    /// 校验文件 Hash，不检验压缩包
-    pub async fn hash_file(&self, task: &DownloadTask) -> Result<()> {
-        let Target::File(path) = &task.target else {
-            return Ok(());
-        };
-
-        let mut buf = self.alloc_buf(task.process.total()).await;
-        let mut hasher = task.file_hash.hasher();
-        let mut file = async_fs::File::open(path).await?;
-
-        loop {
-            let n = file.read(&mut buf).await?;
-
-            if n == 0 {
-                break;
-            }
-
-            hasher.update(&buf[..n]);
-        }
-
-        if hasher.finalize() == task.file_hash {
-            Ok(())
-        } else {
-            Err(Error::other("Hash mismatch"))
-        }
     }
     /// 并发下载文件到储存
     pub async fn download_concurrent(

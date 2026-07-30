@@ -1,19 +1,21 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::Target::File;
-use crate::download::task::{DownloadTask, Target, filter_existed};
+use crate::download::task::{DownloadTask, Target, filter_existed, filter_hash};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
 use crate::instance::instance_info::InstanceManifest;
+use crate::instance::overlay::RawManifest;
 use crate::storage::Storage;
+use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
-use futures::{Stream, StreamExt};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub mod arguments;
 pub mod instance_info;
 pub mod overlay;
+pub mod simple_info;
 pub mod variables;
 
 pub struct Instance {
@@ -28,20 +30,20 @@ impl Instance {
     }
     /// 创建实例
     pub async fn create<'a>(
-        version: &'a VersionManifest,
-        name: &str,
+        version: VersionManifest,
+        name: impl AsRef<str>,
         storage: &'a Storage,
         downloader: &'a Downloader,
     ) -> Result<Self> {
         // 准备实例目录
-        let path = storage.versions_dir().join(name);
+        let path = storage.versions_dir().join(name.as_ref());
         if path.exists() {
             return Err(Error::other("Instance exists"));
         }
         async_fs::create_dir_all(&path).await?;
 
         // 创建需要的文件
-        let info_file = path.join(format!("{}.json", name));
+        let info_file = path.join(format!("{}.json", name.as_ref()));
         let mut info_file = async_fs::File::create(info_file).await?;
         let index_file = storage
             .assets_indexes()
@@ -49,7 +51,7 @@ impl Instance {
         let mut index_file = async_fs::File::create(index_file).await?;
 
         // versions/{name}/{name}.json
-        let manifest = InstanceManifest::from_remote(version.clone()).rename(name.to_string());
+        let manifest = InstanceManifest::from_remote(version).rename(name.as_ref());
         let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
 
@@ -58,57 +60,34 @@ impl Instance {
         let index_json = serde_json::to_vec_pretty(&assets_index)?;
         index_file.write_all(&index_json).await?;
 
-        Self::open(path).await
+        Self::open(name, storage).await
     }
     /// 打开本地实例
-    pub async fn open(instance_dir: impl AsRef<Path>) -> Result<Self> {
-        let path = std::path::absolute(instance_dir)?;
-
-        // 优先考虑 versions/{name}/{name}.json
-        if let Some(parent) = path.parent().and_then(|t| t.file_name()) {
-            let file = path.join(format!("{}.json", parent.to_string_lossy()));
-            if file.is_file() {
-                let mut json = Vec::new();
-                async_fs::File::open(file)
-                    .await?
-                    .read_to_end(&mut json)
-                    .await?;
-                return Ok(Self {
-                    instance_dir: path,
-                    manifest: serde_json::from_slice(&json)?,
-                });
-            }
-        }
-
-        let jsons = async_fs::read_dir(&path)
-            .await?
-            .filter_map(|entry| async move {
-                let entry = entry.ok()?;
-                let name = entry.file_name();
-                if name.to_string_lossy().ends_with(".json") && entry.path().is_file() {
-                    Some(entry.path())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .await;
-
-        if jsons.len() == 1 {
-            let mut json = Vec::new();
-            async_fs::File::open(jsons.first().unwrap())
-                .await?
-                .read_to_end(&mut json)
-                .await?;
-            return Ok(Self {
-                instance_dir: path,
-                manifest: serde_json::from_slice(&json)?,
-            });
-        }
-
-        Err(Error::other("No instance found"))
+    pub async fn open(name: impl AsRef<str>, storage: &Storage) -> Result<Self> {
+        Self::open_inner(name, storage, HashSet::new()).await
     }
-    /// 根据存在检查游戏完整性
+    /// 需要递归
+    async fn open_inner(
+        name: impl AsRef<str>,
+        storage: &Storage,
+        mut visiting: HashSet<&str>,
+    ) -> Result<Self> {
+        // 防止递归成环
+        if !visiting.insert(name.as_ref()) {
+            return Err(Error::other("Circular inheritance"));
+        }
+
+        let instance_dir = std::path::absolute(storage.versions_dir().join(name.as_ref()))?;
+        let json = find_manifest(name.as_ref(), &instance_dir).await?;
+        Ok(Self {
+            instance_dir,
+            manifest: serde_json::from_slice::<RawManifest>(&json)?
+                .merge(storage, visiting)
+                .await?,
+        })
+    }
+    /// 粗略检查游戏完整性，返回缺失文件
+    /// 检查 Assets 索引，不检查压缩包，不校验 Hash
     pub async fn check_exist(
         &self,
         storage: &Storage,
@@ -120,22 +99,49 @@ impl Instance {
         });
         Ok(tasks)
     }
-    /// 根据 Hash 检查游戏完整性
-    pub async fn check_hash<'a>(
-        &'a self,
-        storage: &'a Storage,
-        downloader: &'a Downloader,
-    ) -> Result<impl Stream<Item = DownloadTask> + 'a> {
-        let tasks = self.install(HashSet::new(), storage).await?;
-        let stream = futures::stream::iter(tasks)
-            .map(move |x| async move {
-                let result = downloader.hash_file(&x).await;
-                (x, result)
-            })
-            .buffer_unordered(downloader.concurrency)
-            .filter(|(_, result)| futures::future::ready(result.is_err()))
-            .map(|(x, _)| x);
-        Ok(stream)
+    /// 检查游戏完整性，返回缺失文件
+    /// 检查 Assets 索引，重下压缩包，校验 Hash
+    pub async fn check_full(
+        &self,
+        features: HashSet<&'static str>,
+        storage: &Storage,
+        downloader: &Downloader,
+    ) -> Result<Vec<DownloadTask>> {
+        self.fix_assets_index(storage, downloader).await?;
+        let tasks = futures::stream::iter(self.install(features, storage).await?);
+        let tasks = filter_hash(tasks).collect().await;
+        Ok(tasks)
+    }
+    /// 修复 Assets 索引（如果打开失败）
+    pub async fn fix_assets_index(
+        &self,
+        storage: &Storage,
+        downloader: &Downloader,
+    ) -> Result<AssetIndexList> {
+        let index_path = storage
+            .assets_indexes()
+            .join(format!("{}.json", self.manifest.assets));
+        let open = async || {
+            let mut assets_manifest = Vec::new();
+            async_fs::File::open(&index_path)
+                .await?
+                .read_to_end(&mut assets_manifest)
+                .await?;
+            let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
+            Ok::<AssetIndexList, Error>(assets_manifest)
+        };
+        match open().await {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                let _ = async_fs::remove_file(&index_path).await;
+                let mut index_file = async_fs::File::create(&index_path).await?;
+                let assets_index =
+                    AssetIndexList::get(&self.manifest.asset_index, downloader).await?;
+                let index_json = serde_json::to_vec_pretty(&assets_index)?;
+                index_file.write_all(&index_json).await?;
+                Ok(open().await?)
+            }
+        }
     }
     /// 构建完整下载任务
     pub async fn install(
@@ -185,4 +191,44 @@ impl Instance {
             .chain(assets_task)
             .chain(libraries_task))
     }
+}
+
+/// 寻找并打开实例清单 JSON
+async fn find_manifest(name: impl AsRef<str>, instance_dir: &PathBuf) -> Result<Vec<u8>> {
+    // 优先考虑 versions/{name}/{name}.json
+    let file = instance_dir.join(format!("{}.json", name.as_ref()));
+    if file.is_file() {
+        let mut json = Vec::new();
+        async_fs::File::open(file)
+            .await?
+            .read_to_end(&mut json)
+            .await?;
+        return Ok(json);
+    }
+
+    // 寻找别的 json
+    let jsons = async_fs::read_dir(&instance_dir)
+        .await?
+        .filter_map(|entry| async move {
+            let entry = entry.ok()?;
+            let name = entry.file_name();
+            if name.to_string_lossy().ends_with(".json") && entry.path().is_file() {
+                Some(entry.path())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .await;
+
+    if jsons.len() == 1 {
+        let mut json = Vec::new();
+        async_fs::File::open(jsons.first().unwrap())
+            .await?
+            .read_to_end(&mut json)
+            .await?;
+        return Ok(json);
+    }
+
+    Err(Error::other("No instance found"))
 }

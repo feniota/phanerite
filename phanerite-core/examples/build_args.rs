@@ -9,9 +9,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        let instance_dir = ".minecraft/versions/latest";
         let storage = Storage::new(".minecraft")?;
-        let instance = Instance::open(instance_dir).await?;
+        let instance = Instance::open("latest", &storage).await?;
         let variables = Variables::builder()
             .required(
                 "Steve",

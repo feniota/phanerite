@@ -30,11 +30,10 @@ fn main() -> error::Result<()> {
         println!("Downloading: {} ({})", version.id, version.version_type);
 
         let manifest = VersionManifest::get(version, &downloader).await?;
-        let name = version.id.clone();
 
         let mut group = DownloadGroup::new();
         group.extend(
-            Instance::create(&manifest, &name, &storage, &downloader)
+            Instance::create(manifest, &version.id, &storage, &downloader)
                 .await?
                 .install(HashSet::new(), &storage)
                 .await?,

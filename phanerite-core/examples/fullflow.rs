@@ -23,7 +23,7 @@ fn main() {
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
         let instance = Instance::create(
-            &VersionManifest::get(
+            VersionManifest::get(
                 VersionIndex::sync(&downloader).await?.latest_release()?,
                 &downloader,
             )

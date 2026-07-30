@@ -1,8 +1,11 @@
 use crate::download::extract::ExtractTask;
 use crate::download::task::Target::{Extract, File};
+use crate::error::{Error, Result};
 use crate::storage::Storage;
 use crate::utils::{EmptyHash, Hash, HashValue};
 use event_listener::Event;
+use futures::StreamExt;
+use futures::{AsyncReadExt, Stream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicU8, AtomicU64};
@@ -262,6 +265,7 @@ impl DownloadProcess {
     }
 }
 
+/// 检验文件存在，压缩包默认存在
 pub fn filter_existed(
     tasks: impl Iterator<Item = DownloadTask>,
 ) -> impl Iterator<Item = DownloadTask> {
@@ -272,4 +276,37 @@ pub fn filter_existed(
             true
         }
     })
+}
+
+/// 检验文件存在，压缩包默认失效
+pub fn filter_hash(tasks: impl Stream<Item = DownloadTask>) -> impl Stream<Item = DownloadTask> {
+    tasks
+        .map(async |x| {
+            let invalid = match &x.target {
+                File(p) => hash_file(p, &x.file_hash).await.is_err(),
+                Extract(_) => true,
+            };
+
+            (invalid, x)
+        })
+        .buffer_unordered(8)
+        .filter_map(async |(invalid, x)| invalid.then_some(x))
+}
+
+async fn hash_file(path: &Path, hash: &Hash) -> Result<()> {
+    let mut file = async_fs::File::open(path).await?;
+    let mut buffer = vec![0u8; 128 * 1024];
+    let mut hasher = hash.hasher();
+    loop {
+        let n = file.read(&mut buffer).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n])
+    }
+    if hasher.finalize() == *hash {
+        Ok(())
+    } else {
+        Err(Error::other("hash mismatch"))
+    }
 }

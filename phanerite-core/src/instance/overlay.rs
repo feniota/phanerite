@@ -7,7 +7,7 @@ use crate::instance::instance_info::{
 use crate::storage::Storage;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// 此处顺序不可改变
 /// 若 `inherits_from` 存在，则允许其他字段 `Option`
@@ -20,13 +20,17 @@ pub enum RawManifest {
 }
 
 impl RawManifest {
-    pub async fn merge(self, storage: &Storage) -> Result<InstanceManifest> {
+    #[async_recursion::async_recursion] // 需要递归
+    pub async fn merge(
+        self,
+        storage: &Storage,
+        visiting: HashSet<&str>,
+    ) -> Result<InstanceManifest> {
         let overlay = match self {
             RawManifest::Overlay(v) => v,
             RawManifest::Base(v) => return Ok(v),
         };
-        let base = storage.versions_dir().join(&overlay.inherits_from);
-        let base = Instance::open(base).await?;
+        let base = Instance::open_inner(&overlay.inherits_from, storage, visiting).await?;
         Ok(overlay.merge_from(base.manifest))
     }
 }

@@ -8,6 +8,7 @@ async-channel = "2.5"
 async-fs = "2.2"
 async-lock = "3.4"
 async-process = "2.5"
+async-recursion = "1.1"
 base64 = "0.23"
 blake3 = { version = "1.8", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }

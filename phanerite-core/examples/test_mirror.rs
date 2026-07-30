@@ -17,8 +17,6 @@ fn main() -> error::Result<()> {
             .build()
             .await?;
 
-        let mut group = DownloadGroup::new();
-
         // 下载最新正式版
         let version_id = std::env::args()
             .nth(1)
@@ -34,6 +32,7 @@ fn main() -> error::Result<()> {
         let manifest = VersionManifest::get(version, &downloader).await?;
         let name = version.id.clone();
 
+        let mut group = DownloadGroup::new();
         group.extend(
             Instance::create(&manifest, &name, &storage, &downloader)
                 .await?

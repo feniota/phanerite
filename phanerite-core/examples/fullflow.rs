@@ -9,7 +9,7 @@ use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::HashSet;
-use tracing::{Level, error, info};
+use tracing::{Level, error};
 
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
@@ -18,7 +18,7 @@ fn main() {
         let downloader = download::downloader::Downloader::builder(&storage)
             .build()
             .await?;
-        let mut group = DownloadGroup::new();
+        let injector = AuthlibInjector::new(&storage);
 
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
@@ -33,16 +33,10 @@ fn main() {
             &downloader,
         )
         .await?;
+
+        let mut group = DownloadGroup::new();
         group.extend(instance.install(HashSet::new(), &storage).await?);
-
-        let instance = Instance::open(storage.versions_dir().join("latest")).await?;
-
-        if instance.find_java(&storage).await.is_empty() {
-            info!("Install java");
-            group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
-        }
-
-        let injector = AuthlibInjector::new(&storage);
+        group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
         group.extend(injector.update(&downloader).await?);
 
         let processes = group.processes();

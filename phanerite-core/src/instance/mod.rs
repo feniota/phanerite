@@ -1,6 +1,6 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::Target::File;
-use crate::download::task::{filter_existed, DownloadTask, Target};
+use crate::download::task::{DownloadTask, Target, filter_existed};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};

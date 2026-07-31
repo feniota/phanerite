@@ -1,7 +1,6 @@
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::mirror::granodiorite::Granodiorite;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
-use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
@@ -29,7 +28,7 @@ fn main() -> error::Result<()> {
             .expect("Version not found");
         println!("Downloading: {} ({})", version.id, version.version_type);
 
-        let manifest = VersionManifest::get(version, &downloader).await?;
+        let manifest = version.get_manifest(&downloader).await?;
 
         let mut group = DownloadGroup::new();
         group.extend(

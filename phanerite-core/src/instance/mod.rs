@@ -1,11 +1,8 @@
 use crate::download::downloader::Downloader;
-use crate::download::task::Target::File;
-use crate::download::task::{DownloadTask, Target, filter_existed, filter_hash};
+use crate::download::task::{DownloadTask, filter_existed, filter_hash};
 use crate::download::vanilla::assets::AssetIndexList;
-use crate::download::vanilla::version_info::VersionManifest;
 use crate::error::{Error, Result};
 use crate::instance::instance_info::InstanceManifest;
-use crate::instance::overlay::RawManifest;
 use crate::storage::Storage;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -30,11 +27,13 @@ impl Instance {
     }
     /// 创建实例
     pub async fn create<'a>(
-        version: VersionManifest,
+        manifest: impl Into<InstanceManifest>,
         name: impl AsRef<str>,
         storage: &'a Storage,
         downloader: &'a Downloader,
     ) -> Result<Self> {
+        let manifest = manifest.into();
+
         // 准备实例目录
         let path = storage.versions_dir().join(name.as_ref());
         if path.exists() {
@@ -42,20 +41,17 @@ impl Instance {
         }
         async_fs::create_dir_all(&path).await?;
 
-        // 创建需要的文件
+        // versions/{name}/{name}.json
         let info_file = path.join(format!("{}.json", name.as_ref()));
         let mut info_file = async_fs::File::create(info_file).await?;
-        let index_file = storage
-            .assets_indexes()
-            .join(format!("{}.json", version.asset_index.id));
-        let mut index_file = async_fs::File::create(index_file).await?;
-
-        // versions/{name}/{name}.json
-        let manifest = InstanceManifest::from_remote(version).rename(name.as_ref());
         let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
 
         // assets/indexes/{id}.json
+        let index_file = storage
+            .assets_indexes()
+            .join(format!("{}.json", manifest.asset_index.id));
+        let mut index_file = async_fs::File::create(index_file).await?;
         let assets_index = AssetIndexList::get(&manifest.asset_index, downloader).await?;
         let index_json = serde_json::to_vec_pretty(&assets_index)?;
         index_file.write_all(&index_json).await?;
@@ -64,26 +60,11 @@ impl Instance {
     }
     /// 打开本地实例
     pub async fn open(name: impl AsRef<str>, storage: &Storage) -> Result<Self> {
-        Self::open_inner(name, storage, HashSet::new()).await
-    }
-    /// 需要递归
-    async fn open_inner(
-        name: impl AsRef<str>,
-        storage: &Storage,
-        mut visiting: HashSet<&str>,
-    ) -> Result<Self> {
-        // 防止递归成环
-        if !visiting.insert(name.as_ref()) {
-            return Err(Error::other("Circular inheritance"));
-        }
-
         let instance_dir = std::path::absolute(storage.versions_dir().join(name.as_ref()))?;
         let json = find_manifest(name.as_ref(), &instance_dir).await?;
         Ok(Self {
             instance_dir,
-            manifest: serde_json::from_slice::<RawManifest>(&json)?
-                .merge(storage, visiting)
-                .await?,
+            manifest: serde_json::from_slice::<InstanceManifest>(&json)?,
         })
     }
     /// 粗略检查游戏完整性，返回缺失文件
@@ -93,10 +74,7 @@ impl Instance {
         storage: &Storage,
     ) -> Result<impl Iterator<Item = DownloadTask>> {
         let tasks = self.install(HashSet::new(), storage).await?;
-        let tasks = filter_existed(tasks).filter(|x| match x.target {
-            File(_) => true,
-            Target::Extract(_) => false, // 无法检查解压后文件完整性
-        });
+        let tasks = filter_existed(tasks, false);
         Ok(tasks)
     }
     /// 检查游戏完整性，返回缺失文件
@@ -109,7 +87,7 @@ impl Instance {
     ) -> Result<Vec<DownloadTask>> {
         self.fix_assets_index(storage, downloader).await?;
         let tasks = futures::stream::iter(self.install(features, storage).await?);
-        let tasks = filter_hash(tasks).collect().await;
+        let tasks = filter_hash(tasks, true).collect().await;
         Ok(tasks)
     }
     /// 修复 Assets 索引（如果打开失败）
@@ -173,6 +151,9 @@ impl Instance {
             .flatten()
             .flatten();
 
+        // Extra
+        let extra = self.extra_downloads(storage);
+
         // Client
         let file_name = format!("{}.jar", self.manifest.id);
         let client_task = self.manifest.downloads.client.as_ref().map(|c| {
@@ -189,7 +170,8 @@ impl Instance {
         Ok(client_task
             .into_iter()
             .chain(assets_task)
-            .chain(libraries_task))
+            .chain(libraries_task)
+            .chain(extra))
     }
 }
 

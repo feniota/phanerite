@@ -265,26 +265,30 @@ impl DownloadProcess {
     }
 }
 
-/// 检验文件存在，压缩包默认存在
+/// 检验文件存在
 pub fn filter_existed(
     tasks: impl Iterator<Item = DownloadTask>,
+    default: bool,
 ) -> impl Iterator<Item = DownloadTask> {
-    tasks.filter(|x| {
+    tasks.filter(move |x| {
         if let File(p) = &x.target {
             !p.exists()
         } else {
-            true
+            default
         }
     })
 }
 
-/// 检验文件存在，压缩包默认失效
-pub fn filter_hash(tasks: impl Stream<Item = DownloadTask>) -> impl Stream<Item = DownloadTask> {
+/// 检验文件 Hash
+pub fn filter_hash(
+    tasks: impl Stream<Item = DownloadTask>,
+    default: bool,
+) -> impl Stream<Item = DownloadTask> {
     tasks
-        .map(async |x| {
+        .map(move |x| async move {
             let invalid = match &x.target {
                 File(p) => hash_file(p, &x.file_hash).await.is_err(),
-                Extract(_) => true,
+                Extract(_) => default,
             };
 
             (invalid, x)

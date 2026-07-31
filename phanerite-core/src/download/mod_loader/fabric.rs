@@ -2,9 +2,10 @@ use crate::download::downloader::Downloader;
 use crate::download::task::DownloadTask;
 use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_index::Version;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::instance::Instance;
-use crate::instance::overlay::InheritsManifest;
+use crate::instance::instance_info::InstanceManifest;
+use crate::instance::overlay::OverlayManifest;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
 use serde::Deserialize;
@@ -39,36 +40,71 @@ fn fabric_profile_url(game_version: &str, loader_version: &str) -> Url {
     url
 }
 
-impl LoaderList {
-    /// 根据游戏版本查询
-    pub async fn from_game(version: &Version, downloader: &Downloader) -> Result<Self> {
-        let body = downloader
-            .fetch(&fabric_intermediary_url(&version.id), None)
-            .await?;
-        let json = serde_json::from_slice(&body)?;
-        Ok(json)
-    }
-    /// 选择版本并下载 Profile
-    pub async fn select_version(
+impl Version {
+    pub async fn install_fabric<'a>(
         &self,
-        version: &Version,
-        downloader: &Downloader,
-        find: impl FnMut(&&Loader) -> bool,
-    ) -> Result<InheritsManifest> {
-        let Some(selected) = self.list.iter().map(|x| &x.loader).find(find) else {
-            return Err(Error::other("fabric version not found"));
-        };
+        downloader: &'a Downloader,
+    ) -> Result<LoaderInstall<'a>> {
         let body = downloader
-            .fetch(&fabric_profile_url(&version.id, &selected.version), None)
+            .fetch(&fabric_intermediary_url(&self.id), None)
             .await?;
-        let json = serde_json::from_slice(&body)?;
-        Ok(json)
+        let json = serde_json::from_slice::<Vec<LoaderMeta>>(&body)?;
+        Ok(LoaderInstall {
+            downloader,
+            manifest: self.get_manifest(downloader).await?.into(),
+            list: json,
+        })
     }
 }
 
-#[derive(Deserialize)]
-pub struct LoaderList {
-    pub list: Vec<LoaderMeta>,
+impl<'a> LoaderInstall<'a> {
+    /// 选择版本并下载 Profile
+    pub async fn install<F>(
+        self,
+        mut select: impl AsyncFnMut(Vec<LoaderMeta>) -> Result<LoaderMeta>,
+    ) -> Result<InstanceManifest> {
+        let LoaderInstall {
+            list,
+            manifest,
+            downloader,
+        } = self;
+        let selected = select(list).await?;
+        let body = downloader
+            .fetch(
+                &fabric_profile_url(&manifest.id, &selected.loader.version),
+                None,
+            )
+            .await?;
+        let json = serde_json::from_slice::<OverlayManifest>(&body)?;
+        let merged = json.merge(manifest);
+        Ok(merged)
+    }
+}
+
+impl Instance {
+    /// 查找 Fabric 库
+    fn fabric_libraries(&self) -> impl Iterator<Item = FabricLibrary> {
+        let libraries = self.manifest.libraries.iter();
+        libraries.filter_map(|x| {
+            Some(FabricLibrary {
+                name: x.name.clone(),
+                url: serde_json::from_value(x.extra.get("url")?.clone()).ok()?,
+                sha256: serde_json::from_value(x.extra.get("sha256")?.clone()).ok()?,
+                size: serde_json::from_value(x.extra.get("size")?.clone()).ok()?,
+            })
+        })
+    }
+    /// 下载 Fabric 库
+    pub(super) fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
+        self.fabric_libraries()
+            .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
+    }
+}
+
+pub struct LoaderInstall<'a> {
+    downloader: &'a Downloader,
+    manifest: InstanceManifest,
+    list: Vec<LoaderMeta>,
 }
 
 #[derive(Deserialize)]
@@ -128,26 +164,6 @@ impl FabricLibrary {
             .file_size(self.size)
             .hash(self.sha256)
             .build())
-    }
-}
-
-impl Instance {
-    /// 查找 Fabric 库
-    pub fn fabric_libraries(&self) -> impl Iterator<Item = FabricLibrary> {
-        let libraries = self.manifest.libraries.iter();
-        libraries.filter_map(|x| {
-            Some(FabricLibrary {
-                name: x.name.clone(),
-                url: serde_json::from_value(x.extra.get("url")?.clone()).ok()?,
-                sha256: serde_json::from_value(x.extra.get("sha256")?.clone()).ok()?,
-                size: serde_json::from_value(x.extra.get("size")?.clone()).ok()?,
-            })
-        })
-    }
-    /// 下载 Fabric 库
-    pub fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
-        self.fabric_libraries()
-            .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
     }
 }
 

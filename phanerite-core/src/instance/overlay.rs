@@ -1,48 +1,14 @@
-use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::instance_info::{
     Arguments, AssetIndex, Downloads, InstanceManifest, JavaVersion, Library, Logging, Patch,
     VersionType,
 };
-use crate::storage::Storage;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-/// 此处顺序不可改变
-/// 若 `inherits_from` 存在，则允许其他字段 `Option`
-/// 否则 `InstanceManifest` 的字段必须存在
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum RawManifest {
-    Overlay(InheritsManifest),
-    Base(InstanceManifest),
-}
-
-impl RawManifest {
-    #[async_recursion::async_recursion] // 需要递归
-    pub async fn merge(
-        self,
-        storage: &Storage,
-        visiting: HashSet<&str>,
-    ) -> Result<InstanceManifest> {
-        let overlay = match self {
-            RawManifest::Overlay(v) => v,
-            RawManifest::Base(v) => return Ok(v),
-        };
-        let base = Instance::open_inner(&overlay.inherits_from, storage, visiting).await?;
-        Ok(overlay.merge_from(base.manifest))
-    }
-}
-
-impl InheritsManifest {
-    /// 更改继承对象
-    pub fn inherits(mut self, id: impl Into<String>) -> Self {
-        self.inherits_from = id.into();
-        self
-    }
+impl OverlayManifest {
     /// 合并到完整清单
-    fn merge_from(mut self, base: InstanceManifest) -> InstanceManifest {
+    pub fn merge(mut self, base: InstanceManifest) -> InstanceManifest {
         InstanceManifest {
             id: self.id,
             arguments: match base.arguments {
@@ -90,7 +56,7 @@ impl InheritsManifest {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InheritsManifest {
+pub struct OverlayManifest {
     pub id: String,
 
     pub inherits_from: String,

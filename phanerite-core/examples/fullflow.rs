@@ -3,7 +3,6 @@ use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
-use phanerite_core::download::vanilla::version_info::VersionManifest;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
@@ -24,11 +23,11 @@ fn main() {
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
         let instance = Instance::create(
-            VersionManifest::get(
-                VersionIndex::sync(&downloader).await?.latest_release()?,
-                &downloader,
-            )
-            .await?,
+            VersionIndex::sync(&downloader)
+                .await?
+                .latest_release()?
+                .get_manifest(&downloader)
+                .await?,
             "latest",
             &storage,
             &downloader,

@@ -14,41 +14,19 @@ use url::Url;
 
 static FABRIC_META: LazyLock<Url> = LazyLock::new(|| "https://meta.fabricmc.net".parse().unwrap());
 
-fn fabric_intermediary_url(game_version: &str) -> Url {
-    let mut url = FABRIC_META.clone();
-
-    url.path_segments_mut()
-        .unwrap()
-        .extend(["v2", "versions", "intermediary", game_version]);
-
-    url
-}
-
-fn fabric_profile_url(game_version: &str, loader_version: &str) -> Url {
-    let mut url = FABRIC_META.clone();
-
-    url.path_segments_mut().unwrap().extend([
-        "v2",
-        "versions",
-        "loader",
-        game_version,
-        loader_version,
-        "profile",
-        "json",
-    ]);
-
-    url
-}
-
 impl Version {
     pub async fn install_fabric<'a>(
         &self,
         downloader: &'a Downloader,
     ) -> Result<LoaderInstall<'a>> {
-        let body = downloader
-            .fetch(&fabric_intermediary_url(&self.id), None)
-            .await?;
+        let mut url = FABRIC_META.clone();
+        url.path_segments_mut()
+            .unwrap()
+            .extend(["v2", "versions", "intermediary", &self.id]);
+
+        let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<Vec<LoaderMeta>>(&body)?;
+
         Ok(LoaderInstall {
             downloader,
             manifest: self.get_manifest(downloader).await?.into(),
@@ -59,6 +37,7 @@ impl Version {
 
 impl<'a> LoaderInstall<'a> {
     /// 选择版本并下载 Profile
+    /// 留 AsyncFn 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
     pub async fn install<F>(
         self,
         mut select: impl AsyncFnMut(Vec<LoaderMeta>) -> Result<LoaderMeta>,
@@ -68,15 +47,24 @@ impl<'a> LoaderInstall<'a> {
             manifest,
             downloader,
         } = self;
+
         let selected = select(list).await?;
-        let body = downloader
-            .fetch(
-                &fabric_profile_url(&manifest.id, &selected.loader.version),
-                None,
-            )
-            .await?;
+
+        let mut url = FABRIC_META.clone();
+        url.path_segments_mut().unwrap().extend([
+            "v2",
+            "versions",
+            "loader",
+            &manifest.id,
+            &selected.loader.version,
+            "profile",
+            "json",
+        ]);
+
+        let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
         let merged = json.merge(manifest);
+
         Ok(merged)
     }
 }

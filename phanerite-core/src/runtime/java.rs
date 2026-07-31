@@ -4,15 +4,14 @@ use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::instance_info::InstanceManifest;
-use crate::java::buildin::BuildInRuntime;
-use crate::java::system::detect;
+use crate::runtime::RuntimePath;
 use crate::storage::Storage;
+use futures::StreamExt;
+use std::collections::HashSet;
+use std::env;
 use std::ffi::OsStr;
-use std::path::PathBuf;
-use tracing::trace;
-
-pub mod buildin;
-pub mod system;
+use std::path::{Path, PathBuf};
+use tracing::{debug, trace};
 
 #[cfg(target_os = "windows")]
 const JAVA_BIN_NAME: &str = "java.exe";
@@ -25,8 +24,7 @@ impl Instance {
         downloader: &Downloader,
         storage: &Storage,
     ) -> Result<Option<DownloadTask>> {
-        if BuildInRuntime::new(storage)
-            .list()
+        if list_build_in(storage.runtime_dir())
             .await
             .unwrap_or_default()
             .iter()
@@ -44,18 +42,15 @@ impl Instance {
         Ok(Some(task))
     }
     pub async fn find_java(&self, storage: &Storage) -> Vec<JavaRuntime> {
-        let build_in = BuildInRuntime::new(storage)
-            .list()
+        let build_in = list_build_in(storage.runtime_dir())
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let system = detect_system().await.unwrap_or_default();
+        build_in
             .into_iter()
-            .filter(|x| x.major == self.manifest.java_version.major_version);
-        let system = detect()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|x| x.major == self.manifest.java_version.major_version);
-        build_in.chain(system).collect()
+            .chain(system)
+            .filter(|x| x.major == self.manifest.java_version.major_version)
+            .collect()
     }
 }
 
@@ -80,7 +75,8 @@ impl AsRef<OsStr> for JavaRuntime {
 }
 
 impl JavaRuntime {
-    async fn from_path(path: PathBuf) -> Result<Self> {
+    async fn from_path(path: impl Into<PathBuf>) -> Result<Self> {
+        let path = path.into();
         let mut name = None;
         let mut major = None;
         let mut version = None;
@@ -115,4 +111,60 @@ impl JavaRuntime {
             path,
         })
     }
+}
+
+/// 列出内建 Java
+pub async fn list_build_in(runtime_dir: &Path) -> Result<Vec<JavaRuntime>> {
+    let result = async_fs::read_dir(runtime_dir)
+        .await?
+        .filter_map(async |x| x.ok())
+        .filter_map(async |x| {
+            RuntimePath::try_from(x.file_name()).ok()?;
+            Some(x.path())
+        })
+        .map(|path| path.join("bin").join(JAVA_BIN_NAME))
+        .map(JavaRuntime::from_path)
+        .buffer_unordered(4)
+        .filter_map(async |x| x.ok())
+        .collect()
+        .await;
+    Ok(result)
+}
+
+/// 探测系统的 Java
+pub async fn detect_system() -> Result<Vec<JavaRuntime>> {
+    debug!("detect runtime");
+    let paths = env::var_os("PATH").unwrap_or_default();
+    let java_home = env::var_os("JAVA_HOME")
+        .map(PathBuf::from)
+        .map(|x| x.join("bin").join(JAVA_BIN_NAME))
+        .unwrap_or_default();
+    let javas = env::split_paths(&paths)
+        .map(|x| x.join(JAVA_BIN_NAME))
+        .chain(std::iter::once(java_home))
+        .filter(|x| x.is_file())
+        .map(|x| std::path::absolute(&x).unwrap_or(x));
+
+    let result = async_lock::Mutex::new(Vec::new());
+    let set = async_lock::Mutex::new(HashSet::new());
+
+    let check_java = async |path: PathBuf| -> Result<()> {
+        if !set.lock().await.insert(path.clone()) {
+            return Ok(());
+        }
+        debug!("found runtime: {}", path.to_string_lossy());
+        result
+            .lock()
+            .await
+            .push(JavaRuntime::from_path(path).await?);
+        Ok(())
+    };
+
+    futures::stream::iter(javas)
+        .for_each_concurrent(4, async |path| {
+            let _ = check_java(path).await;
+        })
+        .await;
+
+    Ok(result.into_inner())
 }

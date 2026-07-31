@@ -245,13 +245,7 @@ impl Generated {
             .manifest
             .libraries
             .iter()
-            .filter_map(|lib| {
-                Some(
-                    storage
-                        .libraries_dir()
-                        .join(&lib.downloads.as_ref()?.artifact.as_ref()?.path),
-                )
-            })
+            .map(|lib| storage.libraries_dir().join(lib.name.path()))
             .chain(std::iter::once(instance.client_file()))
             .filter_map(|p| std::fs::canonicalize(p).ok())
             .map(|p| p.to_string_lossy().into_owned())

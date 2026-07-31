@@ -23,7 +23,7 @@ BMCLAPI 使用声明：
     fn resolve(&self, url: &mut Url) {
         match url.host_str() {
             // ----------------------------------------
-            // Mojang version / json / java runtime
+            // Mojang version / json / runtime runtime
             // ----------------------------------------
             Some("launchermeta.mojang.com") | Some("launcher.mojang.com") => {
                 url.set_scheme("https").ok();

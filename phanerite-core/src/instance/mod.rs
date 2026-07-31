@@ -32,7 +32,7 @@ impl Instance {
         storage: &'a Storage,
         downloader: &'a Downloader,
     ) -> Result<Self> {
-        let manifest = manifest.into();
+        let manifest = manifest.into().rename(name.as_ref());
 
         // 准备实例目录
         let path = storage.versions_dir().join(name.as_ref());
@@ -120,6 +120,15 @@ impl Instance {
                 Ok(open().await?)
             }
         }
+    }
+    /// 构建下载任务，并减少下载量
+    pub async fn install_less(
+        &self,
+        features: HashSet<&'static str>,
+        storage: &Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let full = self.install(features, storage).await?;
+        Ok(filter_existed(full, true))
     }
     /// 构建完整下载任务
     pub async fn install(

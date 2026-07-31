@@ -26,7 +26,6 @@ impl OverlayManifest {
             jar: self.jar.unwrap_or(base.jar),
             asset_index: self.asset_index.unwrap_or(base.asset_index),
             assets: self.assets.unwrap_or(base.assets),
-            compliance_level: self.compliance_level.unwrap_or(base.compliance_level),
             java_version: self.java_version.unwrap_or(base.java_version),
             libraries: {
                 self.libraries.extend(base.libraries);

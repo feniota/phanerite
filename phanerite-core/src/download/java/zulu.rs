@@ -3,6 +3,7 @@ use crate::download::extract::ExtractTask;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
+use crate::runtime::RuntimePath;
 use crate::storage::Storage;
 use serde::Deserialize;
 use std::sync::LazyLock;
@@ -58,16 +59,15 @@ impl JavaDownload for Zulu {
             .max_by_key(|p| (p.java_version.clone(), p.distro_version.clone()));
 
         let Some(choice) = choice else {
-            return Err(Error::other("No available java"));
+            return Err(Error::other("No available runtime"));
         };
 
         let extract = ExtractTask::builder()
-            .target(storage.runtime_dir().join(format!(
-                "{}-{}-{}-zulu-jre",
-                major,
-                std::env::consts::OS,
-                std::env::consts::ARCH
-            )))
+            .target(
+                storage
+                    .runtime_dir()
+                    .join(RuntimePath::new("jre", major as usize, "zulu").to_string()),
+            )
             .flatten();
 
         let extract = if choice.name.ends_with(".zip") {

@@ -4,19 +4,40 @@ use crate::error::Result;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+/// `Storage` 包含了启动器需要持久储存数据的地址
+/// 作为依赖注入到启动器的文件系统操作中
+///
+/// `Storage` 并不封装文件系统的 IO 操作，仅保存常用路径
+/// 因此写入操作并不总是在需要注入 `Storage` 的调用
+/// 例如 `DownloadTask` 在构建时可能需要注入 `Storage`
+/// 但实际的写入操作是在执行下载时
 pub struct Storage {
+    /// 启动器数据的根目录，例如 `.minecraft`
     root_dir: PathBuf,
+    /// 临时文件目录， `{root_dir}/cache`
+    /// `Storage` 释放时删除
     cache_dir: OnceLock<PathBuf>,
+    /// 实例目录，`{root_dir}/versions`
     versions_dir: OnceLock<PathBuf>,
+    /// 运行时目录，`{root_dir}/runtime`
+    /// 储存启动 Minecraft 需要的运行时
+    /// 子目录命名需要满足 `RuntimePath`
     runtime_dir: OnceLock<PathBuf>,
+    /// 共享储存桶目录，`{root_dir}/share`
+    /// 通过 hardlink 共享文件以节约磁盘空间，需要文件系统支持
+    /// 所有文件以 `Blake3` Hash 值命名，并取前两位作为目录名
     share_dir: OnceLock<PathBuf>,
+    /// Library 目录，`{root_dir}/libraries`
     libraries_dir: OnceLock<PathBuf>,
+    /// Asset 目录，`{root_dir}/assets`
     assets_dir: OnceLock<PathBuf>,
+    /// Asset 对象目录，`{root_dir}/assets/objects`
     assets_objects: OnceLock<PathBuf>,
+    /// Asset 索引目录，`{root_dir}/assets/indexes`
     assets_indexes: OnceLock<PathBuf>,
-
+    /// `AuthlibInjector` 目录，`{root_dir]/authlib-injector`
     authlib_injector: OnceLock<PathBuf>,
-
+    /// 共享储存桶策略
     pub(crate) share_strategy: ShareStrategy,
 }
 
@@ -90,6 +111,7 @@ fn dir(root: &Path, name: &str) -> PathBuf {
     p
 }
 
+/// 清理临时文件
 impl Drop for Storage {
     fn drop(&mut self) {
         if let Some(cache) = self.cache_dir.get() {
@@ -106,7 +128,7 @@ pub enum ShareStrategy {
     /// 优先使用硬链接，否则不使用链接
     Prefer,
     /// 使用符号链接 fallback
-    /// WIP: 暂未实习符号链接的计数机制
+    /// WIP: 暂未实现符号链接的计数机制
     Fallback,
     /// 强制使用硬链接
     Force,

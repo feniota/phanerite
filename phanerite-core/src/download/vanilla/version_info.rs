@@ -33,9 +33,8 @@ impl From<VersionManifest> for InstanceManifest {
             jar: id,
             asset_index: remote.asset_index,
             assets,
-            compliance_level: 1,
             java_version: remote.java_version.unwrap_or(JavaVersion {
-                component: "java-runtime-alpha".into(),
+                component: "runtime-runtime-alpha".into(),
                 major_version: 8,
             }),
             libraries: remote.libraries,
@@ -70,7 +69,6 @@ impl From<VersionManifest> for InstanceManifest {
                 main_class: manifest.main_class.clone(),
                 asset_index: manifest.asset_index.clone(),
                 assets: manifest.assets.clone(),
-                compliance_level: manifest.compliance_level,
                 java_version: manifest.java_version.clone(),
                 libraries: manifest.libraries.clone(),
                 downloads: manifest.downloads.clone(),

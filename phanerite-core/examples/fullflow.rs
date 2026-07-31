@@ -20,45 +20,51 @@ fn main() {
             .await?;
         let injector = AuthlibInjector::new(&storage);
 
-        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
+        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest-fabric")).await;
 
-        let instance = Instance::create(
-            VersionIndex::sync(&downloader)
-                .await?
-                .latest_release()?
-                .get_manifest(&downloader)
-                .await?,
-            "latest",
-            &storage,
-            &downloader,
-        )
-        .await?;
+        let version = VersionIndex::sync(&downloader)
+            .await?
+            .latest_release()?
+            .install_fabric(&downloader)
+            .await?
+            .install(async |mut x| Ok(x.remove(0)))
+            .await?;
+        let instance = Instance::create(version, "latest-fabric", &storage, &downloader).await?;
 
         let mut group = DownloadGroup::new();
-        group.extend(instance.install(HashSet::new(), &storage).await?);
+        group.extend(instance.install_less(HashSet::new(), &storage).await?);
         group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
         group.extend(injector.update(&downloader).await?);
 
-        let processes = group.processes();
+        // 显示下载速度和进度
+        let monitor = group.processes();
+        let total = monitor.total() as f64 / 1024.0 / 1024.0;
+        println!("Total size: {:.2} MiB ({} tasks)", total, monitor.len());
         smol::spawn(async move {
-            loop {
-                println!("Downloading: {}", processes.downloading());
+            while !monitor.is_finished() {
+                let downloading = monitor.downloading();
+                let speed = monitor
+                    .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
+                    .await;
+                let current = monitor.current();
+                let pct = if monitor.total() > 0 {
+                    current as f64 / monitor.total() as f64 * 100.0
+                } else {
+                    0.0
+                };
+                let finished = monitor.finished();
                 println!(
-                    "Speed: {:.2} MiB/s",
-                    processes
-                        .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
-                        .await as f64
-                        / 1024.0
-                        / 1024.0
-                )
+                    "Progress: {pct:.1}% ({finished} finished) Downloading: {downloading}  {:.2} MiB/s",
+                    speed as f64 / 1024.0 / 1024.0,
+                );
             }
         })
-        .detach();
+            .detach();
 
-        let errs = group
-            .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
-            .await;
-        // let errs = group.exec(&downloader).await;
+        // let errs = group
+        //     .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
+        //     .await;
+        let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 
         let auth = Authentication::new_login(&downloader)

@@ -22,7 +22,7 @@ impl Version {
         let mut url = FABRIC_META.clone();
         url.path_segments_mut()
             .unwrap()
-            .extend(["v2", "versions", "intermediary", &self.id]);
+            .extend(["v2", "versions", "loader", &self.id]);
 
         let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<Vec<LoaderMeta>>(&body)?;
@@ -38,9 +38,9 @@ impl Version {
 impl<'a> LoaderInstall<'a> {
     /// 选择版本并下载 Profile
     /// 留 AsyncFn 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
-    pub async fn install<F>(
+    pub async fn install(
         self,
-        mut select: impl AsyncFnMut(Vec<LoaderMeta>) -> Result<LoaderMeta>,
+        select: impl AsyncFnOnce(Vec<LoaderMeta>) -> Result<LoaderMeta>,
     ) -> Result<InstanceManifest> {
         let LoaderInstall {
             list,

@@ -270,7 +270,10 @@ impl Downloader {
             if task.file_hash == hasher.finalize() {
                 Ok(bucket_hasher)
             } else {
-                Err(Error::other("hash mismatch"))
+                Err(Error::other(format!(
+                    "hash mismatch: {}",
+                    task.process.name().unwrap_or("Unknow file")
+                )))
             }
         }; // RETRY_BODY
 

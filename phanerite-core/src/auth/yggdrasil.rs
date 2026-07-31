@@ -140,9 +140,11 @@ impl Authentication {
         };
         let req = serde_json::to_string(&req)?;
 
-        let (_, res) = downloader
-            .post_json(&self.server.join("authserver/refresh")?, req)
-            .await?;
+        let mut url = self.server.clone();
+        url.path_segments_mut()
+            .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .extend(&["authserver", "refresh"]);
+        let (_, res) = downloader.post_json(&url, req).await?;
         let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
 
         self.access_token = res.access_token;
@@ -168,9 +170,11 @@ impl Authentication {
         };
         let req = serde_json::to_string(&req)?;
 
-        let (status, _) = downloader
-            .post_json(&self.server.join("/authserver/validate")?, req)
-            .await?;
+        let mut url = self.server.clone();
+        url.path_segments_mut()
+            .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .extend(&["authserver", "validate"]);
+        let (status, _) = downloader.post_json(&url, req).await?;
 
         if status == 204 { Ok(true) } else { Ok(false) }
     }
@@ -188,9 +192,11 @@ impl Authentication {
         };
         let req = serde_json::to_string(&req)?;
 
-        let (_, _) = downloader
-            .post_json(&self.server.join("/authserver/invalidate")?, req)
-            .await?;
+        let mut url = self.server.clone();
+        url.path_segments_mut()
+            .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .extend(&["authserver", "invalidate"]);
+        let (_, _) = downloader.post_json(&url, req).await?;
 
         Ok(())
     }
@@ -208,9 +214,11 @@ impl Authentication {
         };
         let req = serde_json::to_string(&req)?;
 
-        let (status, err) = downloader
-            .post_json(&self.server.join("/authserver/signout")?, req)
-            .await?;
+        let mut url = self.server.clone();
+        url.path_segments_mut()
+            .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .extend(&["authserver", "signout"]);
+        let (status, err) = downloader.post_json(&url, req).await?;
 
         if status == 204 {
             Ok(())
@@ -402,10 +410,11 @@ impl<'a> Login<'a, Url, String, SecretString> {
         };
         let req = serde_json::to_string(&req)?;
 
-        let (_, res) = self
-            .downloader
-            .post_json(&self.server.join("/authserver/authenticate")?, &req)
-            .await?;
+        let mut url = self.server.clone();
+        url.path_segments_mut()
+            .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .extend(&["authserver", "authenticate"]);
+        let (_, res) = self.downloader.post_json(&url, &req).await?;
         let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
 
         Ok(Authentication {

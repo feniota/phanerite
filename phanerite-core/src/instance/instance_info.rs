@@ -1,5 +1,6 @@
 use crate::download::vanilla::maven::MavenArtifact;
 use crate::error::Result;
+use crate::instance::overlay::Patch;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use futures::AsyncReadExt;
@@ -31,7 +32,9 @@ pub struct InstanceManifest {
     pub version_type: VersionType,
     pub time: DateTime<FixedOffset>,
     pub release_time: DateTime<FixedOffset>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub minimum_launcher_version: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<bool>,
     #[serde(default)]
     pub patches: Vec<Patch>,
@@ -40,29 +43,6 @@ pub struct InstanceManifest {
     pub minecraft_arguments: Option<String>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
-}
-
-/// A single patch entry (e.g. the `game` patch).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Patch {
-    pub id: String,
-    pub version: String,
-    pub priority: i32,
-    pub arguments: Arguments,
-    pub main_class: String,
-    pub asset_index: AssetIndex,
-    pub assets: String,
-    pub java_version: JavaVersion,
-    pub libraries: Vec<Library>,
-    pub downloads: Downloads,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub logging: Option<Logging>,
-    #[serde(rename = "type")]
-    pub version_type: VersionType,
-    pub time: DateTime<FixedOffset>,
-    pub release_time: DateTime<FixedOffset>,
-    pub minimum_launcher_version: Option<u32>,
 }
 
 /// JVM / game launch arguments split into two arrays.
@@ -202,14 +182,19 @@ pub struct JavaVersion {
 pub struct Library {
     pub name: MavenArtifact,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub downloads: Option<LibraryDownloads>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rules: Option<Vec<Rule>>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub natives: Option<HashMap<String, String>>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extract: Option<Extract>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub classifiers: Option<HashMap<String, Artifact>>,
 
     #[serde(flatten)]
@@ -218,8 +203,10 @@ pub struct Library {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryDownloads {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact: Option<Artifact>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub classifiers: Option<HashMap<String, Artifact>>,
 }
 
@@ -236,6 +223,7 @@ pub struct Artifact {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Extract {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
 }
 

@@ -2,14 +2,12 @@ use crate::download::downloader::Downloader;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::Result;
 use crate::instance::instance_info::{
-    Arguments, DownloadInfo, InstanceManifest, JavaVersion, Logging, Patch,
+    Arguments, AssetIndex, Downloads, InstanceManifest, JavaVersion, Library, Logging,
 };
-use crate::instance::instance_info::{AssetIndex, Library};
-use crate::utils::Sha1Hash;
+use crate::instance::overlay::{OptionalManifest, Patch};
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use url::Url;
 
 impl Version {
     pub async fn get_manifest(&self, downloader: &Downloader) -> Result<VersionManifest> {
@@ -23,10 +21,36 @@ impl Version {
 
 /// Build an instance manifest from the remote version metadata.
 impl From<VersionManifest> for InstanceManifest {
-    fn from(remote: VersionManifest) -> InstanceManifest {
+    fn from(remote: VersionManifest) -> Self {
         let assets = remote.asset_index.id.clone();
         let id = remote.id;
-        let mut manifest = Self {
+
+        // Self-patch so the serialized JSON records the original state.
+        let self_patch = Patch {
+            priority: 0,
+            manifest: OptionalManifest {
+                id: Some(id.clone()),
+                version: None,
+                arguments: remote.arguments.clone(),
+                main_class: Some(remote.main_class.clone()),
+                jar: Some(id.clone()),
+                asset_index: Some(remote.asset_index.clone()),
+                assets: Some(assets.clone()),
+                compliance_level: None,
+                java_version: remote.java_version.clone(),
+                downloads: Some(remote.downloads.clone()),
+                logging: remote.logging.clone(),
+                version_type: Some(remote.version_type),
+                time: Some(remote.time),
+                release_time: Some(remote.release_time),
+                minimum_launcher_version: remote.minimum_launcher_version,
+                minecraft_arguments: remote.minecraft_arguments.clone(),
+                libraries: remote.libraries.clone(),
+                extra: HashMap::new(),
+            },
+        };
+
+        Self {
             id: id.clone(),
             arguments: remote.arguments,
             main_class: remote.main_class,
@@ -38,48 +62,17 @@ impl From<VersionManifest> for InstanceManifest {
                 major_version: 8,
             }),
             libraries: remote.libraries,
-            downloads: crate::instance::instance_info::Downloads {
-                client: remote.downloads.client.map(|d| DownloadInfo {
-                    url: d.url,
-                    sha1: d.sha1,
-                    size: d.size,
-                }),
-                server: remote.downloads.server.map(|d| DownloadInfo {
-                    url: d.url,
-                    sha1: d.sha1,
-                    size: d.size,
-                }),
-            },
+            downloads: remote.downloads,
             logging: remote.logging,
             version_type: remote.version_type,
             time: remote.time,
             release_time: remote.release_time,
             minimum_launcher_version: remote.minimum_launcher_version,
             root: Some(true),
-            patches: vec![],
+            patches: vec![self_patch],
             minecraft_arguments: remote.minecraft_arguments,
             extra: filter_extra(remote.extra),
-        };
-        manifest.patches = manifest.arguments.clone().map_or(vec![], |args| {
-            vec![Patch {
-                id: "game".into(),
-                version: manifest.id.clone(),
-                priority: 0,
-                arguments: args,
-                main_class: manifest.main_class.clone(),
-                asset_index: manifest.asset_index.clone(),
-                assets: manifest.assets.clone(),
-                java_version: manifest.java_version.clone(),
-                libraries: manifest.libraries.clone(),
-                downloads: manifest.downloads.clone(),
-                logging: manifest.logging.clone(),
-                version_type: manifest.version_type,
-                time: manifest.time,
-                release_time: manifest.release_time,
-                minimum_launcher_version: manifest.minimum_launcher_version,
-            }]
-        });
-        manifest
+        }
     }
 }
 
@@ -141,18 +134,4 @@ pub struct VersionManifest {
 
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
-}
-
-/// 游戏下载
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Downloads {
-    pub client: Option<Download>,
-    pub server: Option<Download>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Download {
-    pub sha1: Sha1Hash,
-    pub size: u64,
-    pub url: Url,
 }

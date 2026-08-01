@@ -46,7 +46,7 @@ impl<'a> LoaderInstall<'a> {
     ) -> Result<InstanceManifest> {
         let LoaderInstall {
             list,
-            manifest,
+            mut manifest,
             downloader,
         } = self;
 
@@ -65,9 +65,8 @@ impl<'a> LoaderInstall<'a> {
 
         let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
-        let merged = json.merge(manifest);
-
-        Ok(merged)
+        manifest.merge_overlay(json, 30000);
+        Ok(manifest)
     }
 }
 
@@ -92,7 +91,6 @@ impl Instance {
     /// 下载 Fabric 库
     pub(super) fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
         self.fabric_libraries()
-            .inspect(|x| println!("{}", x.name))
             .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
     }
 }

@@ -12,7 +12,9 @@ use serde::Deserialize;
 use std::sync::LazyLock;
 use url::Url;
 
-static FABRIC_META: LazyLock<Url> = LazyLock::new(|| "https://meta.fabricmc.net".parse().unwrap());
+static FABRIC_META: LazyLock<Url> = LazyLock::new(|| "https://meta.fabricmc.net/".parse().unwrap());
+static FABRIC_MAVEN: LazyLock<Url> =
+    LazyLock::new(|| "https://maven.fabricmc.net/".parse().unwrap());
 
 impl Version {
     pub async fn install_fabric<'a>(
@@ -74,17 +76,23 @@ impl Instance {
     fn fabric_libraries(&self) -> impl Iterator<Item = FabricLibrary> {
         let libraries = self.manifest.libraries.iter();
         libraries.filter_map(|x| {
-            Some(FabricLibrary {
+            (x.extra.get("url")? == "https://maven.fabricmc.net/").then_some(FabricLibrary {
                 name: x.name.clone(),
-                url: serde_json::from_value(x.extra.get("url")?.clone()).ok()?,
-                sha256: serde_json::from_value(x.extra.get("sha256")?.clone()).ok()?,
-                size: serde_json::from_value(x.extra.get("size")?.clone()).ok()?,
+                sha256: x
+                    .extra
+                    .get("sha256")
+                    .and_then(|t| serde_json::from_value(t.clone()).ok()?),
+                size: x
+                    .extra
+                    .get("size")
+                    .and_then(|t| serde_json::from_value(t.clone()).ok()?),
             })
         })
     }
     /// 下载 Fabric 库
     pub(super) fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
         self.fabric_libraries()
+            .inspect(|x| println!("{}", x.name))
             .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
     }
 }
@@ -138,20 +146,42 @@ pub struct Loader {
 #[derive(Deserialize)]
 pub struct FabricLibrary {
     name: MavenArtifact,
-    url: Url,
-    sha256: Sha256Hash,
-    size: u64,
+    // url: Url,
+    sha256: Option<Sha256Hash>,
+    size: Option<u64>,
 }
 
 impl FabricLibrary {
     pub fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
-        Ok(DownloadTask::builder()
-            .url(self.name.url(&self.url)?)
-            .to_library(self.name.path(), storage)
-            .file_name(self.name)
-            .file_size(self.size)
-            .hash(self.sha256)
-            .build())
+        let url = self.name.url(&FABRIC_MAVEN)?;
+        // 本库优秀的泛型设计 + 傻逼的 Fabric Meta =
+        let task = match (self.size, self.sha256) {
+            (Some(size), Some(hash)) => DownloadTask::builder()
+                .url(url)
+                .to_library(self.name.path(), storage)
+                .file_name(self.name)
+                .file_size(size)
+                .hash(hash)
+                .build(),
+            (Some(size), None) => DownloadTask::builder()
+                .url(url)
+                .to_library(self.name.path(), storage)
+                .file_name(self.name)
+                .file_size(size)
+                .build(),
+            (None, Some(hash)) => DownloadTask::builder()
+                .url(url)
+                .to_library(self.name.path(), storage)
+                .file_name(self.name)
+                .hash(hash)
+                .build(),
+            (None, None) => DownloadTask::builder()
+                .url(url)
+                .to_library(self.name.path(), storage)
+                .file_name(self.name)
+                .build(),
+        };
+        Ok(task)
     }
 }
 

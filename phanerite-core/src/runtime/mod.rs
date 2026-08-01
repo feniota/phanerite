@@ -31,6 +31,9 @@ impl RuntimePath {
             vendor: vendor.into(),
         }
     }
+    pub fn matches_current(&self) -> bool {
+        self.os == std::env::consts::OS && self.arch == std::env::consts::ARCH
+    }
 }
 
 impl FromStr for RuntimePath {

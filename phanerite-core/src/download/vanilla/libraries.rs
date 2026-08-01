@@ -97,7 +97,7 @@ fn native_download(
     file_name: &str,
     extract: Option<&Extract>,
 ) -> DownloadTask {
-    let mut builder = ExtractTask::builder().target(native_dir).zip().flatten();
+    let mut builder = ExtractTask::builder().target(native_dir).flatten();
     if let Some(ex) = extract
         && let Some(ref patterns) = ex.exclude
     {

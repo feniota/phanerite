@@ -1,22 +1,15 @@
 use crate::error::{Error, Result};
 use crate::storage::ShareStrategy;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 const CHUNK_SIZE: usize = 8192;
-
-#[derive(Clone, Copy)]
-pub enum ArchiveFormat {
-    Zip,
-    Tar,
-}
 
 pub struct Missing;
 
 pub struct ExtractTask {
     path: PathBuf,
-    format: ArchiveFormat,
     auto_flattens: bool,
     exclude: Vec<ExcludePattern>,
 }
@@ -39,10 +32,9 @@ impl ExcludePattern {
 }
 
 impl ExtractTask {
-    pub fn builder() -> ExtractTaskBuilder<Missing, Missing> {
+    pub fn builder() -> ExtractTaskBuilder<Missing> {
         ExtractTaskBuilder {
             path: Missing,
-            format: Missing,
             auto_flattens: false,
             exclude: vec![],
         }
@@ -56,31 +48,19 @@ impl ExtractTask {
     ) -> Result<()> {
         let archive_path = archive_file.as_ref().to_path_buf();
         let target = self.path.clone();
-        let format = self.format;
         let auto_flattens = self.auto_flattens;
         let exclude = self.exclude.clone();
 
         let (tx, rx) = async_channel::bounded(1);
         std::thread::spawn(move || {
-            let result = match format {
-                ArchiveFormat::Zip => unzip(
-                    &archive_path,
-                    &target,
-                    bucket,
-                    auto_flattens,
-                    &exclude,
-                    strategy,
-                ),
-                ArchiveFormat::Tar => untar(
-                    &archive_path,
-                    &target,
-                    bucket,
-                    auto_flattens,
-                    &exclude,
-                    strategy,
-                ),
-            };
-            // Native jars are delivery vehicles — remove after extraction.
+            let result = extract(
+                &archive_path,
+                &target,
+                bucket,
+                auto_flattens,
+                &exclude,
+                strategy,
+            );
             if result.is_ok() {
                 let _ = fs::remove_file(&archive_path);
             }
@@ -92,7 +72,35 @@ impl ExtractTask {
     }
 }
 
-// ── ZIP ──────────────────────────────────────────────────────────────
+// ── Extraction dispatcher ─────────────────────────────────────────────
+
+fn extract(
+    archive: &Path,
+    target: &Path,
+    bucket: Option<PathBuf>,
+    auto_flattens: bool,
+    exclude: &[ExcludePattern],
+    strategy: ShareStrategy,
+) -> Result<()> {
+    let file = fs::File::open(archive)?;
+    let mut reader = BufReader::new(file);
+
+    // Peek magic bytes to determine format.
+    let magic = reader.fill_buf()?;
+    if magic.len() < 4 {
+        return Err(Error::other("archive too small"));
+    }
+
+    if &magic[..2] == b"PK" {
+        drop(reader);
+        unzip(archive, target, bucket, auto_flattens, exclude, strategy)
+    } else {
+        drop(reader);
+        untar(archive, target, bucket, auto_flattens, exclude, strategy)
+    }
+}
+
+// ── ZIP ───────────────────────────────────────────────────────────────
 
 fn unzip(
     archive: &Path,
@@ -105,7 +113,6 @@ fn unzip(
     let file = fs::File::open(archive)?;
     let mut reader = zip::ZipArchive::new(file)?;
 
-    // ── List entries ──────────────────────────────────────────────
     let mut entries: Vec<(String, u64)> = Vec::with_capacity(reader.len());
     for i in 0..reader.len() {
         let entry = reader.by_index(i)?;
@@ -125,7 +132,6 @@ fn unzip(
         ""
     };
 
-    // ── Extract one by one ────────────────────────────────────────
     for (name, _) in &entries {
         let stored_path = strip_prefix(name, prefix);
         let mut entry = reader.by_name(name)?;
@@ -136,7 +142,7 @@ fn unzip(
     Ok(())
 }
 
-// ── TAR ─────────────────────────────────────────────────────────────
+// ── TAR (auto-detect compression) ─────────────────────────────────────
 
 fn untar(
     archive_path: &Path,
@@ -146,23 +152,45 @@ fn untar(
     exclude: &[ExcludePattern],
     strategy: ShareStrategy,
 ) -> Result<()> {
-    let file = fs::File::open(archive_path)?;
-    let mut tar = tar::Archive::new(file);
+    fn open_tar(archive: &Path) -> Result<tar::Archive<Box<dyn Read>>> {
+        let file = fs::File::open(archive)?;
+        let mut reader = BufReader::new(file);
+        let magic = reader.fill_buf()?.to_vec();
+        let len = magic.len();
+        drop(reader);
+
+        let file = fs::File::open(archive)?;
+        let decoder: Box<dyn Read> = if len >= 3 && magic[0] == 0x1f && magic[1] == 0x8b {
+            Box::new(flate2::read::GzDecoder::new(file))
+        } else if len >= 3 && &magic[..3] == b"BZh" {
+            Box::new(bzip2::read::BzDecoder::new(file))
+        } else if len >= 6 && &magic[..6] == b"\xfd7zXZ\x00" {
+            Box::new(xz2::read::XzDecoder::new(file))
+        } else if len >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 {
+            Box::new(zstd::stream::read::Decoder::new(file)?)
+        } else {
+            Box::new(file)
+        };
+        Ok(tar::Archive::new(decoder))
+    }
 
     // ── List entries ──────────────────────────────────────────────
     let mut entries: Vec<(String, u64)> = Vec::new();
-    for entry in tar.entries()? {
-        let entry = entry?;
-        let header = entry.header();
-        if header.entry_type() != tar::EntryType::Regular {
-            continue;
+    {
+        let mut tar = open_tar(archive_path)?;
+        for entry in tar.entries()? {
+            let entry = entry?;
+            let header = entry.header();
+            if header.entry_type() != tar::EntryType::Regular {
+                continue;
+            }
+            let name = entry.path()?.to_string_lossy().into_owned();
+            if exclude.iter().any(|p| p.matches(&name)) {
+                continue;
+            }
+            let size = header.size()?;
+            entries.push((name, size));
         }
-        let name = entry.path()?.to_string_lossy().into_owned();
-        if exclude.iter().any(|p| p.matches(&name)) {
-            continue;
-        }
-        let size = header.size()?;
-        entries.push((name, size));
     }
 
     let prefix = if auto_flattens {
@@ -171,11 +199,8 @@ fn untar(
         ""
     };
 
-    // Re-open for extraction
-    drop(tar);
-    let file = fs::File::open(archive_path)?;
-    let mut tar = tar::Archive::new(file);
-
+    // ── Re-open and extract ───────────────────────────────────────
+    let mut tar = open_tar(archive_path)?;
     for entry in tar.entries()? {
         let entry = entry?;
         let header = entry.header();
@@ -194,7 +219,7 @@ fn untar(
     Ok(())
 }
 
-// ── Extract a single entry (shared by zip / tar) ────────────────────
+// ── Extract a single entry (shared by zip / tar) ─────────────────────
 
 fn extract_entry(
     mut reader: impl Read,
@@ -202,7 +227,6 @@ fn extract_entry(
     bucket: Option<&Path>,
     strategy: ShareStrategy,
 ) -> Result<()> {
-    // Already extracted by a previous native jar — skip.
     if dest.exists() {
         return Ok(());
     }
@@ -249,7 +273,6 @@ fn extract_entry(
         None => {
             let _ = fs::remove_file(dest);
             if fs::rename(&tmp, dest).is_err() {
-                // Concurrent extraction won the race — temp is stale.
                 let _ = fs::remove_file(&tmp);
             }
         }
@@ -258,9 +281,8 @@ fn extract_entry(
     Ok(())
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────
 
-/// Strip the leading `prefix` directory component from `path`.
 fn strip_prefix<'a>(path: &'a str, prefix: &str) -> &'a str {
     if prefix.is_empty() {
         return path;
@@ -271,7 +293,6 @@ fn strip_prefix<'a>(path: &'a str, prefix: &str) -> &'a str {
         .unwrap_or(path)
 }
 
-/// Longest common path prefix among non-empty slices (directory level).
 fn common_prefix<'a>(paths: impl Iterator<Item = &'a str>) -> &'a str {
     let mut prefix: Option<&str> = None;
     for p in paths {
@@ -281,7 +302,6 @@ fn common_prefix<'a>(paths: impl Iterator<Item = &'a str>) -> &'a str {
         match prefix {
             None => prefix = Some(p),
             Some(current) => {
-                // Shorten `current` until it's a prefix of `p`
                 let mut cur = current;
                 while !p.starts_with(cur) {
                     cur = match cur.rfind('/') {
@@ -296,43 +316,24 @@ fn common_prefix<'a>(paths: impl Iterator<Item = &'a str>) -> &'a str {
     prefix.unwrap_or("")
 }
 
-/// Generate a temp path next to `target`.
 fn temp_path(target: &Path) -> PathBuf {
     let mut t = target.as_os_str().to_os_string();
     t.push(".phanerite-tmp");
     PathBuf::from(t)
 }
 
-// ── Builder ──────────────────────────────────────────────────────────
+// ── Builder ────────────────────────────────────────────────────────────
 
-pub struct ExtractTaskBuilder<P, F> {
+pub struct ExtractTaskBuilder<P> {
     path: P,
-    format: F,
     auto_flattens: bool,
     exclude: Vec<ExcludePattern>,
 }
 
-impl<P, F> ExtractTaskBuilder<P, F> {
-    pub fn target(self, path: impl Into<PathBuf>) -> ExtractTaskBuilder<PathBuf, F> {
+impl<P> ExtractTaskBuilder<P> {
+    pub fn target(self, path: impl Into<PathBuf>) -> ExtractTaskBuilder<PathBuf> {
         ExtractTaskBuilder {
             path: path.into(),
-            format: self.format,
-            auto_flattens: self.auto_flattens,
-            exclude: self.exclude,
-        }
-    }
-    pub fn zip(self) -> ExtractTaskBuilder<P, ArchiveFormat> {
-        ExtractTaskBuilder {
-            path: self.path,
-            format: ArchiveFormat::Zip,
-            auto_flattens: self.auto_flattens,
-            exclude: self.exclude,
-        }
-    }
-    pub fn tar(self) -> ExtractTaskBuilder<P, ArchiveFormat> {
-        ExtractTaskBuilder {
-            path: self.path,
-            format: ArchiveFormat::Tar,
             auto_flattens: self.auto_flattens,
             exclude: self.exclude,
         }
@@ -354,16 +355,17 @@ impl<P, F> ExtractTaskBuilder<P, F> {
     }
 }
 
-impl ExtractTaskBuilder<PathBuf, ArchiveFormat> {
+impl ExtractTaskBuilder<PathBuf> {
     pub fn build(self) -> ExtractTask {
         ExtractTask {
             path: self.path,
-            format: self.format,
             auto_flattens: self.auto_flattens,
             exclude: self.exclude,
         }
     }
 }
+
+// ── link ───────────────────────────────────────────────────────────────
 
 fn link_file(
     source: impl AsRef<Path>,

@@ -51,6 +51,7 @@ impl JavaDownload for Zulu {
             .into_iter()
             .filter(|p| {
                 p.name.ends_with(".zip")
+                    || p.name.ends_with(".tar")
                     || p.name.ends_with(".tar.bz2")
                     || p.name.ends_with(".tar.gz")
                     || p.name.ends_with(".tar.xz")
@@ -68,14 +69,8 @@ impl JavaDownload for Zulu {
                     .runtime_dir()
                     .join(RuntimePath::new("jre", major as usize, "zulu").to_string()),
             )
-            .flatten();
-
-        let extract = if choice.name.ends_with(".zip") {
-            extract.zip()
-        } else {
-            extract.tar()
-        }
-        .build();
+            .flatten()
+            .build();
 
         let download = DownloadTask::builder()
             .url(choice.download_url)

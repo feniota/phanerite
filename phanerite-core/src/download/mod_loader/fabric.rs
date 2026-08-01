@@ -3,9 +3,9 @@ use crate::download::task::DownloadTask;
 use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::instance_info::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
+use crate::instance::Instance;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
 use serde::Deserialize;
@@ -154,7 +154,7 @@ pub struct FabricLibrary {
 impl FabricLibrary {
     pub fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
         let url = self.name.url(&FABRIC_MAVEN)?;
-        // 本库优秀的泛型设计 + 傻逼的 Fabric Meta =
+        // 本库优秀的泛型设计 + 奇妙的 Fabric Meta =
         let task = match (self.size, self.sha256) {
             (Some(size), Some(hash)) => DownloadTask::builder()
                 .url(url)

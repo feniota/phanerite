@@ -8,11 +8,11 @@ use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::HashSet;
-use tracing::{Level, error};
+use tracing::{error, Level};
 use url::Url;
 
 fn main() {
-    dotenvy::dotenv().unwrap();
+    let _ = dotenvy::dotenv();
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);

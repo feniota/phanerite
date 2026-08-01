@@ -1,5 +1,7 @@
-/.idea
-/target
-/.minecraft
-/logs
-/authlib-injector.log
+.idea/
+target/
+debug/
+.minecraft/
+logs/
+authlib-injector.log
+*.log

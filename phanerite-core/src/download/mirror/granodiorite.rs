@@ -44,14 +44,14 @@ impl Mirror for Granodiorite {
                 let path = url.path().to_string();
 
                 url.set_host(Some("granodiorite.ferris.love")).unwrap();
-                url.set_path(&format!("/mod_loader-meta{}", path));
+                url.set_path(&format!("/fabric-meta{}", path));
             }
 
             Some("maven.fabricmc.net") => {
                 let path = url.path().to_string();
 
                 url.set_host(Some("granodiorite.ferris.love")).unwrap();
-                url.set_path(&format!("/maven/mod_loader{}", path));
+                url.set_path(&format!("/maven/fabric{}", path));
             }
 
             // ── NeoForge ──

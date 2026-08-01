@@ -151,35 +151,19 @@ pub struct FabricLibrary {
 
 impl FabricLibrary {
     pub fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
-        let url = self.name.url(&FABRIC_MAVEN)?;
-        // 本库优秀的泛型设计 + 奇妙的 Fabric Meta =
-        let task = match (self.size, self.sha256) {
-            (Some(size), Some(hash)) => DownloadTask::builder()
-                .url(url)
-                .to_library(self.name.path(), storage)
-                .file_name(self.name)
-                .file_size(size)
-                .hash(hash)
-                .build(),
-            (Some(size), None) => DownloadTask::builder()
-                .url(url)
-                .to_library(self.name.path(), storage)
-                .file_name(self.name)
-                .file_size(size)
-                .build(),
-            (None, Some(hash)) => DownloadTask::builder()
-                .url(url)
-                .to_library(self.name.path(), storage)
-                .file_name(self.name)
-                .hash(hash)
-                .build(),
-            (None, None) => DownloadTask::builder()
-                .url(url)
-                .to_library(self.name.path(), storage)
-                .file_name(self.name)
-                .build(),
-        };
-        Ok(task)
+        let mut builder = DownloadTask::builder()
+            .url(self.name.url(&FABRIC_MAVEN)?)
+            .to_library(self.name.path(), storage);
+
+        if let Some(size) = self.size {
+            builder = builder.file_size(size);
+        }
+
+        if let Some(hash) = self.sha256 {
+            builder = builder.hash(hash);
+        }
+
+        Ok(builder.build())
     }
 }
 

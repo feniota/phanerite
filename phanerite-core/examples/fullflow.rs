@@ -12,6 +12,7 @@ use tracing::{Level, error};
 use url::Url;
 
 fn main() {
+    dotenvy::dotenv().unwrap();
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
@@ -61,14 +62,14 @@ fn main() {
         })
             .detach();
 
-        // let errs = group
-        //     .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
-        //     .await;
-        let errs = group.exec(&downloader).await;
+        let errs = group
+            .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
+            .await;
+        // let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 
         let auth = Authentication::new_login(&downloader)
-            .custom("https://littleskin.cn/api/yggdrasil".parse::<Url>()?)
+            .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
             .await?
             .username(
                 std::env::var("USERNAME")

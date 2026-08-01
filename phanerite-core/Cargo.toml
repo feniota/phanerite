@@ -32,6 +32,7 @@ zip = "8.6"
 zstd = { version = "0.13", default-features = false }
 
 [dev-dependencies]
+dotenvy = "0.15.7"
 indicatif = "0.18"
 smol = "2.0"
 tracing-subscriber = "0.3"

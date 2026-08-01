@@ -3,7 +3,7 @@ use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
-use crate::instance::instance_info::InstanceManifest;
+use crate::instance::manifest::InstanceManifest;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
 use futures::StreamExt;

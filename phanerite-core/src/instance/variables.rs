@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::instance::Instance;
-use crate::instance::instance_info::VersionType;
+use crate::instance::manifest::VersionType;
 use crate::storage::Storage;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

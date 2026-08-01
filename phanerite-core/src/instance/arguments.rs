@@ -1,5 +1,5 @@
 use crate::instance::Instance;
-use crate::instance::instance_info::{Action, Argument};
+use crate::instance::manifest::{Action, Argument};
 use crate::instance::variables::Variables;
 use std::collections::HashSet;
 use std::iter::Peekable;

@@ -4,7 +4,7 @@ use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
 use crate::instance::Instance;
-use crate::instance::instance_info::InstanceManifest;
+use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;

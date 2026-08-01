@@ -1,6 +1,6 @@
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
-pub(crate) use crate::instance::instance_info::VersionType;
+pub(crate) use crate::instance::manifest::VersionType;
 use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;

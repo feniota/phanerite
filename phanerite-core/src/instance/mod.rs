@@ -2,7 +2,7 @@ use crate::download::downloader::Downloader;
 use crate::download::task::{DownloadTask, filter_existed, filter_hash};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::{Error, Result};
-use crate::instance::instance_info::InstanceManifest;
+use crate::instance::manifest::InstanceManifest;
 use crate::storage::Storage;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub mod arguments;
-pub mod instance_info;
+pub mod manifest;
 pub mod overlay;
 pub mod simple_info;
 pub mod variables;

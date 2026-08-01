@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::instance::instance_info::VersionType;
+use crate::instance::manifest::VersionType;
 use crate::instance::{Instance, find_manifest};
 use crate::storage::Storage;
 use futures::StreamExt;

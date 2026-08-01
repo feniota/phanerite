@@ -1,7 +1,7 @@
 use crate::download::downloader::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::instance::instance_info::AssetIndex;
+use crate::instance::manifest::AssetIndex;
 use crate::storage::Storage;
 use crate::utils::Sha1Hash;
 use serde::{Deserialize, Serialize};

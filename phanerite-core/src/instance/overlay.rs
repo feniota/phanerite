@@ -1,4 +1,4 @@
-use crate::instance::instance_info::{
+use crate::instance::manifest::{
     Arguments, AssetIndex, Downloads, InstanceManifest, JavaVersion, Library, Logging, VersionType,
 };
 use chrono::{DateTime, FixedOffset};

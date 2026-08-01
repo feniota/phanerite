@@ -1,6 +1,6 @@
 use crate::download::extract::ExtractTask;
 use crate::download::task::DownloadTask;
-use crate::instance::instance_info::{Action, Artifact, Extract, Library};
+use crate::instance::manifest::{Action, Artifact, Extract, Library};
 use crate::storage::Storage;
 use std::collections::HashSet;
 use std::path::Path;

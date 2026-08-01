@@ -1,7 +1,7 @@
 use crate::download::downloader::Downloader;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::Result;
-use crate::instance::instance_info::{
+use crate::instance::manifest::{
     Arguments, AssetIndex, Downloads, InstanceManifest, JavaVersion, Library, Logging,
 };
 use crate::instance::overlay::{OptionalManifest, Patch};

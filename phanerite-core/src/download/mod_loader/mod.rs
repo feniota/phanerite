@@ -35,7 +35,8 @@ impl Version {
 }
 
 /// Loader 元信息
-pub trait LoaderMeta {
+/// 根据版本大小全序
+pub trait LoaderMeta: Ord {
     fn name(&self) -> &str;
     fn version(&self) -> &str;
     fn stable(&self) -> bool;

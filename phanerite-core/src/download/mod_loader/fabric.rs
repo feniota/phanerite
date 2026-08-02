@@ -9,6 +9,7 @@ use crate::instance::overlay::OverlayManifest;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
 use serde::Deserialize;
+use std::cmp::Ordering;
 use std::sync::LazyLock;
 use url::Url;
 
@@ -80,6 +81,26 @@ impl LoaderMeta for MetaData {
 
     fn stable(&self) -> bool {
         self.loader.stable
+    }
+}
+
+impl Eq for MetaData {}
+
+impl PartialEq<Self> for MetaData {
+    fn eq(&self, other: &Self) -> bool {
+        self.loader.version.eq(&other.loader.version)
+    }
+}
+
+impl PartialOrd<Self> for MetaData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MetaData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.loader.version.cmp(&other.loader.version)
     }
 }
 

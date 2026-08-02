@@ -4,6 +4,7 @@ use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
 use crate::instance::manifest::InstanceManifest;
 use serde::Deserialize;
+use std::cmp::Ordering;
 use std::sync::LazyLock;
 use url::Url;
 
@@ -64,6 +65,26 @@ impl LoaderMeta for ForgeVersion {
 
     fn stable(&self) -> bool {
         true
+    }
+}
+
+impl Eq for ForgeVersion {}
+
+impl PartialEq<Self> for ForgeVersion {
+    fn eq(&self, other: &Self) -> bool {
+        self.forge.eq(&other.forge)
+    }
+}
+
+impl PartialOrd<Self> for ForgeVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ForgeVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.forge.cmp(&other.forge)
     }
 }
 

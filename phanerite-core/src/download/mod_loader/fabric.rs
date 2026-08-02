@@ -100,6 +100,7 @@ impl PartialOrd<Self> for MetaData {
 
 impl Ord for MetaData {
     fn cmp(&self, other: &Self) -> Ordering {
+        // TODO: 更好的版本比较
         self.loader.version.cmp(&other.loader.version)
     }
 }

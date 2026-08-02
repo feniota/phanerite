@@ -1,10 +1,13 @@
 use crate::auth::yggdrasil::YggdrasilError;
 
+pub type Result<T> = core::result::Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
     Http(isahc::Error),
     SerdeJson(serde_json::Error),
+    SerdeXml(serde_xml_rs::Error),
     Zip(zip::result::ZipError),
     Yggdrasil(YggdrasilError),
     UrlParseErr(url::ParseError),
@@ -18,6 +21,7 @@ impl std::fmt::Display for Error {
             Error::Io(e) => write!(f, "I/O error: {e}"),
             Error::Http(status) => write!(f, "HTTP {status}"),
             Error::SerdeJson(e) => write!(f, "Serde JSON error: {e}"),
+            Error::SerdeXml(e) => write!(f, "Serde XML error: {e}"),
             Error::Yggdrasil(e) => write!(f, "{}", e),
             Error::Cancelled => write!(f, "Operation cancelled"),
             Error::Zip(e) => write!(f, "ZIP error: {e}"),
@@ -71,4 +75,8 @@ impl From<url::ParseError> for Error {
     }
 }
 
-pub type Result<T> = core::result::Result<T, Error>;
+impl From<serde_xml_rs::Error> for Error {
+    fn from(e: serde_xml_rs::Error) -> Self {
+        Error::SerdeXml(e)
+    }
+}

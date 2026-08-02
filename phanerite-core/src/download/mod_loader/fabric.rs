@@ -1,9 +1,9 @@
 use crate::download::downloader::Downloader;
+use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::download::task::DownloadTask;
 use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
 use crate::storage::Storage;
@@ -16,48 +16,41 @@ static FABRIC_META: LazyLock<Url> = LazyLock::new(|| "https://meta.fabricmc.net/
 static FABRIC_MAVEN: LazyLock<Url> =
     LazyLock::new(|| "https://maven.fabricmc.net/".parse().unwrap());
 
-impl Version {
-    pub async fn install_fabric<'a>(
-        &self,
-        downloader: &'a Downloader,
-    ) -> Result<LoaderInstall<'a>> {
+pub struct Fabric {
+    list: Vec<MetaData>,
+}
+
+impl LoaderInstall for Fabric {
+    type MetaInfo = MetaData;
+    type MetaList = std::vec::IntoIter<Self::MetaInfo>;
+    async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self> {
         let mut url = FABRIC_META.clone();
         url.path_segments_mut()
             .unwrap()
-            .extend(["v2", "versions", "loader", &self.id]);
+            .extend(["v2", "versions", "loader", &version.id]);
 
         let body = downloader.fetch(&url, None).await?;
-        let json = serde_json::from_slice::<Vec<LoaderMeta>>(&body)?;
+        let json = serde_json::from_slice::<Vec<MetaData>>(&body)?;
 
-        Ok(LoaderInstall {
-            downloader,
-            manifest: self.get_manifest(downloader).await?.into(),
-            list: json,
-        })
+        Ok(Fabric { list: json })
     }
-}
-
-impl<'a> LoaderInstall<'a> {
-    /// 选择版本并下载 Profile
-    /// 留 AsyncFn 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
-    pub async fn install(
+    async fn install<S>(
         self,
-        select: impl AsyncFnOnce(Vec<LoaderMeta>) -> Result<LoaderMeta>,
-    ) -> Result<InstanceManifest> {
-        let LoaderInstall {
-            list,
-            mut manifest,
-            downloader,
-        } = self;
-
-        let selected = select(list).await?;
+        mut raw: InstanceManifest,
+        select: S,
+        downloader: &Downloader,
+    ) -> Result<InstanceManifest>
+    where
+        S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
+    {
+        let selected = select(self.list.into_iter()).await?;
 
         let mut url = FABRIC_META.clone();
         url.path_segments_mut().unwrap().extend([
             "v2",
             "versions",
             "loader",
-            &manifest.id,
+            &raw.id,
             &selected.loader.version,
             "profile",
             "json",
@@ -65,57 +58,63 @@ impl<'a> LoaderInstall<'a> {
 
         let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
-        manifest.merge_overlay(json, 30000);
-        Ok(manifest)
+        raw.merge_overlay(json, 30000);
+        Ok(raw)
+    }
+    async fn extra_downloads(
+        manifest: &InstanceManifest,
+        storage: &Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        Ok(fabric_libraries(manifest).filter_map(|x| x.into_download(storage).ok()))
     }
 }
 
-impl Instance {
-    /// 查找 Fabric 库
-    fn fabric_libraries(&self) -> impl Iterator<Item = FabricLibrary> {
-        let libraries = self.manifest.libraries.iter();
-        libraries.filter_map(|x| {
-            (x.extra.get("url")? == "https://maven.fabricmc.net/").then_some(FabricLibrary {
-                name: x.name.clone(),
-                sha256: x
-                    .extra
-                    .get("sha256")
-                    .and_then(|t| serde_json::from_value(t.clone()).ok()?),
-                size: x
-                    .extra
-                    .get("size")
-                    .and_then(|t| serde_json::from_value(t.clone()).ok()?),
-            })
+impl LoaderMeta for MetaData {
+    fn name(&self) -> &str {
+        &self.loader.maven.artifact
+    }
+
+    fn version(&self) -> &str {
+        &self.loader.version
+    }
+
+    fn stable(&self) -> bool {
+        self.loader.stable
+    }
+}
+
+/// 查找 Fabric 库
+fn fabric_libraries(manifest: &InstanceManifest) -> impl Iterator<Item = FabricLibrary> {
+    manifest.libraries.iter().filter_map(|x| {
+        (x.extra.get("url")? == "https://maven.fabricmc.net/").then_some(FabricLibrary {
+            name: x.name.clone(),
+            sha256: x
+                .extra
+                .get("sha256")
+                .and_then(|t| serde_json::from_value(t.clone()).ok()?),
+            size: x
+                .extra
+                .get("size")
+                .and_then(|t| serde_json::from_value(t.clone()).ok()?),
         })
-    }
-    /// 下载 Fabric 库
-    pub(super) fn fabric_downloads(&self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
-        self.fabric_libraries()
-            .filter_map(|x| x.into_download(storage).ok()) // 不应该出现解析失败的 URL
-    }
-}
-
-pub struct LoaderInstall<'a> {
-    downloader: &'a Downloader,
-    manifest: InstanceManifest,
-    list: Vec<LoaderMeta>,
+    })
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoaderMeta {
-    pub loader: Loader,
+pub struct MetaData {
+    loader: Loader,
     // intermediary: Intermediary,
     // launcher_meta: LauncherMeta,
 }
 
 #[derive(Deserialize)]
-pub struct Loader {
-    pub separator: String,
-    pub build: usize,
-    pub maven: MavenArtifact,
-    pub version: String,
-    pub stable: bool,
+struct Loader {
+    // separator: String,
+    // build: usize,
+    maven: MavenArtifact,
+    version: String,
+    stable: bool,
 }
 
 // #[derive(Deserialize)]
@@ -142,7 +141,7 @@ pub struct Loader {
 // }
 
 #[derive(Deserialize)]
-pub struct FabricLibrary {
+struct FabricLibrary {
     name: MavenArtifact,
     // url: Url,
     sha256: Option<Sha256Hash>,
@@ -150,7 +149,7 @@ pub struct FabricLibrary {
 }
 
 impl FabricLibrary {
-    pub fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
+    fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
         let mut builder = DownloadTask::builder()
             .url(self.name.url(&FABRIC_MAVEN)?)
             .to_library(self.name.path(), storage);

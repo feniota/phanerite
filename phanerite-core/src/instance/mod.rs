@@ -161,7 +161,7 @@ impl Instance {
             .flatten();
 
         // Extra
-        let extra = self.extra_downloads(storage);
+        let extra = self.extra_downloads(storage).await?;
 
         // Client
         let file_name = format!("{}.jar", self.manifest.id);

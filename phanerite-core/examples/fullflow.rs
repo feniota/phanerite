@@ -2,13 +2,14 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
+use phanerite_core::download::mod_loader::fabric::Fabric;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::HashSet;
-use tracing::{error, Level};
+use tracing::{Level, error};
 use url::Url;
 
 fn main() {
@@ -26,9 +27,9 @@ fn main() {
         let version = VersionIndex::sync(&downloader)
             .await?
             .latest_release()?
-            .install_fabric(&downloader)
-            .await?
-            .install(async |mut x| Ok(x.remove(0)))
+            .install_loader::<Fabric>(&downloader, async |mut x| {
+                Ok(x.next().expect("No available Fabric loader version"))
+            })
             .await?;
         let instance = Instance::create(version, "latest-fabric", &storage, &downloader).await?;
 

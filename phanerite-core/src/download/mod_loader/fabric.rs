@@ -1,15 +1,17 @@
 use crate::download::downloader::Downloader;
 use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::download::task::DownloadTask;
-use crate::download::vanilla::maven::MavenArtifact;
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
 use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
+use crate::utils::maven::MavenArtifact;
+use crate::utils::version::compare_versions;
 use serde::Deserialize;
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::sync::LazyLock;
 use url::Url;
 
@@ -71,24 +73,16 @@ impl LoaderInstall for Fabric {
 }
 
 impl LoaderMeta for MetaData {
-    fn name(&self) -> &str {
+    fn name(&self) -> impl Display {
         &self.loader.maven.artifact
     }
 
-    fn version(&self) -> &str {
+    fn version(&self) -> impl Display {
         &self.loader.version
     }
 
     fn stable(&self) -> bool {
         self.loader.stable
-    }
-}
-
-impl Eq for MetaData {}
-
-impl PartialEq<Self> for MetaData {
-    fn eq(&self, other: &Self) -> bool {
-        self.loader.version.eq(&other.loader.version)
     }
 }
 
@@ -100,8 +94,7 @@ impl PartialOrd<Self> for MetaData {
 
 impl Ord for MetaData {
     fn cmp(&self, other: &Self) -> Ordering {
-        // TODO: 更好的版本比较
-        self.loader.version.cmp(&other.loader.version)
+        compare_versions(&self.loader.version, &other.loader.version)
     }
 }
 
@@ -122,7 +115,7 @@ fn fabric_libraries(manifest: &InstanceManifest) -> impl Iterator<Item = FabricL
     })
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaData {
     loader: Loader,
@@ -130,7 +123,7 @@ pub struct MetaData {
     // launcher_meta: LauncherMeta,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Eq)]
 struct Loader {
     // separator: String,
     // build: usize,

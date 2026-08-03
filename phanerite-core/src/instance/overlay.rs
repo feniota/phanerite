@@ -2,8 +2,30 @@ use crate::instance::manifest::{
     Arguments, AssetIndex, Downloads, InstanceManifest, JavaVersion, Library, Logging, VersionType,
 };
 use chrono::{DateTime, FixedOffset};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+
+/// Deserialize a `DateTime<FixedOffset>` that may lack a timezone suffix
+/// (some mod-loaders emit bare timestamps). Missing offset → UTC.
+pub fn deser_datetime_opt<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<Option<DateTime<FixedOffset>>, D::Error> {
+    let s: Option<String> = Option::deserialize(d)?;
+    match s {
+        None => Ok(None),
+        Some(s) => {
+            // Try as-is first (chrono's default parser).
+            if let Ok(dt) = s.parse::<DateTime<FixedOffset>>() {
+                return Ok(Some(dt));
+            }
+            // Missing offset — treat as UTC.
+            if let Ok(naive) = s.parse::<chrono::NaiveDateTime>() {
+                return Ok(Some(naive.and_utc().fixed_offset()));
+            }
+            Err(serde::de::Error::custom(format!("invalid datetime: {s}")))
+        }
+    }
+}
 
 /// All version-manifest fields in their optional form.
 /// Used as the `#[serde(flatten)]` target for `OverlayManifest` and `Patch`.
@@ -12,7 +34,6 @@ use std::collections::HashMap;
 pub struct OptionalManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 
@@ -46,10 +67,18 @@ pub struct OptionalManifest {
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
     pub version_type: Option<VersionType>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_datetime_opt",
+        default
+    )]
     pub time: Option<DateTime<FixedOffset>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_datetime_opt",
+        default
+    )]
     pub release_time: Option<DateTime<FixedOffset>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -128,11 +157,10 @@ impl OptionalManifest {
 #[serde(rename_all = "camelCase")]
 pub struct OverlayManifest {
     pub inherits_from: String,
-    #[serde(flatten)]
-    pub manifest: OptionalManifest,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub patches: Vec<Patch>,
+    #[serde(flatten)]
+    pub manifest: OptionalManifest,
 }
 
 impl OverlayManifest {

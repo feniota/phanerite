@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::storage::Storage;
+use std::fmt::Display;
 
 pub mod fabric;
 pub mod neoforge;
@@ -37,8 +38,8 @@ impl Version {
 /// Loader 元信息
 /// 根据版本大小全序
 pub trait LoaderMeta: Ord {
-    fn name(&self) -> &str;
-    fn version(&self) -> &str;
+    fn name(&self) -> impl Display;
+    fn version(&self) -> impl Display;
     fn stable(&self) -> bool;
 }
 

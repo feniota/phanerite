@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 use url::Url;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MavenArtifact {
     pub group: String,
     pub artifact: String,
@@ -75,8 +75,9 @@ impl<'de> Deserialize<'de> for MavenArtifact {
     where
         D: Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
 

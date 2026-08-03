@@ -2,7 +2,9 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
+use phanerite_core::download::mod_loader::LoaderMeta;
 use phanerite_core::download::mod_loader::fabric::Fabric;
+use phanerite_core::download::mod_loader::neoforge::NeoForge;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
@@ -22,16 +24,23 @@ fn main() {
             .await?;
         let injector = AuthlibInjector::new(&storage);
 
-        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest-fabric")).await;
+        let _ = async_fs::remove_dir_all(storage.versions_dir().join("1.21.1-nf")).await;
 
         let version = VersionIndex::sync(&downloader)
             .await?
-            .latest_release()?
-            .install_loader::<Fabric>(&downloader, async |mut x| {
-                Ok(x.next().expect("No available Fabric loader version"))
+            .iter()
+            .find(|x| x.id == "1.21.1")
+            .expect("Version not found")
+            // .latest_release()?
+            .install_loader::<NeoForge>(&downloader, async |x| {
+                let mut iter =
+                    x.inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+                let first = iter.next().expect("No available loader version");
+                iter.for_each(|_| {});
+                Ok(first)
             })
             .await?;
-        let instance = Instance::create(version, "latest-fabric", &storage, &downloader).await?;
+        let instance = Instance::create(version, "1.21.1-nf", &storage, &downloader).await?;
 
         let mut group = DownloadGroup::new();
         group.extend(instance.install_less(HashSet::new(), &storage).await?);
@@ -63,10 +72,10 @@ fn main() {
         })
             .detach();
 
-        let errs = group
-            .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
-            .await;
-        // let errs = group.exec(&downloader).await;
+        // let errs = group
+        //     .exec_with_mirror(&downloader, download::mirror::granodiorite::Granodiorite)
+        //     .await;
+        let errs = group.exec(&downloader).await;
         errs.iter().for_each(|e| error!("{}", e));
 
         let auth = Authentication::new_login(&downloader)

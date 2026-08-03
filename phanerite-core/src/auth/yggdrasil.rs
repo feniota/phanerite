@@ -14,6 +14,7 @@ use url::Url;
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct YggdrasilError {
     pub error: String,
     pub error_message: String,

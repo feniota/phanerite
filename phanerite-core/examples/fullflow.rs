@@ -9,12 +9,12 @@ use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use tracing::{Level, error};
 use url::Url;
 
 fn main() {
-    let _ = dotenvy::dotenv();
+    // let _ = dotenvy::dotenv();
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
@@ -31,12 +31,20 @@ fn main() {
             .find(|x| x.id == "1.21.1")
             .expect("Version not found")
             // .latest_release()?
-            .install_loader::<NeoForge>(&downloader, async |x| {
-                let mut iter =
-                    x.inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-                let first = iter.next().expect("No available loader version");
-                iter.for_each(|_| {});
-                Ok(first)
+            .install_loader::<NeoForge>(&downloader, async |iter| {
+                // let iter = iter
+                //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+                let latest = iter
+                    .collect::<BTreeSet<_>>()
+                    .pop_last()
+                    .expect("No available loader version");
+                println!(
+                    "{}:{} stable:{}",
+                    latest.name(),
+                    latest.version(),
+                    latest.stable()
+                );
+                Ok(latest)
             })
             .await?;
         let instance = Instance::create(version, "1.21.1-nf", &storage, &downloader).await?;

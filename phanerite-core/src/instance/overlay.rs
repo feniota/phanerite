@@ -97,61 +97,6 @@ pub struct OptionalManifest {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-impl OptionalManifest {
-    /// Merge `other` on top of `self`.
-    /// - `Option` fields: `other` wins when `Some`.
-    /// - `Vec` fields: `extend` from `other`.
-    pub fn merge(&mut self, other: &Self) {
-        if other.arguments.is_some() {
-            self.arguments.clone_from(&other.arguments);
-        }
-        if other.main_class.is_some() {
-            self.main_class.clone_from(&other.main_class);
-        }
-        if other.jar.is_some() {
-            self.jar.clone_from(&other.jar);
-        }
-        if other.asset_index.is_some() {
-            self.asset_index.clone_from(&other.asset_index);
-        }
-        if other.assets.is_some() {
-            self.assets.clone_from(&other.assets);
-        }
-        if other.compliance_level.is_some() {
-            self.compliance_level = other.compliance_level;
-        }
-        if other.java_version.is_some() {
-            self.java_version.clone_from(&other.java_version);
-        }
-        if other.downloads.is_some() {
-            self.downloads.clone_from(&other.downloads);
-        }
-        if other.logging.is_some() {
-            self.logging.clone_from(&other.logging);
-        }
-        if other.version_type.is_some() {
-            self.version_type = other.version_type;
-        }
-        if other.time.is_some() {
-            self.time = other.time;
-        }
-        if other.release_time.is_some() {
-            self.release_time = other.release_time;
-        }
-        if other.minimum_launcher_version.is_some() {
-            self.minimum_launcher_version = other.minimum_launcher_version;
-        }
-        if other.minecraft_arguments.is_some() {
-            self.minecraft_arguments
-                .clone_from(&other.minecraft_arguments);
-        }
-        self.libraries.extend(other.libraries.iter().cloned());
-        for (k, v) in &other.extra {
-            self.extra.insert(k.clone(), v.clone());
-        }
-    }
-}
-
 /// A version file that inherits from a base version.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -221,7 +166,12 @@ impl InstanceManifest {
             self.java_version.clone_from(v);
         }
         if let Some(ref v) = opt.downloads {
-            self.downloads.clone_from(v);
+            if let Some(ref c) = v.client {
+                self.downloads.client = Some(c.clone());
+            }
+            if let Some(ref s) = v.server {
+                self.downloads.server = Some(s.clone());
+            }
         }
         if let Some(ref v) = opt.logging {
             self.logging = Some(v.clone());

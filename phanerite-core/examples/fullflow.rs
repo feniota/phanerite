@@ -3,7 +3,6 @@ use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::mod_loader::LoaderMeta;
-use phanerite_core::download::mod_loader::fabric::Fabric;
 use phanerite_core::download::mod_loader::neoforge::NeoForge;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;

@@ -9,6 +9,7 @@ use crate::storage::Storage;
 use std::fmt::Display;
 
 pub mod fabric;
+pub mod forge;
 pub mod neoforge;
 
 impl Instance {

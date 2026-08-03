@@ -1,4 +1,5 @@
 use crate::download::downloader::Downloader;
+use crate::download::mod_loader::neoforge::MetaData;
 use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
@@ -14,64 +15,43 @@ use std::sync::LazyLock;
 use tracing::debug;
 use url::Url;
 
-static NEOFORGE_MAVEN: LazyLock<Url> =
-    LazyLock::new(|| "https://maven.neoforged.net/releases/".parse().unwrap());
-static NEOFORGE_META: LazyLock<Url> = LazyLock::new(|| {
-    NEOFORGE_MAVEN
-        .join("net/neoforged/neoforge/maven-metadata.xml")
+static FORGE_MAVEN: LazyLock<Url> =
+    LazyLock::new(|| "https://maven.minecraftforge.net/".parse().unwrap());
+static FORGE_META: LazyLock<Url> = LazyLock::new(|| {
+    FORGE_MAVEN
+        .join("net/minecraftforge/forge/maven-metadata.xml")
         .unwrap()
 });
 
-pub struct NeoForge {
+/// Forge 可能不想让你从 Maven 下载 client
+pub static UNAVAILABLE_URL: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("https://unavailable.invalid").unwrap());
+
+pub struct Forge {
     group_id: String,
     artifact_id: String,
-    list: Vec<NeoForgeVersion>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct MetaData<V> {
-    pub(super) group_id: String,
-    pub(super) artifact_id: String,
-    pub(super) versioning: Versioning<V>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct Versioning<V> {
-    // latest: ForgeVersion,
-    // release: ForgeVersion,
-    pub(super) versions: Versions<V>,
-    // last_updated: String,
-}
-
-#[derive(Deserialize)]
-pub(super) struct Versions<V> {
-    pub(super) version: Vec<V>,
+    list: Vec<ForgeVersion>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct NeoForgeVersion {
+pub struct ForgeVersion {
     pub minecraft: String,
-    pub neoforge: String,
+    pub forge: String,
 }
 
-impl LoaderInstall for NeoForge {
-    type MetaInfo = NeoForgeVersion;
+impl LoaderInstall for Forge {
+    type MetaInfo = ForgeVersion;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
     async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self> {
-        let body = downloader.fetch(&NEOFORGE_META, None).await?;
+        let body = downloader.fetch(&FORGE_META, None).await?;
         let reader = std::io::Cursor::new(body);
-        let xml = serde_xml_rs::from_reader::<MetaData<NeoForgeVersion>, _>(reader)?;
+        let xml = serde_xml_rs::from_reader::<MetaData<ForgeVersion>, _>(reader)?;
         let filter = xml
             .versioning
             .versions
             .version
             .into_iter()
-            .filter(|x| {
-                // NeoForge 去掉了 "1."
-                x.minecraft.strip_prefix("1.").unwrap_or(&x.minecraft)
-                    == version.id.strip_prefix("1.").unwrap_or(&version.id)
-            })
+            .filter(|x| x.minecraft == version.id)
             .collect();
         Ok(Self {
             group_id: xml.group_id,
@@ -96,9 +76,9 @@ impl LoaderInstall for NeoForge {
             classifier: Some("installer".to_string()),
             extension: "jar".to_string(),
         };
-        let url = maven.url(&NEOFORGE_MAVEN)?;
+        let url = maven.url(&FORGE_MAVEN)?;
 
-        debug!("Downloading NeoForge Installer: {url}");
+        debug!("Downloading Forge Installer: {url}");
 
         let body = downloader.fetch(&url, None).await?;
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(body))?;
@@ -112,52 +92,52 @@ impl LoaderInstall for NeoForge {
     }
 }
 
-impl LoaderMeta for NeoForgeVersion {
+impl LoaderMeta for ForgeVersion {
     fn name(&self) -> impl Display {
-        "neoforge"
+        "forge"
     }
 
     fn version(&self) -> impl Display {
-        &self.neoforge
+        &self.forge
     }
 
     fn stable(&self) -> bool {
-        is_stable(&self.neoforge)
+        is_stable(&self.forge)
     }
 }
 
-impl PartialOrd<Self> for NeoForgeVersion {
+impl Ord for ForgeVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        compare_versions(&self.forge, &other.forge)
+    }
+}
+
+impl PartialOrd<Self> for ForgeVersion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for NeoForgeVersion {
-    fn cmp(&self, other: &Self) -> Ordering {
-        compare_versions(&self.neoforge, &other.neoforge)
-    }
-}
-
-impl Display for NeoForgeVersion {
+impl Display for ForgeVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.minecraft, self.neoforge)
+        write!(f, "{}-{}", self.minecraft, self.forge)
     }
 }
 
-impl<'de> Deserialize<'de> for NeoForgeVersion {
+impl<'de> Deserialize<'de> for ForgeVersion {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
 
-        let (minecraft, neoforge) = s
-            .rsplit_once('.')
-            .ok_or_else(|| serde::de::Error::custom("invalid NeoForge version"))?;
+        let (minecraft, forge) = s
+            .split_once('-')
+            .ok_or_else(|| serde::de::Error::custom("invalid Forge version"))?;
 
         Ok(Self {
             minecraft: minecraft.to_string(),
-            neoforge: neoforge.to_string(),
+            forge: forge.to_string(),
         })
     }
 }

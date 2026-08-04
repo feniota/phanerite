@@ -1,3 +1,4 @@
+use crate::download::authlib_injector::AuthlibInjector;
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
 use crate::instance::Instance;
@@ -257,6 +258,26 @@ impl Authentication {
 
         let arguments = variables.to_arguments(instance);
         Ok(arguments)
+    }
+    pub async fn injected_args(
+        &self,
+        instance: &Instance,
+        storage: &Storage,
+        authlib_injector: &AuthlibInjector<'_>,
+    ) -> Result<LaunchArguments> {
+        let mut args = self.args(instance, storage)?;
+        let agent = format!(
+            "-javaagent:{}={}",
+            authlib_injector.get().await?.to_string_lossy(),
+            self.server,
+        );
+        let meta = format!(
+            "-Dauthlibinjector.yggdrasil.prefetched={}",
+            self.meta_base64()?
+        );
+        args.jvm.push((agent, None));
+        args.jvm.push((meta, None));
+        Ok(args)
     }
 }
 

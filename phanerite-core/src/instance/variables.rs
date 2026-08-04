@@ -85,7 +85,7 @@ pub struct VariablesBuilder<Required, Legacy, Modern> {
 // 新旧版必选配置
 // ————————————————————————————————————————
 
-impl<Required, Legacy, Modern> VariablesBuilder<Required, Legacy, Modern> {
+impl<Legacy, Modern> VariablesBuilder<Missing, Legacy, Modern> {
     pub fn required(
         self,
         auth_player_name: impl Into<String>,
@@ -235,6 +235,12 @@ struct Generated {
     launcher_version: &'static str,
     /// 日志前缀
     path: PathBuf,
+
+    // NeoForge 扩展
+    /// Library 根目录
+    library_directory: PathBuf,
+    /// 路径分隔符
+    classpath_separator: &'static str,
 }
 
 impl Generated {
@@ -247,22 +253,26 @@ impl Generated {
             .iter()
             .map(|lib| storage.libraries_dir().join(lib.name.path()))
             .chain(std::iter::once(instance.client_file()))
-            .filter_map(|p| std::fs::canonicalize(p).ok())
-            .map(|p| p.to_string_lossy().into_owned())
+            .map(std::fs::canonicalize)
+            .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
+            .try_collect::<HashSet<_>>()?
+            .into_iter()
             .collect::<Vec<_>>()
             .join(if cfg!(windows) { ";" } else { ":" });
 
         Ok(Self {
             version_name: instance.manifest.id.clone(),
             version_type: instance.manifest.version_type,
-            game_directory: std::path::absolute(instance_dir)?,
-            assets_root: std::path::absolute(storage.assets_dir())?,
+            game_directory: std::fs::canonicalize(instance_dir)?,
+            assets_root: std::fs::canonicalize(storage.assets_dir())?,
             assets_index_name: instance.manifest.assets.clone(),
             classpath: cp,
             natives_directory: instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            path: std::path::absolute(instance_dir.join("../../../logs"))?,
+            path: std::fs::canonicalize(instance_dir.join("../../../logs"))?,
+            library_directory: storage.libraries_dir().to_owned(),
+            classpath_separator: if cfg!(windows) { ";" } else { ":" },
         })
     }
 
@@ -283,6 +293,11 @@ impl Generated {
         vars.insert("launcher_name", self.launcher_name.to_string());
         vars.insert("launcher_version", self.launcher_version.to_string());
         vars.insert("path", self.path.to_string_lossy().into());
+        vars.insert(
+            "library_directory",
+            self.library_directory.to_string_lossy().into(),
+        );
+        vars.insert("classpath_separator", self.classpath_separator.to_string());
     }
 }
 

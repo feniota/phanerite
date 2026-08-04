@@ -52,7 +52,7 @@ impl Instance {
             .assets_indexes()
             .join(format!("{}.json", manifest.asset_index.id));
         let mut index_file = async_fs::File::create(index_file).await?;
-        let assets_index = AssetIndexList::get(&manifest.asset_index, downloader).await?;
+        let assets_index = manifest.asset_index.get_list(downloader).await?;
         let index_json = serde_json::to_vec_pretty(&assets_index)?;
         index_file.write_all(&index_json).await?;
 
@@ -113,8 +113,7 @@ impl Instance {
             Err(_) => {
                 let _ = async_fs::remove_file(&index_path).await;
                 let mut index_file = async_fs::File::create(&index_path).await?;
-                let assets_index =
-                    AssetIndexList::get(&self.manifest.asset_index, downloader).await?;
+                let assets_index = self.manifest.asset_index.get_list(downloader).await?;
                 let index_json = serde_json::to_vec_pretty(&assets_index)?;
                 index_file.write_all(&index_json).await?;
                 Ok(open().await?)

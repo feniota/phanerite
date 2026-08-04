@@ -13,14 +13,17 @@ use url::Url;
 static RESOURCES_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://resources.download.minecraft.net").unwrap());
 
-impl AssetIndexList {
-    pub async fn get(index: &AssetIndex, downloader: &Downloader) -> Result<Self> {
+impl AssetIndex {
+    pub async fn get_list(&self, downloader: &Downloader) -> Result<AssetIndexList> {
         let body = downloader
-            .fetch(&index.url, Some(index.sha1.clone().into()))
+            .fetch(&self.url, Some(self.sha1.clone().into()))
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)
     }
+}
+
+impl AssetIndexList {
     pub fn build_assets_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
         self.objects.into_iter().map(|(name, object)| {
             let hash = &object.hash.to_string();
@@ -48,8 +51,8 @@ pub struct AssetIndexList {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct AssetObject {
-    hash: Sha1Hash,
-    size: u64,
+    pub hash: Sha1Hash,
+    pub size: u64,
 }
 
 impl AssetIndex {

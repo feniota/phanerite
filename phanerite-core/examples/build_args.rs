@@ -1,5 +1,4 @@
 use phanerite_core::instance::Instance;
-use phanerite_core::instance::variables::Variables;
 use phanerite_core::storage::Storage;
 use std::error::Error;
 use tracing::Level;
@@ -11,19 +10,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     smol::block_on(async {
         let storage = Storage::new(".minecraft")?;
         let instance = Instance::open("1.21.1-nf", &storage).await?;
-        let variables = Variables::builder()
-            .required(
-                "Steve",
-                "10000000-0000-0000-0000-000000000000",
-                "20000000-0000-0000-0000-000000000000",
-            )
-            .modern(
-                "30000000-0000-0000-0000-000000000000",
-                "40000000-0000-0000-0000-000000000000",
-            )
-            .feature("is_demo_user")
-            .build(&instance, &storage)?;
-        let arguments = variables.to_arguments(&instance);
+        let auth = phanerite_core::auth::offline::Authentication::new("Steve");
+        let arguments = auth.args(&instance, &storage)?;
 
         for i in arguments.iter() {
             println!("{}", i)

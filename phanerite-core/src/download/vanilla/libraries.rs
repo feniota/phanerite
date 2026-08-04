@@ -29,7 +29,7 @@ impl Library {
     pub fn to_native_task(
         &self,
         features: &HashSet<&'static str>,
-        native_dir: &Path,
+        native_dir: impl AsRef<Path>,
     ) -> Option<DownloadTask> {
         if !self.allowed_env(features) {
             return None;
@@ -47,7 +47,7 @@ impl Library {
             let artifact = classifiers.get(classifier_key)?;
             return Some(native_download(
                 artifact,
-                native_dir,
+                native_dir.as_ref(),
                 &format!("{}-{}", self.name, classifier_key),
                 self.extract.as_ref(),
             ));
@@ -73,7 +73,7 @@ impl Library {
             let a = self.downloads.as_ref()?.artifact.clone()?;
             return Some(native_download(
                 &a,
-                native_dir,
+                native_dir.as_ref(),
                 &self.name.to_string(),
                 self.extract.as_ref(),
             ));

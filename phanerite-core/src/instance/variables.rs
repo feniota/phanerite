@@ -244,7 +244,7 @@ struct Generated {
 }
 
 impl Generated {
-    fn from_instance(instance: &Instance, storage: &Storage) -> Result<Self> {
+    fn from_instance<R, C>(instance: &Instance<R, C>, storage: &Storage) -> Result<Self> {
         let instance_dir = &instance.instance_dir;
 
         let cp = instance
@@ -323,7 +323,7 @@ macro_rules! insert_fields {
 
 /// 旧版配置
 impl VariablesBuilder<String, String, Missing> {
-    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
+    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -350,7 +350,7 @@ impl VariablesBuilder<String, String, Missing> {
 
 /// 新版配置
 impl VariablesBuilder<String, Missing, String> {
-    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
+    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(
@@ -389,7 +389,7 @@ impl VariablesBuilder<String, Missing, String> {
 }
 
 impl VariablesBuilder<String, String, String> {
-    pub fn build(self, instance: &Instance, storage: &Storage) -> Result<Variables> {
+    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
         let mut vars = HashMap::new();
 
         insert_fields!(

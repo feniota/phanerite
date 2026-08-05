@@ -12,7 +12,7 @@ pub mod fabric;
 pub mod forge;
 pub mod neoforge;
 
-impl Instance {
+impl<R, C> Instance<'_, R, C> {
     /// 由于模组加载器而存在的额外下载任务
     /// 需要手动注册
     pub(crate) async fn extra_downloads(

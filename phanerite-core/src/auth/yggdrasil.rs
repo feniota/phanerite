@@ -1,13 +1,13 @@
 use crate::download::authlib_injector::AuthlibInjector;
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
-use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
+use crate::instance::Instance;
 use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -46,7 +46,7 @@ impl<T> Response<T> {
     }
 }
 
-pub struct Authentication {
+pub struct Authentication<'a> {
     access_token: SecretString,
     client_token: SecretString,
 
@@ -70,10 +70,13 @@ pub struct Authentication {
     pub signature_publickey: String,
     /// 服务器元信息
     pub meta_info: MetaInfo,
+
+    authlib_injector: Option<&'a AuthlibInjector<'a>>,
 }
 
 pub struct Login<'a, S, U, P> {
     downloader: &'a Downloader,
+    authlib_injector: Option<&'a AuthlibInjector<'a>>,
 
     // 登录服务器
     server: S,
@@ -88,11 +91,12 @@ pub struct Login<'a, S, U, P> {
 
 pub struct Missing;
 
-impl Authentication {
+impl Authentication<'_> {
     /// 创建登录会话
     pub fn new_login(downloader: &Downloader) -> Login<'_, Missing, Missing, Missing> {
         Login {
             downloader,
+            authlib_injector: None,
             server: Missing,
             skin_domains: vec![],
             signature_publickey: None,
@@ -242,7 +246,7 @@ impl Authentication {
         Ok(encoded)
     }
     /// 生成启动参数
-    pub fn args(&self, instance: &Instance, storage: &Storage) -> Result<LaunchArguments> {
+    fn args<R, C>(&self, instance: &Instance<R, C>, storage: &Storage) -> Result<LaunchArguments> {
         let Some(profile) = &self.selected_profile else {
             return Err(Error::other("No selected profile"));
         };
@@ -259,9 +263,9 @@ impl Authentication {
         let arguments = variables.to_arguments(instance);
         Ok(arguments)
     }
-    pub async fn injected_args(
+    async fn injected_args<R, C>(
         &self,
-        instance: &Instance,
+        instance: &Instance<'_, R, C>,
         storage: &Storage,
         authlib_injector: &AuthlibInjector<'_>,
     ) -> Result<LaunchArguments> {
@@ -281,12 +285,33 @@ impl Authentication {
     }
 }
 
+impl super::Authentication for Authentication<'_> {
+    async fn args<R, C>(
+        &self,
+        instance: &Instance<'_, R, C>,
+        storage: &Storage,
+    ) -> Result<LaunchArguments> {
+        Ok(match self.authlib_injector {
+            None => self.args(instance, storage)?,
+            Some(i) => self.injected_args(instance, storage, i).await?,
+        })
+    }
+}
+
+impl<'a, S, U, P> Login<'a, S, U, P> {
+    pub fn inject(mut self, authlib_injector: &'a AuthlibInjector) -> Self {
+        self.authlib_injector = Some(authlib_injector);
+        self
+    }
+}
+
 impl<'a, U, P> Login<'a, Missing, U, P> {
     pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P>> {
         let url = self.get_ali(url.into()).await;
         self.update_meta(&url).await?;
         Ok(Login {
             downloader: self.downloader,
+            authlib_injector: self.authlib_injector,
             server: url,
             skin_domains: self.skin_domains,
             signature_publickey: self.signature_publickey,
@@ -322,6 +347,7 @@ impl<'a, S, P> Login<'a, S, Missing, P> {
     pub fn username(self, username: impl Into<String>) -> Login<'a, S, String, P> {
         Login {
             downloader: self.downloader,
+            authlib_injector: self.authlib_injector,
             server: self.server,
             skin_domains: self.skin_domains,
             signature_publickey: self.signature_publickey,
@@ -336,6 +362,7 @@ impl<'a, S, U> Login<'a, S, U, Missing> {
     pub fn password(self, password: impl Into<String>) -> Login<'a, S, U, SecretString> {
         Login {
             downloader: self.downloader,
+            authlib_injector: self.authlib_injector,
             server: self.server,
             skin_domains: self.skin_domains,
             signature_publickey: self.signature_publickey,
@@ -392,7 +419,7 @@ pub struct ProfileProperty {
 }
 
 impl<'a> Login<'a, Url, String, SecretString> {
-    pub async fn login(self) -> Result<Authentication> {
+    pub async fn login(self) -> Result<Authentication<'a>> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
 
         #[derive(Serialize)]
@@ -453,6 +480,7 @@ impl<'a> Login<'a, Url, String, SecretString> {
                 .signature_publickey
                 .expect("Unreachable code: Server meta information does not exist"),
             meta_info: self.meta_info,
+            authlib_injector: self.authlib_injector,
         })
     }
 }

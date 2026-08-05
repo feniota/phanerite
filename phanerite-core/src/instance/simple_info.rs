@@ -12,7 +12,7 @@ pub struct SimpleInfo {
     pub version_type: VersionType,
 }
 
-impl Instance {
+impl<R, C> Instance<'_, R, C> {
     /// 简要列出实例列表
     pub async fn list(storage: &Storage) -> Result<Vec<SimpleInfo>> {
         let stream = async_fs::read_dir(storage.versions_dir())

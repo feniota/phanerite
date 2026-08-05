@@ -34,7 +34,7 @@ fn main() -> error::Result<()> {
         group.extend(
             Instance::create(manifest, &version.id, &storage, &downloader)
                 .await?
-                .install(HashSet::new(), &storage)
+                .install(HashSet::new())
                 .await?,
         );
 

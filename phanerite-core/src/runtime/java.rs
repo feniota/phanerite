@@ -2,8 +2,8 @@ use crate::download::downloader::Downloader;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
+use crate::instance::Instance;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
 use futures::StreamExt;
@@ -18,19 +18,13 @@ const JAVA_BIN_NAME: &str = "java.exe";
 #[cfg(not(target_os = "windows"))]
 const JAVA_BIN_NAME: &str = "java";
 
-impl Instance {
+impl<R, C> Instance<'_, R, C> {
     pub async fn install_java<J: JavaDownload>(
         &self,
         downloader: &Downloader,
         storage: &Storage,
     ) -> Result<Option<DownloadTask>> {
-        if list_build_in(storage.runtime_dir())
-            .await
-            .unwrap_or_default()
-            .iter()
-            .find(|x| x.major == self.manifest.java_version.major_version)
-            .is_some()
-        {
+        if self.find_java(storage).await.into_iter().next().is_some() {
             return Ok(None);
         }
         let task = J::get_major(
@@ -60,7 +54,7 @@ impl InstanceManifest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JavaRuntime {
     pub name: String,
     pub major: u32,

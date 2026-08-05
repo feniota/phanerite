@@ -1,3 +1,4 @@
+use phanerite_core::auth::Authentication;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
 use std::error::Error;
@@ -11,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let storage = Storage::new(".minecraft")?;
         let instance = Instance::open("1.21.1-nf", &storage).await?;
         let auth = phanerite_core::auth::offline::Authentication::new("Steve");
-        let arguments = auth.args(&instance, &storage)?;
+        let arguments = auth.args(&instance, &storage).await?;
 
         for i in arguments.iter() {
             println!("{}", i)

@@ -1,8 +1,10 @@
+use crate::auth::Authentication;
 use crate::download::downloader::Downloader;
 use crate::download::task::{DownloadTask, filter_existed, filter_hash};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::{Error, Result};
 use crate::instance::manifest::InstanceManifest;
+use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -15,18 +17,143 @@ pub mod overlay;
 pub mod simple_info;
 pub mod variables;
 
-pub struct Instance {
+pub struct NotReady;
+pub struct Ready;
+
+pub struct Instance<'a, R, C> {
     pub instance_dir: PathBuf,
     pub manifest: InstanceManifest,
+
+    pub storage: &'a Storage,
+
+    /// Runtime 的准备状态
+    /// JavaRuntime 或 NotReady
+    pub runtime: R,
+    /// 游戏完整性状态
+    /// Ready 或 NotReady
+    pub completeness: C,
 }
 
-impl Instance {
+impl<R, C> Instance<'_, R, C> {
     /// 获取当前实例的游戏文件路径
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
+    /// 修复 Assets 索引（如果打开失败）
+    pub async fn fix_assets_index(&self, downloader: &Downloader) -> Result<AssetIndexList> {
+        let index_path = self
+            .storage
+            .assets_indexes()
+            .join(format!("{}.json", self.manifest.assets));
+        let open = async || {
+            let mut assets_manifest = Vec::new();
+            async_fs::File::open(&index_path)
+                .await?
+                .read_to_end(&mut assets_manifest)
+                .await?;
+            let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
+            Ok::<AssetIndexList, Error>(assets_manifest)
+        };
+        match open().await {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                let _ = async_fs::remove_file(&index_path).await;
+                let mut index_file = async_fs::File::create(&index_path).await?;
+                let assets_index = self.manifest.asset_index.get_list(downloader).await?;
+                let index_json = serde_json::to_vec_pretty(&assets_index)?;
+                index_file.write_all(&index_json).await?;
+                Ok(open().await?)
+            }
+        }
+    }
+    /// 粗略检查游戏完整性，返回缺失文件
+    /// 检查 Assets 索引，不检查压缩包，不校验 Hash
+    pub async fn check_exist(
+        &self,
+        features: HashSet<&'static str>,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let tasks = self.install(features).await?;
+        let tasks = filter_existed(tasks, false);
+        Ok(tasks)
+    }
+    /// 检查游戏完整性，返回缺失文件
+    /// 检查 Assets 索引，重下压缩包，校验 Hash
+    pub async fn check_full(
+        &self,
+        features: HashSet<&'static str>,
+        downloader: &Downloader,
+    ) -> Result<Vec<DownloadTask>> {
+        self.fix_assets_index(downloader).await?;
+        let tasks = futures::stream::iter(self.install(features).await?);
+        let tasks = filter_hash(tasks, true).collect().await;
+        Ok(tasks)
+    }
+
+    /// 构建下载任务，并减少下载量
+    pub async fn install_less(
+        &self,
+        features: HashSet<&'static str>,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let full = self.install(features).await?;
+        Ok(filter_existed(full, true))
+    }
+    /// 构建完整下载任务
+    pub async fn install(
+        &self,
+        features: HashSet<&'static str>,
+    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        // Assets
+        let assets_index = self
+            .storage
+            .assets_indexes()
+            .join(format!("{}.json", self.manifest.assets));
+        let mut assets_manifest = Vec::new();
+        async_fs::File::open(assets_index)
+            .await?
+            .read_to_end(&mut assets_manifest)
+            .await?;
+        let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
+        let assets_task = assets_manifest.build_assets_task(self.storage);
+
+        // Libraries
+        let native_dir = self.instance_dir.join("native");
+        let libraries_task = self
+            .manifest
+            .libraries
+            .iter()
+            .scan((features, native_dir), |(f, n), x| {
+                Some([x.to_task(self.storage, f), x.to_native_task(f, n)])
+            })
+            .flatten()
+            .flatten();
+
+        // Extra
+        let extra = self.extra_downloads(self.storage).await?;
+
+        // Client
+        let file_name = format!("{}.jar", self.manifest.id);
+        let client_task = self.manifest.downloads.client.as_ref().map(|c| {
+            DownloadTask::builder()
+                .url(c.url.clone())
+                .to_path(self.instance_dir.join(&file_name))
+                .share()
+                .file_name(file_name)
+                .file_size(c.size)
+                .hash(c.sha1.clone())
+                .build()
+        });
+
+        Ok(client_task
+            .into_iter()
+            .chain(assets_task)
+            .chain(libraries_task)
+            .chain(extra))
+    }
+}
+
+impl<'a> Instance<'a, NotReady, NotReady> {
     /// 创建实例
-    pub async fn create<'a>(
+    pub async fn create(
         manifest: impl Into<InstanceManifest>,
         name: impl AsRef<str>,
         storage: &'a Storage,
@@ -59,127 +186,50 @@ impl Instance {
         Self::open(name, storage).await
     }
     /// 打开本地实例
-    pub async fn open(name: impl AsRef<str>, storage: &Storage) -> Result<Self> {
+    pub async fn open(name: impl AsRef<str>, storage: &'a Storage) -> Result<Self> {
         let instance_dir = std::path::absolute(storage.versions_dir().join(name.as_ref()))?;
         let json = find_manifest(name.as_ref(), &instance_dir).await?;
         Ok(Self {
             instance_dir,
             manifest: serde_json::from_slice::<InstanceManifest>(&json)?,
+            storage,
+            runtime: NotReady,
+            completeness: NotReady,
         })
     }
-    /// 粗略检查游戏完整性，返回缺失文件
-    /// 检查 Assets 索引，不检查压缩包，不校验 Hash
-    pub async fn check_exist(
-        &self,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
-        let tasks = self.install(HashSet::new(), storage).await?;
-        let tasks = filter_existed(tasks, false);
-        Ok(tasks)
-    }
-    /// 检查游戏完整性，返回缺失文件
-    /// 检查 Assets 索引，重下压缩包，校验 Hash
-    pub async fn check_full(
-        &self,
-        features: HashSet<&'static str>,
-        storage: &Storage,
-        downloader: &Downloader,
-    ) -> Result<Vec<DownloadTask>> {
-        self.fix_assets_index(storage, downloader).await?;
-        let tasks = futures::stream::iter(self.install(features, storage).await?);
-        let tasks = filter_hash(tasks, true).collect().await;
-        Ok(tasks)
-    }
-    /// 修复 Assets 索引（如果打开失败）
-    pub async fn fix_assets_index(
-        &self,
-        storage: &Storage,
-        downloader: &Downloader,
-    ) -> Result<AssetIndexList> {
-        let index_path = storage
-            .assets_indexes()
-            .join(format!("{}.json", self.manifest.assets));
-        let open = async || {
-            let mut assets_manifest = Vec::new();
-            async_fs::File::open(&index_path)
-                .await?
-                .read_to_end(&mut assets_manifest)
-                .await?;
-            let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
-            Ok::<AssetIndexList, Error>(assets_manifest)
-        };
-        match open().await {
-            Ok(v) => Ok(v),
-            Err(_) => {
-                let _ = async_fs::remove_file(&index_path).await;
-                let mut index_file = async_fs::File::create(&index_path).await?;
-                let assets_index = self.manifest.asset_index.get_list(downloader).await?;
-                let index_json = serde_json::to_vec_pretty(&assets_index)?;
-                index_file.write_all(&index_json).await?;
-                Ok(open().await?)
-            }
+}
+
+impl<'a, R> Instance<'a, R, NotReady> {
+    /// 确定已经完成了完整性检查
+    pub fn ensure_ready(self) -> Instance<'a, R, Ready> {
+        Instance {
+            instance_dir: self.instance_dir,
+            manifest: self.manifest,
+            storage: self.storage,
+            runtime: self.runtime,
+            completeness: Ready,
         }
     }
-    /// 构建下载任务，并减少下载量
-    pub async fn install_less(
-        &self,
-        features: HashSet<&'static str>,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
-        let full = self.install(features, storage).await?;
-        Ok(filter_existed(full, true))
+}
+
+impl<'a, R, C> Instance<'a, R, C> {
+    pub async fn bind_java(self, java: JavaRuntime) -> Result<Instance<'a, JavaRuntime, C>> {
+        Ok(Instance {
+            instance_dir: self.instance_dir,
+            manifest: self.manifest,
+            storage: self.storage,
+            runtime: java,
+            completeness: self.completeness,
+        })
     }
-    /// 构建完整下载任务
-    pub async fn install(
-        &self,
-        features: HashSet<&'static str>,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
-        // Assets
-        let assets_index = storage
-            .assets_indexes()
-            .join(format!("{}.json", self.manifest.assets));
-        let mut assets_manifest = Vec::new();
-        async_fs::File::open(assets_index)
-            .await?
-            .read_to_end(&mut assets_manifest)
-            .await?;
-        let assets_manifest = serde_json::from_slice::<AssetIndexList>(&assets_manifest)?;
-        let assets_task = assets_manifest.build_assets_task(storage);
+}
 
-        // Libraries
-        let native_dir = self.instance_dir.join("native");
-        let libraries_task = self
-            .manifest
-            .libraries
-            .iter()
-            .scan((features, native_dir), |(f, n), x| {
-                Some([x.to_task(storage, f), x.to_native_task(f, n)])
-            })
-            .flatten()
-            .flatten();
-
-        // Extra
-        let extra = self.extra_downloads(storage).await?;
-
-        // Client
-        let file_name = format!("{}.jar", self.manifest.id);
-        let client_task = self.manifest.downloads.client.as_ref().map(|c| {
-            DownloadTask::builder()
-                .url(c.url.clone())
-                .to_path(self.instance_dir.join(&file_name))
-                .share()
-                .file_name(file_name)
-                .file_size(c.size)
-                .hash(c.sha1.clone())
-                .build()
-        });
-
-        Ok(client_task
-            .into_iter()
-            .chain(assets_task)
-            .chain(libraries_task)
-            .chain(extra))
+impl Instance<'_, JavaRuntime, Ready> {
+    pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Child> {
+        let child = async_process::Command::new(self.runtime.clone())
+            .args(auth.args(self, self.storage).await?.iter())
+            .spawn()?;
+        Ok(child)
     }
 }
 

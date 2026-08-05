@@ -18,7 +18,14 @@ impl Authentication {
             nickname,
         }
     }
-    pub fn args(&self, instance: &Instance, storage: &Storage) -> Result<LaunchArguments> {
+}
+
+impl super::Authentication for Authentication {
+    async fn args<R, C>(
+        &self,
+        instance: &Instance<'_, R, C>,
+        storage: &Storage,
+    ) -> Result<LaunchArguments> {
         let variables = Variables::builder()
             .required(&self.nickname, self.uuid.to_string(), "0")
             .legacy("0", "legacy")

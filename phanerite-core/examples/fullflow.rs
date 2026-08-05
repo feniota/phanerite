@@ -2,19 +2,19 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
-use phanerite_core::download::mod_loader::LoaderMeta;
 use phanerite_core::download::mod_loader::neoforge::NeoForge;
+use phanerite_core::download::mod_loader::LoaderMeta;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::{BTreeSet, HashSet};
-use tracing::{Level, error};
+use tracing::{error, Level};
 use url::Url;
 
 fn main() {
-    // let _ = dotenvy::dotenv();
+    let _ = dotenvy::dotenv();
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
         let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
@@ -50,7 +50,7 @@ fn main() {
         let instance = Instance::create(version, "1.21.1-nf", &storage, &downloader).await?;
 
         let mut group = DownloadGroup::new();
-        group.extend(instance.install_less(HashSet::new(), &storage).await?);
+        group.extend(instance.install_less(HashSet::new()).await?);
         group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
         group.extend(injector.update(&downloader).await?);
 
@@ -86,6 +86,7 @@ fn main() {
         errs.iter().for_each(|e| error!("{}", e));
 
         let auth = Authentication::new_login(&downloader)
+            .inject(&injector)
             .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
             .await?
             .username(
@@ -99,12 +100,19 @@ fn main() {
             .login()
             .await?;
 
-        let arguments = auth.injected_args(&instance, &storage, &injector).await?;
-        let java = instance.find_java(&storage).await.remove(0);
+        let java = instance
+            .find_java(&storage)
+            .await
+            .into_iter()
+            .next()
+            .ok_or(Error::other("No available java"))?;
 
-        async_process::Command::new(java)
-            .args(arguments.iter())
-            .spawn()?;
+        instance
+            .ensure_ready()
+            .bind_java(java)
+            .await?
+            .launch(&auth)
+            .await?;
 
         Ok::<(), Error>(())
     }) {

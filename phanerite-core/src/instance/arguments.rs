@@ -11,7 +11,7 @@ pub struct LaunchArguments {
 }
 
 impl Variables {
-    pub fn to_arguments(&self, instance: &Instance) -> LaunchArguments {
+    pub fn to_arguments<R, C>(&self, instance: &Instance<R, C>) -> LaunchArguments {
         let main_class = instance.manifest.main_class.to_string();
         if let Some(args) = &instance.manifest.arguments {
             let flattened_jvm = flatten_arguments(args.jvm.iter(), &self.feat).peekable();

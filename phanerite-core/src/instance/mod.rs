@@ -39,8 +39,16 @@ impl<R, C> Instance<'_, R, C> {
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
+    /// 持久化版本清单
+    pub async fn save(&self) -> Result<()> {
+        let file = self.instance_dir.join(format!("{}.json", self.manifest.id));
+        let mut file = async_fs::File::create(file).await?;
+        let json = serde_json::to_vec_pretty(&self.manifest.id)?;
+        file.write_all(&json).await?;
+        Ok(())
+    }
     /// 修复 Assets 索引（如果打开失败）
-    pub async fn fix_assets_index(&self, downloader: &Downloader) -> Result<AssetIndexList> {
+    pub async fn fix_assets_index(&self, downloader: &Downloader<'_>) -> Result<AssetIndexList> {
         let index_path = self
             .storage
             .assets_indexes()
@@ -81,7 +89,7 @@ impl<R, C> Instance<'_, R, C> {
     pub async fn check_full(
         &self,
         features: HashSet<&'static str>,
-        downloader: &Downloader,
+        downloader: &Downloader<'_>,
     ) -> Result<Vec<DownloadTask>> {
         self.fix_assets_index(downloader).await?;
         let tasks = futures::stream::iter(self.install(features).await?);
@@ -155,21 +163,25 @@ impl<'a> Instance<'a, NotReady, NotReady> {
     /// 创建实例
     pub async fn create(
         manifest: impl Into<InstanceManifest>,
-        name: impl AsRef<str>,
+        name: Option<impl AsRef<str>>,
         storage: &'a Storage,
-        downloader: &'a Downloader,
+        downloader: &'a Downloader<'a>,
     ) -> Result<Self> {
-        let manifest = manifest.into().rename(name.as_ref());
+        let manifest = if let Some(name) = name {
+            manifest.into().rename(name.as_ref())
+        } else {
+            manifest.into()
+        };
 
         // 准备实例目录
-        let path = storage.versions_dir().join(name.as_ref());
+        let path = storage.versions_dir().join(&manifest.id);
         if path.exists() {
             return Err(Error::other("Instance exists"));
         }
         async_fs::create_dir_all(&path).await?;
 
         // versions/{name}/{name}.json
-        let info_file = path.join(format!("{}.json", name.as_ref()));
+        let info_file = path.join(format!("{}.json", manifest.id));
         let mut info_file = async_fs::File::create(info_file).await?;
         let info_json = serde_json::to_vec_pretty(&manifest)?;
         info_file.write_all(&info_json).await?;
@@ -183,11 +195,11 @@ impl<'a> Instance<'a, NotReady, NotReady> {
         let index_json = serde_json::to_vec_pretty(&assets_index)?;
         index_file.write_all(&index_json).await?;
 
-        Self::open(name, storage).await
+        Self::open(&manifest.id, storage).await
     }
     /// 打开本地实例
     pub async fn open(name: impl AsRef<str>, storage: &'a Storage) -> Result<Self> {
-        let instance_dir = std::path::absolute(storage.versions_dir().join(name.as_ref()))?;
+        let instance_dir = storage.versions_dir().join(name.as_ref());
         let json = find_manifest(name.as_ref(), &instance_dir).await?;
         Ok(Self {
             instance_dir,
@@ -226,8 +238,20 @@ impl<'a, R, C> Instance<'a, R, C> {
 
 impl Instance<'_, JavaRuntime, Ready> {
     pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Child> {
+        let arg_path = self.instance_dir.join("arguments");
+        let mut arg_file = async_fs::File::create(&arg_path).await?;
+
+        for line in auth.args(self, self.storage).await?.iter() {
+            arg_file.write_all(line.as_bytes()).await?;
+            arg_file.write_all(b"\n").await?;
+        }
+        drop(arg_file);
+
         let child = async_process::Command::new(self.runtime.clone())
-            .args(auth.args(self, self.storage).await?.iter())
+            .arg(format!(
+                "@{}",
+                std::path::absolute(arg_path)?.to_string_lossy()
+            ))
             .spawn()?;
         Ok(child)
     }

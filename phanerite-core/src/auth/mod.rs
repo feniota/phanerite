@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::instance::arguments::LaunchArguments;
 use crate::instance::Instance;
+use crate::instance::arguments::LaunchArguments;
 use crate::storage::Storage;
 
 pub mod offline;

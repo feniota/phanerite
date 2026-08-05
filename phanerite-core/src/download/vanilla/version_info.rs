@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 impl Version {
-    pub async fn get_manifest(&self, downloader: &Downloader) -> Result<VersionManifest> {
+    pub async fn get_manifest(&self, downloader: &Downloader<'_>) -> Result<VersionManifest> {
         let body = downloader
             .fetch(&self.url, Some(self.sha1.clone().into()))
             .await?;

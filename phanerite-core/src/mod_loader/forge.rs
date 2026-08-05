@@ -1,10 +1,11 @@
+/*
 use crate::download::downloader::Downloader;
-use crate::download::mod_loader::neoforge::MetaData;
-use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
 use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
+use crate::mod_loader::neoforge::MetaData;
+use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
 use serde::{Deserialize, Deserializer};
@@ -141,3 +142,4 @@ impl<'de> Deserialize<'de> for ForgeVersion {
         })
     }
 }
+*/

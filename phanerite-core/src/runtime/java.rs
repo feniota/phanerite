@@ -2,8 +2,8 @@ use crate::download::downloader::Downloader;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::instance::manifest::InstanceManifest;
 use crate::instance::Instance;
+use crate::instance::manifest::InstanceManifest;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
 use futures::StreamExt;
@@ -18,33 +18,40 @@ const JAVA_BIN_NAME: &str = "java.exe";
 #[cfg(not(target_os = "windows"))]
 const JAVA_BIN_NAME: &str = "java";
 
+pub async fn install_java<J: JavaDownload>(
+    major: u32,
+    storage: &Storage,
+    downloader: &Downloader<'_>,
+) -> Result<Option<DownloadTask>> {
+    if find_java(major, storage).await.into_iter().next().is_some() {
+        return Ok(None);
+    }
+    let task = J::get_major(major, downloader, storage).await?;
+    Ok(Some(task))
+}
+
+pub async fn find_java(major: u32, storage: &Storage) -> Vec<JavaRuntime> {
+    let build_in = list_build_in(storage.runtime_dir())
+        .await
+        .unwrap_or_default();
+    let system = detect_system().await.unwrap_or_default();
+    build_in
+        .into_iter()
+        .chain(system)
+        .filter(|x| x.major == major)
+        .collect()
+}
+
 impl<R, C> Instance<'_, R, C> {
     pub async fn install_java<J: JavaDownload>(
         &self,
-        downloader: &Downloader,
         storage: &Storage,
+        downloader: &Downloader<'_>,
     ) -> Result<Option<DownloadTask>> {
-        if self.find_java(storage).await.into_iter().next().is_some() {
-            return Ok(None);
-        }
-        let task = J::get_major(
-            self.manifest.java_version.major_version,
-            downloader,
-            storage,
-        )
-        .await?;
-        Ok(Some(task))
+        install_java::<J>(self.manifest.java_major(), storage, downloader).await
     }
     pub async fn find_java(&self, storage: &Storage) -> Vec<JavaRuntime> {
-        let build_in = list_build_in(storage.runtime_dir())
-            .await
-            .unwrap_or_default();
-        let system = detect_system().await.unwrap_or_default();
-        build_in
-            .into_iter()
-            .chain(system)
-            .filter(|x| x.major == self.manifest.java_version.major_version)
-            .collect()
+        find_java(self.manifest.java_major(), storage).await
     }
 }
 

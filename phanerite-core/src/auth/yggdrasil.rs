@@ -1,13 +1,13 @@
 use crate::download::authlib_injector::AuthlibInjector;
 use crate::download::downloader::Downloader;
 use crate::error::{Error, Result};
+use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -75,7 +75,7 @@ pub struct Authentication<'a> {
 }
 
 pub struct Login<'a, S, U, P> {
-    downloader: &'a Downloader,
+    downloader: &'a Downloader<'a>,
     authlib_injector: Option<&'a AuthlibInjector<'a>>,
 
     // 登录服务器
@@ -91,9 +91,9 @@ pub struct Login<'a, S, U, P> {
 
 pub struct Missing;
 
-impl Authentication<'_> {
+impl<'a> Authentication<'a> {
     /// 创建登录会话
-    pub fn new_login(downloader: &Downloader) -> Login<'_, Missing, Missing, Missing> {
+    pub fn new_login(downloader: &'a Downloader<'a>) -> Login<'a, Missing, Missing, Missing> {
         Login {
             downloader,
             authlib_injector: None,
@@ -114,7 +114,7 @@ impl Authentication<'_> {
     pub async fn refresh(
         &mut self,
         update_user: bool,
-        downloader: &Downloader,
+        downloader: &Downloader<'_>,
         select_profile: impl FnMut(&&GameProfile) -> bool,
     ) -> Result<()> {
         #[derive(Serialize)]
@@ -149,6 +149,7 @@ impl Authentication<'_> {
         let mut url = self.server.clone();
         url.path_segments_mut()
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .pop_if_empty()
             .extend(&["authserver", "refresh"]);
         let (_, res) = downloader.post_json(&url, req).await?;
         let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
@@ -163,7 +164,7 @@ impl Authentication<'_> {
         Ok(())
     }
     /// 检验令牌
-    pub async fn validate(&self, downloader: &Downloader) -> Result<bool> {
+    pub async fn validate(&self, downloader: &Downloader<'_>) -> Result<bool> {
         #[derive(Serialize)]
         struct RequestValidate<'a> {
             access_token: &'a str,
@@ -179,13 +180,14 @@ impl Authentication<'_> {
         let mut url = self.server.clone();
         url.path_segments_mut()
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .pop_if_empty()
             .extend(&["authserver", "validate"]);
         let (status, _) = downloader.post_json(&url, req).await?;
 
         if status == 204 { Ok(true) } else { Ok(false) }
     }
     /// 吊销令牌
-    pub async fn invalidate(&self, downloader: &Downloader) -> Result<()> {
+    pub async fn invalidate(&self, downloader: &Downloader<'_>) -> Result<()> {
         #[derive(Serialize)]
         struct RequestInvalidate<'a> {
             access_token: &'a str,
@@ -201,13 +203,14 @@ impl Authentication<'_> {
         let mut url = self.server.clone();
         url.path_segments_mut()
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .pop_if_empty()
             .extend(&["authserver", "invalidate"]);
         let (_, _) = downloader.post_json(&url, req).await?;
 
         Ok(())
     }
     /// 退出登录
-    pub async fn signout(&self, downloader: &Downloader) -> Result<()> {
+    pub async fn signout(&self, downloader: &Downloader<'_>) -> Result<()> {
         #[derive(Serialize)]
         struct RequestSignout<'a> {
             username: &'a str,
@@ -223,6 +226,7 @@ impl Authentication<'_> {
         let mut url = self.server.clone();
         url.path_segments_mut()
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .pop_if_empty()
             .extend(&["authserver", "signout"]);
         let (status, err) = downloader.post_json(&url, req).await?;
 
@@ -462,6 +466,7 @@ impl<'a> Login<'a, Url, String, SecretString> {
         let mut url = self.server.clone();
         url.path_segments_mut()
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
+            .pop_if_empty()
             .extend(&["authserver", "authenticate"]);
         let (_, res) = self.downloader.post_json(&url, &req).await?;
         let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;

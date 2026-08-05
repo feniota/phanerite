@@ -3,6 +3,7 @@ pub mod bucket;
 use crate::error::Result;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use uuid::Uuid;
 
 /// `Storage` 包含了启动器需要持久储存数据的地址
 /// 作为依赖注入到启动器的文件系统操作中
@@ -69,8 +70,11 @@ impl Storage {
         &self.root_dir
     }
 
-    pub fn cache_dir(&self) -> &Path {
+    fn cache_dir(&self) -> &Path {
         self.cache_dir.get_or_init(|| dir(&self.root_dir, "cache"))
+    }
+    pub fn temp_path(&self) -> PathBuf {
+        self.cache_dir().join(Uuid::now_v7().to_string())
     }
     pub fn versions_dir(&self) -> &Path {
         self.versions_dir

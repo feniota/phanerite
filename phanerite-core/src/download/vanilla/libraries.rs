@@ -83,7 +83,7 @@ impl Library {
     }
     fn allowed_env(&self, features: &HashSet<&'static str>) -> bool {
         self.rules.as_ref().is_none_or(|x| {
-            x.iter().fold(true, |b, rule| {
+            x.iter().fold(false, |b, rule| {
                 rule.evaluate(features)
                     .map_or(b, |a| matches!(a, Action::Allow))
             })

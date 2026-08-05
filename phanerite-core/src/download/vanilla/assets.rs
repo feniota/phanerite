@@ -14,7 +14,7 @@ static RESOURCES_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://resources.download.minecraft.net").unwrap());
 
 impl AssetIndex {
-    pub async fn get_list(&self, downloader: &Downloader) -> Result<AssetIndexList> {
+    pub async fn get_list(&self, downloader: &Downloader<'_>) -> Result<AssetIndexList> {
         let body = downloader
             .fetch(&self.url, Some(self.sha1.clone().into()))
             .await?;

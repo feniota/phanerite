@@ -32,7 +32,7 @@ fn main() -> error::Result<()> {
 
         let mut group = DownloadGroup::new();
         group.extend(
-            Instance::create(manifest, &version.id, &storage, &downloader)
+            Instance::create(manifest, Some(&version.id), &storage, &downloader)
                 .await?
                 .install(HashSet::new())
                 .await?,

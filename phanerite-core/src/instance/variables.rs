@@ -253,7 +253,7 @@ impl Generated {
             .iter()
             .map(|lib| storage.libraries_dir().join(lib.name.path()))
             .chain(std::iter::once(instance.client_file()))
-            .map(std::fs::canonicalize)
+            .map(std::path::absolute)
             .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
             .try_collect::<HashSet<_>>()?
             .into_iter()
@@ -263,14 +263,14 @@ impl Generated {
         Ok(Self {
             version_name: instance.manifest.id.clone(),
             version_type: instance.manifest.version_type,
-            game_directory: std::fs::canonicalize(instance_dir)?,
-            assets_root: std::fs::canonicalize(storage.assets_dir())?,
+            game_directory: std::path::absolute(instance_dir)?,
+            assets_root: std::path::absolute(storage.assets_dir())?,
             assets_index_name: instance.manifest.assets.clone(),
             classpath: cp,
             natives_directory: instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            path: std::fs::canonicalize(instance_dir.join("../../../logs"))?,
+            path: std::path::absolute(instance_dir.join("../../../logs"))?,
             library_directory: storage.libraries_dir().to_owned(),
             classpath_separator: if cfg!(windows) { ";" } else { ":" },
         })

@@ -42,7 +42,7 @@ impl<'a> AuthlibInjector<'a> {
     pub fn new(storage: &'a Storage) -> Self {
         Self { storage }
     }
-    pub async fn update(&self, downloader: &Downloader) -> Result<Option<DownloadTask>> {
+    pub async fn update(&self, downloader: &Downloader<'_>) -> Result<Option<DownloadTask>> {
         match self.find_latest().await {
             Err(_) => Ok(Some(self.install_latest(downloader).await?)),
             Ok(v) => {
@@ -85,7 +85,7 @@ impl<'a> AuthlibInjector<'a> {
             Some(v) => Ok(v),
         }
     }
-    async fn install_latest(&self, downloader: &Downloader) -> Result<DownloadTask> {
+    async fn install_latest(&self, downloader: &Downloader<'_>) -> Result<DownloadTask> {
         let res = downloader
             .fetch(&AUTHLIB_INJECTOR_LATEST_META, None)
             .await?;

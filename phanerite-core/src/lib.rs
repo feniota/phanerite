@@ -6,6 +6,7 @@ pub mod auth;
 pub mod download;
 pub mod error;
 pub mod instance;
+pub mod mod_loader;
 pub mod runtime;
 pub mod storage;
 pub mod utils;

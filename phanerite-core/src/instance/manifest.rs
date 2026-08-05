@@ -12,16 +12,6 @@ use std::path::Path;
 use strum::{Display, EnumString};
 use url::Url;
 
-/// 用于解析 Forge 的优秀设计
-fn deser_url_allow_empty<'de, D: Deserializer<'de>>(d: D) -> std::result::Result<Url, D::Error> {
-    let s: String = String::deserialize(d)?;
-    if s.is_empty() {
-        Ok(crate::download::mod_loader::forge::UNAVAILABLE_URL.clone())
-    } else {
-        s.parse().map_err(de::Error::custom)
-    }
-}
-
 /// Top-level Minecraft version manifest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,7 +164,6 @@ impl OsInfo {
 pub struct AssetIndex {
     pub total_size: u64,
     pub id: String,
-    #[serde(deserialize_with = "deser_url_allow_empty")]
     pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,
@@ -229,7 +218,6 @@ pub struct Artifact {
 
     pub size: u64,
 
-    #[serde(deserialize_with = "deser_url_allow_empty")]
     pub url: Url,
 }
 
@@ -243,7 +231,6 @@ pub struct Extract {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadInfo {
-    #[serde(deserialize_with = "deser_url_allow_empty")]
     pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,
@@ -285,7 +272,6 @@ pub struct LoggingClient {
 #[serde(rename_all = "camelCase")]
 pub struct LoggingFileInfo {
     pub id: String,
-    #[serde(deserialize_with = "deser_url_allow_empty")]
     pub url: Url,
     pub sha1: Sha1Hash,
     pub size: u64,

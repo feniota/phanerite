@@ -1,15 +1,14 @@
 use crate::download::downloader::Downloader;
-use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
-use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
-use crate::instance::manifest::InstanceManifest;
-use crate::instance::overlay::OverlayManifest;
+use crate::instance::Instance;
+use crate::mod_loader::{LoaderInstall, LoaderMeta};
+use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
+use futures::AsyncWriteExt;
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::io::Read;
 use std::sync::LazyLock;
 use tracing::debug;
 use url::Url;
@@ -30,23 +29,23 @@ pub struct NeoForge {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct MetaData<V> {
-    pub(super) group_id: String,
-    pub(super) artifact_id: String,
-    pub(super) versioning: Versioning<V>,
+pub(crate) struct MetaData<V> {
+    pub(crate) group_id: String,
+    pub(crate) artifact_id: String,
+    pub(crate) versioning: Versioning<V>,
 }
 
 #[derive(Deserialize)]
-pub(super) struct Versioning<V> {
+pub(crate) struct Versioning<V> {
     // latest: ForgeVersion,
     // release: ForgeVersion,
-    pub(super) versions: Versions<V>,
+    pub(crate) versions: Versions<V>,
     // last_updated: String,
 }
 
 #[derive(Deserialize)]
-pub(super) struct Versions<V> {
-    pub(super) version: Vec<V>,
+pub(crate) struct Versions<V> {
+    pub(crate) version: Vec<V>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -58,7 +57,7 @@ pub struct NeoForgeVersion {
 impl LoaderInstall for NeoForge {
     type MetaInfo = NeoForgeVersion;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
-    async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self> {
+    async fn from_version(version: impl AsRef<str>, downloader: &Downloader<'_>) -> Result<Self> {
         let body = downloader.fetch(&NEOFORGE_META, None).await?;
         let reader = std::io::Cursor::new(body);
         let xml = serde_xml_rs::from_reader::<MetaData<NeoForgeVersion>, _>(reader)?;
@@ -70,7 +69,10 @@ impl LoaderInstall for NeoForge {
             .filter(|x| {
                 // NeoForge 去掉了 "1."
                 x.minecraft.strip_prefix("1.").unwrap_or(&x.minecraft)
-                    == version.id.strip_prefix("1.").unwrap_or(&version.id)
+                    == version
+                        .as_ref()
+                        .strip_prefix("1.")
+                        .unwrap_or(version.as_ref())
             })
             .collect();
         Ok(Self {
@@ -79,12 +81,12 @@ impl LoaderInstall for NeoForge {
             list: filter,
         })
     }
-    async fn install<S>(
+    async fn install<C, S>(
         self,
-        mut raw: InstanceManifest,
+        raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader,
-    ) -> Result<InstanceManifest>
+        downloader: &Downloader<'_>,
+    ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
     {
@@ -99,16 +101,14 @@ impl LoaderInstall for NeoForge {
         let url = maven.url(&NEOFORGE_MAVEN)?;
 
         debug!("Downloading NeoForge Installer: {url}");
-
         let body = downloader.fetch(&url, None).await?;
-        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(body))?;
-        let mut manifest = Vec::new();
-        let mut file = archive.by_name("version.json")?;
-        file.read_to_end(&mut manifest)?;
-        let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
+        let file = raw.storage.temp_path();
+        let mut file = async_fs::File::create(file).await?;
+        file.write_all(&body).await?;
 
-        raw.merge_overlay(manifest, 30000);
-        Ok(raw)
+        debug!("Build a virtual installation environment for NeoForge");
+
+        Ok(())
     }
 }
 

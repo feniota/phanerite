@@ -1,10 +1,11 @@
 use crate::download::downloader::Downloader;
-use crate::download::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::download::task::DownloadTask;
-use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
+use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
+use crate::mod_loader::{LoaderInstall, LoaderMeta};
+use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
 use crate::utils::maven::MavenArtifact;
@@ -26,23 +27,23 @@ pub struct Fabric {
 impl LoaderInstall for Fabric {
     type MetaInfo = MetaData;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
-    async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self> {
+    async fn from_version(version: impl AsRef<str>, downloader: &Downloader<'_>) -> Result<Self> {
         let mut url = FABRIC_META.clone();
         url.path_segments_mut()
             .unwrap()
-            .extend(["v2", "versions", "loader", &version.id]);
+            .extend(["v2", "versions", "loader", version.as_ref()]);
 
         let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<Vec<MetaData>>(&body)?;
 
         Ok(Fabric { list: json })
     }
-    async fn install<S>(
+    async fn install<C, S>(
         self,
-        mut raw: InstanceManifest,
+        raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader,
-    ) -> Result<InstanceManifest>
+        downloader: &Downloader<'_>,
+    ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
     {
@@ -53,7 +54,7 @@ impl LoaderInstall for Fabric {
             "v2",
             "versions",
             "loader",
-            &raw.id,
+            &raw.manifest.id,
             &selected.loader.version,
             "profile",
             "json",
@@ -61,8 +62,8 @@ impl LoaderInstall for Fabric {
 
         let body = downloader.fetch(&url, None).await?;
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
-        raw.merge_overlay(json, 30000);
-        Ok(raw)
+        raw.manifest.merge_overlay(json, 30000);
+        Ok(())
     }
     async fn extra_downloads(
         manifest: &InstanceManifest,

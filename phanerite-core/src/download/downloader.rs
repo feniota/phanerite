@@ -10,13 +10,12 @@ use isahc::{AsyncReadResponseExt, HttpClient};
 use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 use tracing::{debug, error, warn};
 use url::Url;
-use uuid::Uuid;
 
-pub struct DownloaderBuilder {
+pub struct DownloaderBuilder<'a> {
     /// 重试次数
     retries: usize,
     /// 最大并发数,
@@ -31,17 +30,13 @@ pub struct DownloaderBuilder {
     large_buffer: usize,
     /// 小文件缓冲大小
     small_buffer: usize,
-    /// 缓存目录
-    cache: PathBuf,
-    /// 共享储存目录
-    bucket: PathBuf,
-    /// 共享储存策略
-    strategy: ShareStrategy,
+
+    storage: &'a Storage,
 }
 
-impl DownloaderBuilder {
+impl<'a> DownloaderBuilder<'a> {
     /// 构建默认下载器
-    fn new(storage: &Storage) -> Self {
+    fn new(storage: &'a Storage) -> Self {
         Self {
             retries: 3,
             concurrency: 32,
@@ -50,9 +45,8 @@ impl DownloaderBuilder {
             small_parallelism: 16,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
-            cache: storage.cache_dir().to_path_buf(),
-            bucket: storage.share_dir().to_path_buf(),
-            strategy: storage.share_strategy,
+
+            storage,
         }
     }
     /// 设置重试次数
@@ -90,7 +84,7 @@ impl DownloaderBuilder {
         self.small_buffer = buffer;
         self
     }
-    pub async fn build(self) -> Result<Downloader> {
+    pub async fn build(self) -> Result<Downloader<'a>> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
@@ -107,9 +101,7 @@ impl DownloaderBuilder {
         Ok(Downloader {
             retries: self.retries,
             concurrency: self.concurrency,
-            cache: self.cache,
-            bucket: self.bucket,
-            strategy: self.strategy,
+            storage: self.storage,
             threshold: self.threshold,
             client: HttpClient::builder()
                 .redirect_policy(RedirectPolicy::Limit(10))
@@ -127,12 +119,10 @@ impl DownloaderBuilder {
     }
 }
 
-pub struct Downloader {
+pub struct Downloader<'a> {
     retries: usize,
     pub(crate) concurrency: usize,
-    cache: PathBuf,
-    bucket: PathBuf,
-    strategy: ShareStrategy,
+    storage: &'a Storage,
     threshold: u64,
 
     /// HTTP 客户端
@@ -147,8 +137,8 @@ pub struct Downloader {
     small_tx: Sender<Vec<u8>>,
 }
 
-impl Downloader {
-    pub fn builder(storage: &Storage) -> DownloaderBuilder {
+impl Downloader<'_> {
+    pub fn builder(storage: &Storage) -> DownloaderBuilder<'_> {
         DownloaderBuilder::new(storage)
     }
     /// 下载到内存（GET）
@@ -210,7 +200,7 @@ impl Downloader {
             task.process.name().unwrap_or("unknown filename")
         );
         task.process.start();
-        let cache = self.cache.join(Uuid::now_v7().to_string());
+        let cache = self.storage.temp_path();
 
         // 下载文件
         let retry_body = async || {
@@ -300,7 +290,7 @@ impl Downloader {
                 // 确定保存路径
                 let save_path = if task.share {
                     let hash = bucket_hasher.unwrap().finalize().to_string();
-                    &self.bucket.join(&hash[..2]).join(hash)
+                    &self.storage.share_dir().join(&hash[..2]).join(hash)
                 } else {
                     path
                 };
@@ -320,7 +310,7 @@ impl Downloader {
 
                 // 如果有 bucket，将共享文件链接到 task.target
                 if task.share {
-                    link_file(save_path, path, self.strategy).await?
+                    link_file(save_path, path, self.storage.share_strategy).await?
                 }
             }
             // 解压缩
@@ -329,8 +319,8 @@ impl Downloader {
                 extract
                     .exec(
                         &cache,
-                        task.share.then_some(self.bucket.clone()),
-                        self.strategy,
+                        task.share.then_some(self.storage.share_dir().to_owned()),
+                        self.storage.share_strategy,
                     )
                     .await?
             }

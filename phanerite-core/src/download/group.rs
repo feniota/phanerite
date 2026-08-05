@@ -36,7 +36,7 @@ impl DownloadGroup {
             processes: self.tasks.iter().map(|x| &x.process).cloned().collect(),
         }
     }
-    pub async fn exec(self, downloader: &Downloader) -> Vec<Error> {
+    pub async fn exec(self, downloader: &Downloader<'_>) -> Vec<Error> {
         downloader
             .download_concurrent(self.tasks.into_iter())
             .await
@@ -45,7 +45,7 @@ impl DownloadGroup {
     }
     pub async fn exec_with_mirror(
         self,
-        downloader: &Downloader,
+        downloader: &Downloader<'_>,
         mirror: impl Mirror,
     ) -> Vec<Error> {
         let tasks = mirror.resolve_all(self.tasks.into_iter());

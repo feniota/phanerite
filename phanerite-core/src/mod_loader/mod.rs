@@ -1,10 +1,10 @@
 use crate::download::downloader::Downloader;
-use crate::download::mod_loader::fabric::Fabric;
 use crate::download::task::DownloadTask;
-use crate::download::vanilla::version_index::Version;
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
+use crate::mod_loader::fabric::Fabric;
+use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
 use std::fmt::Display;
 
@@ -23,16 +23,17 @@ impl<R, C> Instance<'_, R, C> {
     }
 }
 
-impl Version {
-    /// 获取有模组加载器的版本清单
+impl<C> Instance<'_, JavaRuntime, C> {
+    /// 为实例安装模组加载器
     pub async fn install_loader<L: LoaderInstall>(
-        &self,
-        downloader: &Downloader,
+        &mut self,
+        downloader: &Downloader<'_>,
         select: impl AsyncFnOnce(L::MetaList) -> Result<L::MetaInfo>,
-    ) -> Result<InstanceManifest> {
-        let install = L::from_version(self, downloader).await?;
-        let raw = self.get_manifest(downloader).await?;
-        install.install(raw.into(), select, downloader).await
+    ) -> Result<()> {
+        let install = L::from_version(&self.manifest.id, downloader).await?;
+        install.install(self, select, downloader).await?;
+        self.save().await?;
+        Ok(())
     }
 }
 
@@ -51,15 +52,15 @@ pub trait LoaderInstall: Sized {
     /// 当前版本可选的 Loader 列表
     type MetaList: Iterator<Item = Self::MetaInfo>;
     /// 根据已有版本查找合适的 Loader
-    async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self>;
+    async fn from_version(version: impl AsRef<str>, downloader: &Downloader) -> Result<Self>;
     /// 选择版本并下载 Profile，合并出带有 Loader 的 `InstanceManifest`
     /// 留 AsyncFnOnce 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
-    async fn install<S>(
+    async fn install<C, S>(
         self,
-        raw: InstanceManifest,
+        raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader,
-    ) -> Result<InstanceManifest>
+        downloader: &Downloader<'_>,
+    ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>;
     /// 从 `InstanceManifest` 里面找出无法被正常构建的下载任务

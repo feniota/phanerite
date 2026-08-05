@@ -10,7 +10,7 @@ use crate::storage::Storage;
 pub trait JavaDownload {
     async fn get_major(
         major: u32,
-        downloader: &Downloader,
+        downloader: &Downloader<'_>,
         storage: &Storage,
     ) -> Result<DownloadTask>;
 }

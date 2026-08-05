@@ -20,7 +20,7 @@ static ZULU_PACKAGE_META: LazyLock<Url> = LazyLock::new(|| {
 impl JavaDownload for Zulu {
     async fn get_major(
         major: u32,
-        downloader: &Downloader,
+        downloader: &Downloader<'_>,
         storage: &Storage,
     ) -> Result<DownloadTask> {
         let mut url = ZULU_PACKAGE_META.clone();

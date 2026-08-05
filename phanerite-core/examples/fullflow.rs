@@ -2,15 +2,17 @@ use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
-use phanerite_core::download::mod_loader::neoforge::NeoForge;
-use phanerite_core::download::mod_loader::LoaderMeta;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
+use phanerite_core::instance::manifest::InstanceManifest;
+use phanerite_core::mod_loader::LoaderMeta;
+use phanerite_core::mod_loader::neoforge::NeoForge;
+use phanerite_core::runtime::java::install_java;
 use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::{BTreeSet, HashSet};
-use tracing::{error, Level};
+use tracing::{Level, error};
 use url::Url;
 
 fn main() {
@@ -25,34 +27,49 @@ fn main() {
 
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("1.21.1-nf")).await;
 
-        let version = VersionIndex::sync(&downloader)
+        let version: InstanceManifest = VersionIndex::sync(&downloader)
             .await?
             .iter()
             .find(|x| x.id == "1.21.1")
             .expect("Version not found")
             // .latest_release()?
-            .install_loader::<NeoForge>(&downloader, async |iter| {
-                // let iter = iter
-                //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-                let latest = iter
-                    .collect::<BTreeSet<_>>()
-                    .pop_last()
-                    .expect("No available loader version");
-                println!(
-                    "{}:{} stable:{}",
-                    latest.name(),
-                    latest.version(),
-                    latest.stable()
-                );
-                Ok(latest)
-            })
-            .await?;
-        let instance = Instance::create(version, "1.21.1-nf", &storage, &downloader).await?;
+            .get_manifest(&downloader)
+            .await?
+            .into();
+        let mut group = DownloadGroup::new();
+        group.extend(install_java::<Zulu>(version.java_major(), &storage, &downloader).await?);
+        group.extend(injector.update(&downloader).await?);
+
+        let instance = Instance::create(version, Some("1.21.1-nf"), &storage, &downloader).await?;
+
+        let java = instance
+            .find_java(&storage)
+            .await
+            .into_iter()
+            .next()
+            .ok_or(Error::other("No available java"))?;
+        let mut instance = instance.bind_java(java.clone()).await?;
+
+        // instance
+        //     .install_loader::<NeoForge>(&downloader, async |iter| {
+        //         // let iter = iter
+        //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+        //         let latest = iter
+        //             .collect::<BTreeSet<_>>()
+        //             .pop_last()
+        //             .expect("No available loader version");
+        //         println!(
+        //             "{}:{} stable:{}",
+        //             latest.name(),
+        //             latest.version(),
+        //             latest.stable()
+        //         );
+        //         Ok(latest)
+        //     })
+        //     .await?;
 
         let mut group = DownloadGroup::new();
         group.extend(instance.install_less(HashSet::new()).await?);
-        group.extend(instance.install_java::<Zulu>(&downloader, &storage).await?);
-        group.extend(injector.update(&downloader).await?);
 
         // 显示下载速度和进度
         let monitor = group.processes();
@@ -100,14 +117,7 @@ fn main() {
             .login()
             .await?;
 
-        let java = instance
-            .find_java(&storage)
-            .await
-            .into_iter()
-            .next()
-            .ok_or(Error::other("No available java"))?;
-
-        instance
+        let child = instance
             .ensure_ready()
             .bind_java(java)
             .await?

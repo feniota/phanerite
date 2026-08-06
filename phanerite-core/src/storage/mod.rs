@@ -162,11 +162,6 @@ async fn dir(root: &Path, name: &str) -> Result<PathBuf> {
     let p = root.join(name);
     if !p.is_dir() {
         async_fs::create_dir_all(&p).await?;
-    } else if p.exists() {
-        return Err(Error::other(format!(
-            "{} should be directory, but found file",
-            p.to_string_lossy()
-        )));
     }
     Ok(p)
 }

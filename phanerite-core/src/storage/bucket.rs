@@ -8,7 +8,9 @@ use tracing::trace;
 impl Storage {
     pub async fn clean_hardlink(&self) -> Result<()> {
         let bucket = self.share_dir();
+        const CONCURRENT: usize = 16;
 
+        // 删除孤立文件
         async_fs::read_dir(bucket)
             .await?
             .filter_map(async |x| x.ok())
@@ -29,10 +31,32 @@ impl Storage {
                     .then_some(x)
             })
             // 执行删除
-            .for_each_concurrent(16, async |path| {
+            .for_each_concurrent(CONCURRENT, async |path| {
                 trace!("Cleaning orphan file: {}", path.display());
                 if let Err(e) = async_fs::remove_file(path).await {
                     tracing::warn!(?e, "failed to remove orphan");
+                }
+            })
+            .await;
+
+        // 删除空目录
+        async_fs::read_dir(bucket)
+            .await?
+            .filter_map(async |x| x.ok())
+            .map(|x| x.path())
+            .filter_map(async |x| {
+                async_fs::read_dir(&x)
+                    .await
+                    .ok()?
+                    .next()
+                    .await
+                    .is_none()
+                    .then_some(x)
+            })
+            .for_each_concurrent(CONCURRENT, |path| async move {
+                trace!("Cleaning empty directory: {}", path.to_string_lossy());
+                if let Err(e) = async_fs::remove_dir(path).await {
+                    tracing::warn!(?e, "failed to remove empty");
                 }
             })
             .await;

@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::downloader::RawDownloader;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
@@ -21,7 +21,7 @@ const JAVA_BIN_NAME: &str = "java";
 pub async fn install_java<J: JavaDownload>(
     major: u32,
     storage: &Storage,
-    downloader: &Downloader<'_>,
+    downloader: &RawDownloader<'_>,
 ) -> Result<Option<DownloadTask>> {
     if find_java(major, storage).await.into_iter().next().is_some() {
         return Ok(None);
@@ -46,7 +46,7 @@ impl<R, C> Instance<'_, R, C> {
     pub async fn install_java<J: JavaDownload>(
         &self,
         storage: &Storage,
-        downloader: &Downloader<'_>,
+        downloader: &RawDownloader<'_>,
     ) -> Result<Option<DownloadTask>> {
         install_java::<J>(self.manifest.java_major(), storage, downloader).await
     }

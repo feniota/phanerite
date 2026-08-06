@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(Level::DEBUG)
         .init();
     smol::block_on(async {
-        let storage = Storage::new(".minecraft")?;
+        let storage = Storage::new(".minecraft").await?;
         let instance = Instance::open("1.21.1-nf", &storage).await?;
         let auth = phanerite_core::auth::offline::Authentication::new("Steve");
         let arguments = auth.args(&instance, &storage).await?;

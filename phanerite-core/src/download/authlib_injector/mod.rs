@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::storage::Storage;
@@ -42,12 +42,12 @@ impl<'a> AuthlibInjector<'a> {
     pub fn new(storage: &'a Storage) -> Self {
         Self { storage }
     }
-    pub async fn update(&self, downloader: &Downloader<'_>) -> Result<Option<DownloadTask>> {
+    pub async fn update(&self, downloader: &impl Downloader) -> Result<Option<DownloadTask>> {
         match self.find_latest().await {
             Err(_) => Ok(Some(self.install_latest(downloader).await?)),
             Ok(v) => {
                 let res = downloader
-                    .fetch(&AUTHLIB_INJECTOR_LATEST_META, None)
+                    .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
                     .await?;
                 let res = serde_json::from_slice::<Artifact>(&res)?;
                 if res.build_number != v {
@@ -85,9 +85,9 @@ impl<'a> AuthlibInjector<'a> {
             Some(v) => Ok(v),
         }
     }
-    async fn install_latest(&self, downloader: &Downloader<'_>) -> Result<DownloadTask> {
+    async fn install_latest(&self, downloader: &impl Downloader) -> Result<DownloadTask> {
         let res = downloader
-            .fetch(&AUTHLIB_INJECTOR_LATEST_META, None)
+            .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
             .await?;
         let res = serde_json::from_slice::<Artifact>(&res)?;
 

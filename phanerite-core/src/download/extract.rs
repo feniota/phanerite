@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::storage::ShareStrategy;
+use crate::storage::Storage;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -44,12 +44,13 @@ impl ExtractTask {
         &self,
         archive_file: impl AsRef<Path>,
         bucket: Option<PathBuf>,
-        strategy: ShareStrategy,
+        storage: &Storage,
     ) -> Result<()> {
         let archive_path = archive_file.as_ref().to_path_buf();
         let target = self.path.clone();
         let auto_flattens = self.auto_flattens;
         let exclude = self.exclude.clone();
+        let linker = storage.linker();
 
         let (tx, rx) = async_channel::bounded(1);
         std::thread::spawn(move || {
@@ -59,7 +60,7 @@ impl ExtractTask {
                 bucket,
                 auto_flattens,
                 &exclude,
-                strategy,
+                &linker,
             );
             if result.is_ok() {
                 let _ = fs::remove_file(&archive_path);
@@ -80,7 +81,7 @@ fn extract(
     bucket: Option<PathBuf>,
     auto_flattens: bool,
     exclude: &[ExcludePattern],
-    strategy: ShareStrategy,
+    linker: &impl Fn(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
     let file = fs::File::open(archive)?;
     let mut reader = BufReader::new(file);
@@ -93,10 +94,10 @@ fn extract(
 
     if &magic[..2] == b"PK" {
         drop(reader);
-        unzip(archive, target, bucket, auto_flattens, exclude, strategy)
+        unzip(archive, target, bucket, auto_flattens, exclude, linker)
     } else {
         drop(reader);
-        untar(archive, target, bucket, auto_flattens, exclude, strategy)
+        untar(archive, target, bucket, auto_flattens, exclude, linker)
     }
 }
 
@@ -108,7 +109,7 @@ fn unzip(
     bucket: Option<PathBuf>,
     auto_flattens: bool,
     exclude: &[ExcludePattern],
-    strategy: ShareStrategy,
+    linker: &impl for<'a, 'b> Fn(&'a Path, &'b Path) -> Result<()>,
 ) -> Result<()> {
     let file = fs::File::open(archive)?;
     let mut reader = zip::ZipArchive::new(file)?;
@@ -136,7 +137,7 @@ fn unzip(
         let stored_path = strip_prefix(name, prefix);
         let mut entry = reader.by_name(name)?;
         let dest = target.join(stored_path);
-        extract_entry(&mut entry, &dest, bucket.as_deref(), strategy)?;
+        extract_entry(&mut entry, &dest, bucket.as_deref(), &linker)?;
     }
 
     Ok(())
@@ -150,7 +151,7 @@ fn untar(
     bucket: Option<PathBuf>,
     auto_flattens: bool,
     exclude: &[ExcludePattern],
-    strategy: ShareStrategy,
+    linker: &impl Fn(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
     fn open_tar(archive: &Path) -> Result<tar::Archive<Box<dyn Read>>> {
         let file = fs::File::open(archive)?;
@@ -213,7 +214,7 @@ fn untar(
         }
         let stored_path = strip_prefix(&name, prefix);
         let dest = target.join(stored_path);
-        extract_entry(entry, &dest, bucket.as_deref(), strategy)?;
+        extract_entry(entry, &dest, bucket.as_deref(), &linker)?;
     }
 
     Ok(())
@@ -225,7 +226,7 @@ fn extract_entry(
     mut reader: impl Read,
     dest: &Path,
     bucket: Option<&Path>,
-    strategy: ShareStrategy,
+    linker: &impl Fn(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
     if dest.exists() {
         return Ok(());
@@ -268,7 +269,7 @@ fn extract_entry(
                 let _ = fs::remove_file(&tmp);
             }
             let _ = fs::remove_file(dest);
-            link_file(&obj_path, dest, strategy)?;
+            linker(&obj_path, dest)?;
         }
         None => {
             let _ = fs::remove_file(dest);
@@ -363,44 +364,4 @@ impl ExtractTaskBuilder<PathBuf> {
             exclude: self.exclude,
         }
     }
-}
-
-// ── link ───────────────────────────────────────────────────────────────
-
-fn link_file(
-    source: impl AsRef<Path>,
-    target: impl AsRef<Path>,
-    strategy: ShareStrategy,
-) -> Result<()> {
-    let source = source.as_ref();
-    let target = target.as_ref();
-
-    match strategy {
-        ShareStrategy::Off => {
-            fs::rename(source, target)?;
-        }
-        ShareStrategy::Prefer => {
-            if fs::hard_link(source, target).is_err() {
-                fs::rename(source, target)?;
-            }
-        }
-        ShareStrategy::Fallback => {
-            if fs::hard_link(source, target).is_ok() {
-                return Ok(());
-            }
-            #[cfg(target_family = "unix")]
-            if std::os::unix::fs::symlink(source, target).is_ok() {
-                return Ok(());
-            }
-            #[cfg(target_os = "windows")]
-            if std::os::windows::fs::symlink_file(source, target).is_ok() {
-                return Ok(());
-            }
-            fs::rename(source, target)?;
-        }
-        ShareStrategy::Force => {
-            fs::hard_link(source, target)?;
-        }
-    }
-    Ok(())
 }

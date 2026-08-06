@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::extract::ExtractTask;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
@@ -20,7 +20,7 @@ static ZULU_PACKAGE_META: LazyLock<Url> = LazyLock::new(|| {
 impl JavaDownload for Zulu {
     async fn get_major(
         major: u32,
-        downloader: &Downloader<'_>,
+        downloader: &impl Downloader,
         storage: &Storage,
     ) -> Result<DownloadTask> {
         let mut url = ZULU_PACKAGE_META.clone();
@@ -44,7 +44,7 @@ impl JavaDownload for Zulu {
             .append_pair("latest", "true")
             .finish();
 
-        let body = downloader.fetch(&url, None).await?;
+        let body = downloader.fetch(url, None).await?;
         let json: Vec<ZuluPackage> = serde_json::from_slice(&body)?;
 
         let choice = json

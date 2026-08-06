@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::error::{Error, Result};
 pub(crate) use crate::instance::manifest::VersionType;
 use crate::utils::Sha1Hash;
@@ -15,8 +15,8 @@ static VERSION_INDEX_URL: LazyLock<Url> = LazyLock::new(|| {
 });
 
 impl VersionIndex {
-    pub async fn sync(downloader: &Downloader<'_>) -> Result<Self> {
-        let body = downloader.fetch(&VERSION_INDEX_URL, None).await?;
+    pub async fn sync(downloader: &impl Downloader) -> Result<Self> {
+        let body = downloader.fetch(VERSION_INDEX_URL.clone(), None).await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)
     }

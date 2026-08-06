@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
@@ -57,8 +57,8 @@ pub struct NeoForgeVersion {
 impl LoaderInstall for NeoForge {
     type MetaInfo = NeoForgeVersion;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
-    async fn from_version(version: impl AsRef<str>, downloader: &Downloader<'_>) -> Result<Self> {
-        let body = downloader.fetch(&NEOFORGE_META, None).await?;
+    async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self> {
+        let body = downloader.fetch(NEOFORGE_META.clone(), None).await?;
         let reader = std::io::Cursor::new(body);
         let xml = serde_xml_rs::from_reader::<MetaData<NeoForgeVersion>, _>(reader)?;
         let filter = xml
@@ -85,7 +85,7 @@ impl LoaderInstall for NeoForge {
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader<'_>,
+        downloader: &impl Downloader,
     ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
@@ -101,7 +101,7 @@ impl LoaderInstall for NeoForge {
         let url = maven.url(&NEOFORGE_MAVEN)?;
 
         debug!("Downloading NeoForge Installer: {url}");
-        let body = downloader.fetch(&url, None).await?;
+        let body = downloader.fetch(url, None).await?;
         let file = raw.storage.temp_path();
         let mut file = async_fs::File::create(file).await?;
         file.write_all(&body).await?;

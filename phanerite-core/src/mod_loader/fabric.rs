@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
@@ -27,13 +27,13 @@ pub struct Fabric {
 impl LoaderInstall for Fabric {
     type MetaInfo = MetaData;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
-    async fn from_version(version: impl AsRef<str>, downloader: &Downloader<'_>) -> Result<Self> {
+    async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self> {
         let mut url = FABRIC_META.clone();
         url.path_segments_mut()
             .unwrap()
             .extend(["v2", "versions", "loader", version.as_ref()]);
 
-        let body = downloader.fetch(&url, None).await?;
+        let body = downloader.fetch(url, None).await?;
         let json = serde_json::from_slice::<Vec<MetaData>>(&body)?;
 
         Ok(Fabric { list: json })
@@ -42,7 +42,7 @@ impl LoaderInstall for Fabric {
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader<'_>,
+        downloader: &impl Downloader,
     ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
@@ -60,7 +60,7 @@ impl LoaderInstall for Fabric {
             "json",
         ]);
 
-        let body = downloader.fetch(&url, None).await?;
+        let body = downloader.fetch(url, None).await?;
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
         raw.manifest.merge_overlay(json, 30000);
         Ok(())

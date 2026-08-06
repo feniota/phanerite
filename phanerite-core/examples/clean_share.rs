@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(Level::TRACE)
         .init();
     smol::block_on(async {
-        let storage = phanerite_core::storage::Storage::new(".minecraft")?;
+        let storage = phanerite_core::storage::Storage::new(".minecraft").await?;
         storage.clean_hardlink().await?;
 
         Ok::<(), phanerite_core::error::Error>(())

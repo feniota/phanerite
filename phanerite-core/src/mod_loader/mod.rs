@@ -1,4 +1,5 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
+use crate::download::downloader::RawDownloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
@@ -27,10 +28,11 @@ impl<C> Instance<'_, JavaRuntime, C> {
     /// 为实例安装模组加载器
     pub async fn install_loader<L: LoaderInstall>(
         &mut self,
-        downloader: &Downloader<'_>,
+        version: impl AsRef<str>,
+        downloader: &RawDownloader<'_>,
         select: impl AsyncFnOnce(L::MetaList) -> Result<L::MetaInfo>,
     ) -> Result<()> {
-        let install = L::from_version(&self.manifest.id, downloader).await?;
+        let install = L::from_version(version, downloader).await?;
         install.install(self, select, downloader).await?;
         self.save().await?;
         Ok(())
@@ -52,14 +54,14 @@ pub trait LoaderInstall: Sized {
     /// 当前版本可选的 Loader 列表
     type MetaList: Iterator<Item = Self::MetaInfo>;
     /// 根据已有版本查找合适的 Loader
-    async fn from_version(version: impl AsRef<str>, downloader: &Downloader) -> Result<Self>;
+    async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self>;
     /// 选择版本并下载 Profile，合并出带有 Loader 的 `InstanceManifest`
     /// 留 AsyncFnOnce 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
     async fn install<C, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,
-        downloader: &Downloader<'_>,
+        downloader: &impl Downloader,
     ) -> Result<()>
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>;

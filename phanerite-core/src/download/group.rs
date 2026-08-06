@@ -1,91 +1,138 @@
-use crate::download::downloader::Downloader;
-use crate::download::mirror::Mirror;
+use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask};
 use crate::error::Error;
 use futures::StreamExt;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
 
-pub struct DownloadGroup {
-    tasks: Vec<DownloadTask>,
+pub struct DownloadGroup<'a, D: Downloader> {
+    downloader: &'a D,
+    stage: Vec<DownloadTask>,
+    monitor: Monitor,
 }
 
-pub struct ProcessGroup {
-    processes: Vec<DownloadProcess>,
+#[derive(Clone, Default)]
+pub struct Monitor {
+    inner: Arc<MonitorInner>,
 }
 
-impl Default for DownloadGroup {
-    fn default() -> Self {
-        Self::new()
-    }
+#[derive(Default)]
+struct MonitorInner {
+    max_id: AtomicUsize,
+    processes: scc::HashMap<usize, DownloadProcess>,
 }
 
-impl Extend<DownloadTask> for DownloadGroup {
+/// 扩展暂存区
+impl<D: Downloader> Extend<DownloadTask> for DownloadGroup<'_, D> {
     fn extend<T: IntoIterator<Item = DownloadTask>>(&mut self, iter: T) {
-        self.tasks.extend(iter)
+        self.stage.extend(iter)
     }
 }
 
-impl DownloadGroup {
-    pub fn new() -> Self {
-        Self { tasks: vec![] }
-    }
-    pub fn push(&mut self, task: DownloadTask) {
-        self.tasks.push(task)
-    }
-    pub fn processes(&self) -> ProcessGroup {
-        ProcessGroup {
-            processes: self.tasks.iter().map(|x| &x.process).cloned().collect(),
+impl<'a, D: Downloader> DownloadGroup<'a, D> {
+    pub fn new(downloader: &'a D) -> Self {
+        Self {
+            downloader,
+            stage: vec![],
+            monitor: Default::default(),
         }
     }
-    pub async fn exec(self, downloader: &Downloader<'_>) -> Vec<Error> {
-        downloader
-            .download_concurrent(self.tasks.into_iter())
+    /// 获取监视器
+    pub fn monitor(&self) -> Monitor {
+        self.monitor.clone()
+    }
+    /// 立即执行任务
+    pub async fn join(&self, tasks: impl Iterator<Item = DownloadTask>) -> Vec<Error> {
+        let tasks = futures::stream::iter(tasks).then(async |x| {
+            self.monitor.push_async(x.process.clone()).await;
+            x
+        });
+        self.downloader
+            .download_concurrent(tasks)
             .await
             .collect()
             .await
     }
-    pub async fn exec_with_mirror(
-        self,
-        downloader: &Downloader<'_>,
-        mirror: impl Mirror,
-    ) -> Vec<Error> {
-        let tasks = mirror.resolve_all(self.tasks.into_iter());
-        downloader.download_concurrent(tasks).await.collect().await
+    /// 添加任务到暂存区
+    pub fn push(&mut self, task: DownloadTask) {
+        self.stage.push(task)
+    }
+    /// 执行暂存区的任务
+    pub async fn exec(&mut self) -> Vec<Error> {
+        let tasks = std::mem::take(&mut self.stage);
+        self.join(tasks.into_iter()).await
     }
 }
 
-impl ProcessGroup {
+impl Monitor {
+    async fn push_async(&self, process: DownloadProcess) {
+        let id = self.inner.max_id.fetch_add(1, Relaxed);
+        let _ = self.inner.processes.insert_async(id, process).await;
+    }
     pub fn len(&self) -> usize {
-        self.processes.len()
+        self.inner.processes.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.processes.is_empty()
+        self.inner.processes.is_empty()
     }
-    pub fn total(&self) -> u64 {
-        self.processes.iter().filter_map(|x| x.total()).sum()
+    pub async fn total(&self) -> u64 {
+        let mut total = 0;
+        self.inner
+            .processes
+            .iter_async(|_, x| {
+                total += x.total().unwrap_or_default();
+                true
+            })
+            .await;
+        total
     }
-    pub fn current(&self) -> u64 {
-        self.processes.iter().map(|x| x.current()).sum()
+    pub async fn current(&self) -> u64 {
+        let mut current = 0;
+        self.inner
+            .processes
+            .iter_async(|_, x| {
+                current += x.current();
+                true
+            })
+            .await;
+        current
     }
-    pub fn downloading(&self) -> usize {
-        self.processes
-            .iter()
-            .filter(|x| x.is_started() && !x.is_finished() && !x.is_canceled() && !x.is_failed())
-            .count()
+    pub async fn downloading(&self) -> usize {
+        let mut count = 0;
+        self.inner
+            .processes
+            .iter_async(|_, x| {
+                if x.is_started() && !x.is_finished() && !x.is_canceled() && !x.is_failed() {
+                    count += 1
+                }
+                true
+            })
+            .await;
+        count
     }
-    pub fn finished(&self) -> usize {
-        self.processes.iter().filter(|x| x.is_finished()).count()
+    pub async fn finished(&self) -> usize {
+        let mut count = 0;
+        self.inner
+            .processes
+            .iter_async(|_, x| {
+                if x.is_finished() {
+                    count += 1;
+                }
+                true
+            })
+            .await;
+        count
     }
-    pub fn is_finished(&self) -> bool {
-        self.processes
-            .iter()
-            .all(|x| x.is_finished() || x.is_failed() || x.is_canceled())
+    pub async fn is_finished(&self) -> bool {
+        self.inner
+            .processes
+            .iter_async(|_, x| x.is_finished() || x.is_failed() || x.is_canceled())
+            .await
     }
     pub async fn speed_by_timer(&self, timer: impl Future) -> u64 {
-        let start = self.current();
+        let start = self.current().await;
         timer.await;
-        self.current() - start
-    }
-    pub fn iter(&self) -> impl Iterator<Item = &DownloadProcess> {
-        self.processes.iter()
+        self.current().await - start
     }
 }

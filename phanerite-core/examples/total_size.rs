@@ -1,7 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
-use phanerite_core::storage::ShareStrategy::Force;
 use phanerite_core::*;
 use std::collections::HashSet;
 use tracing::{Level, error};
@@ -16,8 +15,8 @@ const CONCURRENCY: usize = 64;
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
-        let storage = storage::Storage::new(".minecraft")?.share_strategy(Force);
-        let downloader = download::downloader::Downloader::builder(&storage)
+        let storage = storage::Storage::new(".minecraft").await?;
+        let downloader = download::downloader::RawDownloader::builder(&storage)
             .build()
             .await?;
 

@@ -1,6 +1,7 @@
+use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
-use crate::storage::{ShareStrategy, Storage};
+use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt, Stream, StreamExt};
@@ -10,7 +11,6 @@ use isahc::{AsyncReadResponseExt, HttpClient};
 use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
 use std::time::Duration;
 use tracing::{debug, error, warn};
 use url::Url;
@@ -32,6 +32,24 @@ pub struct DownloaderBuilder<'a> {
     small_buffer: usize,
 
     storage: &'a Storage,
+}
+
+pub struct RawDownloader<'a> {
+    retries: usize,
+    concurrency: usize,
+    storage: &'a Storage,
+    threshold: u64,
+
+    /// HTTP 客户端
+    client: HttpClient,
+    /// 获取大缓冲
+    large_rx: Receiver<Vec<u8>>,
+    /// 归还大缓冲
+    large_tx: Sender<Vec<u8>>,
+    /// 获取小缓冲
+    small_rx: Receiver<Vec<u8>>,
+    /// 归还小缓冲
+    small_tx: Sender<Vec<u8>>,
 }
 
 impl<'a> DownloaderBuilder<'a> {
@@ -84,7 +102,7 @@ impl<'a> DownloaderBuilder<'a> {
         self.small_buffer = buffer;
         self
     }
-    pub async fn build(self) -> Result<Downloader<'a>> {
+    pub async fn build(self) -> Result<RawDownloader<'a>> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
@@ -98,7 +116,7 @@ impl<'a> DownloaderBuilder<'a> {
                 "The parallelism is greater than the concurrency, and thus the buffer cannot be fully utilized."
             )
         }
-        Ok(Downloader {
+        Ok(RawDownloader {
             retries: self.retries,
             concurrency: self.concurrency,
             storage: self.storage,
@@ -119,30 +137,8 @@ impl<'a> DownloaderBuilder<'a> {
     }
 }
 
-pub struct Downloader<'a> {
-    retries: usize,
-    pub(crate) concurrency: usize,
-    storage: &'a Storage,
-    threshold: u64,
-
-    /// HTTP 客户端
-    client: HttpClient,
-    /// 获取大缓冲
-    large_rx: Receiver<Vec<u8>>,
-    /// 归还大缓冲
-    large_tx: Sender<Vec<u8>>,
-    /// 获取小缓冲
-    small_rx: Receiver<Vec<u8>>,
-    /// 归还小缓冲
-    small_tx: Sender<Vec<u8>>,
-}
-
-impl Downloader<'_> {
-    pub fn builder(storage: &Storage) -> DownloaderBuilder<'_> {
-        DownloaderBuilder::new(storage)
-    }
-    /// 下载到内存（GET）
-    pub async fn fetch(&self, url: &Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+impl Downloader for RawDownloader<'_> {
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
         for _ in 0..self.retries {
             let res = self.client.get_async(url.as_str()).await?.bytes().await?;
             if let Some(h) = &hash {
@@ -158,12 +154,7 @@ impl Downloader<'_> {
         }
         Err(Error::other("download failed after retries"))
     }
-    /// 封装 POST
-    pub async fn post_json(
-        &self,
-        url: &Url,
-        body: impl AsRef<str>,
-    ) -> Result<(StatusCode, Vec<u8>)> {
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<(StatusCode, Vec<u8>)> {
         let req = isahc::Request::post(url.as_str())
             .header("Content-Type", "application/json")
             .body(body.as_ref())
@@ -171,8 +162,7 @@ impl Downloader<'_> {
         let mut res = self.client.send_async(req).await?;
         Ok((res.status(), res.bytes().await?))
     }
-    /// 封装 HEAD
-    pub async fn head(&self, url: &Url) -> Result<HeaderMap> {
+    async fn head(&self, url: Url) -> Result<HeaderMap> {
         Ok(self
             .client
             .head_async(url.as_ref())
@@ -180,8 +170,7 @@ impl Downloader<'_> {
             .headers()
             .clone())
     }
-    /// 下载文件到储存
-    pub async fn download(&self, task: DownloadTask) -> Result<()> {
+    async fn download(&self, task: DownloadTask) -> Result<()> {
         struct FailGuard<'a> {
             process: &'a DownloadProcess,
         }
@@ -310,7 +299,7 @@ impl Downloader<'_> {
 
                 // 如果有 bucket，将共享文件链接到 task.target
                 if task.share {
-                    link_file(save_path, path, self.storage.share_strategy).await?
+                    self.storage.linker_async()(save_path, path).await?
                 }
             }
             // 解压缩
@@ -320,7 +309,7 @@ impl Downloader<'_> {
                     .exec(
                         &cache,
                         task.share.then_some(self.storage.share_dir().to_owned()),
-                        self.storage.share_strategy,
+                        self.storage,
                     )
                     .await?
             }
@@ -330,15 +319,20 @@ impl Downloader<'_> {
         forget(guard);
         Ok(())
     }
-    /// 并发下载文件到储存
-    pub async fn download_concurrent(
+    async fn download_concurrent(
         &self,
-        tasks: impl Iterator<Item = DownloadTask>,
+        tasks: impl Stream<Item = DownloadTask>,
     ) -> impl Stream<Item = Error> {
-        futures::stream::iter(tasks)
+        tasks
             .map(async |task| self.download(task).await)
             .buffer_unordered(self.concurrency)
             .filter_map(async |res| res.err())
+    }
+}
+
+impl RawDownloader<'_> {
+    pub fn builder(storage: &Storage) -> DownloaderBuilder<'_> {
+        DownloaderBuilder::new(storage)
     }
     /// 申请下载缓存，限制总并行度
     async fn alloc_buf(&self, size: Option<u64>) -> BufferGuard {
@@ -390,45 +384,4 @@ impl Drop for BufferGuard {
             }
         }
     }
-}
-
-async fn link_file(
-    source: impl AsRef<Path>,
-    target: impl AsRef<Path>,
-    strategy: ShareStrategy,
-) -> Result<()> {
-    let source = source.as_ref();
-    let target = target.as_ref();
-
-    match strategy {
-        ShareStrategy::Off => {
-            async_fs::rename(source, target).await?;
-        }
-        ShareStrategy::Prefer => {
-            if async_fs::hard_link(source, target).await.is_err() {
-                async_fs::rename(source, target).await?;
-            }
-        }
-        ShareStrategy::Fallback => {
-            if async_fs::hard_link(source, target).await.is_ok() {
-                return Ok(());
-            }
-            #[cfg(target_family = "unix")]
-            if async_fs::unix::symlink(source, target).await.is_ok() {
-                return Ok(());
-            }
-            #[cfg(target_os = "windows")]
-            if async_fs::windows::symlink_file(source, target)
-                .await
-                .is_ok()
-            {
-                return Ok(());
-            }
-            async_fs::rename(source, target).await?;
-        }
-        ShareStrategy::Force => {
-            async_fs::hard_link(source, target).await?;
-        }
-    }
-    Ok(())
 }

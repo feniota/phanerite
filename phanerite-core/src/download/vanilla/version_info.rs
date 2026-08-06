@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::vanilla::version_index::{Version, VersionType};
 use crate::error::Result;
 use crate::instance::manifest::{
@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 impl Version {
-    pub async fn get_manifest(&self, downloader: &Downloader<'_>) -> Result<VersionManifest> {
+    pub async fn get_manifest(&self, downloader: &impl Downloader) -> Result<VersionManifest> {
         let body = downloader
-            .fetch(&self.url, Some(self.sha1.clone().into()))
+            .fetch(self.url.clone(), Some(self.sha1.clone().into()))
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)

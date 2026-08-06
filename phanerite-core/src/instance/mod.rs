@@ -1,5 +1,5 @@
 use crate::auth::Authentication;
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::task::{DownloadTask, filter_existed, filter_hash};
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::{Error, Result};
@@ -48,7 +48,7 @@ impl<R, C> Instance<'_, R, C> {
         Ok(())
     }
     /// 修复 Assets 索引（如果打开失败）
-    pub async fn fix_assets_index(&self, downloader: &Downloader<'_>) -> Result<AssetIndexList> {
+    pub async fn fix_assets_index(&self, downloader: &impl Downloader) -> Result<AssetIndexList> {
         let index_path = self
             .storage
             .assets_indexes()
@@ -89,7 +89,7 @@ impl<R, C> Instance<'_, R, C> {
     pub async fn check_full(
         &self,
         features: HashSet<&'static str>,
-        downloader: &Downloader<'_>,
+        downloader: &impl Downloader,
     ) -> Result<Vec<DownloadTask>> {
         self.fix_assets_index(downloader).await?;
         let tasks = futures::stream::iter(self.install(features).await?);
@@ -165,7 +165,7 @@ impl<'a> Instance<'a, NotReady, NotReady> {
         manifest: impl Into<InstanceManifest>,
         name: Option<impl AsRef<str>>,
         storage: &'a Storage,
-        downloader: &'a Downloader<'a>,
+        downloader: &'a impl Downloader,
     ) -> Result<Self> {
         let manifest = if let Some(name) = name {
             manifest.into().rename(name.as_ref())
@@ -237,7 +237,7 @@ impl<'a, R, C> Instance<'a, R, C> {
 }
 
 impl Instance<'_, JavaRuntime, Ready> {
-    pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Child> {
+    pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Command> {
         let arg_path = self.instance_dir.join("arguments");
         let mut arg_file = async_fs::File::create(&arg_path).await?;
 
@@ -247,13 +247,13 @@ impl Instance<'_, JavaRuntime, Ready> {
         }
         drop(arg_file);
 
-        let child = async_process::Command::new(self.runtime.clone())
-            .arg(format!(
-                "@{}",
-                std::path::absolute(arg_path)?.to_string_lossy()
-            ))
-            .spawn()?;
-        Ok(child)
+        let mut cmd = async_process::Command::new(self.runtime.clone());
+        cmd.arg(format!(
+            "@{}",
+            std::path::absolute(arg_path)?.to_string_lossy()
+        ))
+        .current_dir(&self.instance_dir);
+        Ok(cmd)
     }
 }
 

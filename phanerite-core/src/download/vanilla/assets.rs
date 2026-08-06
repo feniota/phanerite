@@ -1,4 +1,4 @@
-use crate::download::downloader::Downloader;
+use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::manifest::AssetIndex;
@@ -14,9 +14,9 @@ static RESOURCES_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://resources.download.minecraft.net").unwrap());
 
 impl AssetIndex {
-    pub async fn get_list(&self, downloader: &Downloader<'_>) -> Result<AssetIndexList> {
+    pub async fn get_list(&self, downloader: &impl Downloader) -> Result<AssetIndexList> {
         let body = downloader
-            .fetch(&self.url, Some(self.sha1.clone().into()))
+            .fetch(self.url.clone(), Some(self.sha1.clone().into()))
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)

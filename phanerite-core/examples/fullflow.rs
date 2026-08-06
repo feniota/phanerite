@@ -11,6 +11,9 @@ use phanerite_core::runtime::java::install_java;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::*;
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use tracing::{Level, error};
 use url::Url;
 
@@ -26,7 +29,7 @@ fn main() {
             .await?;
         let injector = AuthlibInjector::new(&storage);
         let mut group = DownloadGroup::new(&downloader);
-        monitor(&group).await;
+        let _g = monitor(&group).await;
 
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("1.21.1-nf")).await;
 
@@ -108,11 +111,25 @@ fn main() {
     }
 }
 
+struct ExitGuard {
+    exit: Arc<AtomicBool>,
+}
+
+impl Drop for ExitGuard {
+    fn drop(&mut self) {
+        self.exit.store(true, Relaxed)
+    }
+}
+
 /// 显示下载速度和进度
-async fn monitor(group: &DownloadGroup<'_, impl Downloader>) {
+async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
     let monitor = group.monitor();
+    let g = ExitGuard {
+        exit: Arc::new(AtomicBool::new(false)),
+    };
+    let exit = g.exit.clone();
     smol::spawn(async move {
-        while !monitor.is_finished().await {
+        while !exit.load(Relaxed)  {
             let downloading = monitor.downloading().await;
             let number = monitor.len();
             let speed = monitor
@@ -133,4 +150,5 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) {
         }
     })
         .detach();
+    g
 }

@@ -5,6 +5,9 @@ use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::instance::Instance;
 use phanerite_core::*;
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use tracing::Level;
 
 fn main() -> error::Result<()> {
@@ -31,7 +34,7 @@ fn main() -> error::Result<()> {
 
         let mirror = downloader.with_mirror(Granodiorite);
         let mut group = DownloadGroup::new(&mirror);
-        monitor(&group).await;
+        let _g = monitor(&group).await;
         group.extend(
             Instance::create(manifest, Some(&version.id), &storage, &downloader)
                 .await?
@@ -51,11 +54,25 @@ fn main() -> error::Result<()> {
     })
 }
 
+struct ExitGuard {
+    exit: Arc<AtomicBool>,
+}
+
+impl Drop for ExitGuard {
+    fn drop(&mut self) {
+        self.exit.store(true, Relaxed)
+    }
+}
+
 /// 显示下载速度和进度
-async fn monitor(group: &DownloadGroup<'_, impl Downloader>) {
+async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
     let monitor = group.monitor();
+    let g = ExitGuard {
+        exit: Arc::new(AtomicBool::new(false)),
+    };
+    let exit = g.exit.clone();
     smol::spawn(async move {
-        while !monitor.is_finished().await {
+        while !exit.load(Relaxed)  {
             let downloading = monitor.downloading().await;
             let number = monitor.len();
             let speed = monitor
@@ -76,4 +93,5 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) {
         }
     })
         .detach();
+    g
 }

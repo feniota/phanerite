@@ -1,14 +1,16 @@
 use crate::download::Downloader;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::instance::Instance;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
-use futures::AsyncWriteExt;
+use futures::{AsyncWriteExt, StreamExt, TryStreamExt};
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 use std::sync::LazyLock;
 use tracing::debug;
 use url::Url;
@@ -102,14 +104,75 @@ impl LoaderInstall for NeoForge {
 
         debug!("Downloading NeoForge Installer: {url}");
         let body = downloader.fetch(url, None).await?;
-        let file = raw.storage.temp_path();
-        let mut file = async_fs::File::create(file).await?;
+        let installer = raw.storage.temp_path();
+        let mut file = async_fs::File::create(&installer).await?;
         file.write_all(&body).await?;
+        drop(file);
 
         debug!("Build a virtual installation environment for NeoForge");
+        let temp = raw.storage.temp_path();
+        async_fs::create_dir_all(&temp).await?;
+        // 下载加速
+        if raw.storage.capability.hardlink {
+            async_fs::hard_link(raw.storage.libraries_dir(), &temp.join("libraries")).await?
+        }
+        // 假 launcher_profiles.json 骗 Installer 安装
+        let mut profile = async_fs::File::create(&temp.join("launcher_profiles.json")).await?;
+        profile.write_all(b"{\"profiles\":{}}").await?;
+        drop(profile);
+        // 运行安装器
+        async_process::Command::new(&raw.runtime)
+            .arg("-jar")
+            .arg(installer)
+            .arg("--installClient")
+            .arg(&temp)
+            .status()
+            .await?
+            .success()
+            .ok_or(Error::other("The NeoForge installer exits on failure"))?;
+        // 拿走安装结果
+        merge_move(&temp.join("libraries"), raw.storage.libraries_dir()).await?;
+        let versions = async_fs::read_dir(temp.join("versions"))
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
+        if versions.len() != 2 {
+            return Err(Error::other("The installer doesn't behave as expected"));
+        }
+        let _version = versions
+            .into_iter()
+            .find(|x| x.file_name() != OsStr::new(&selected.minecraft))
+            .ok_or(Error::other("The installer doesn't behave as expected"))?
+            .path();
 
-        Ok(())
+        let _ = async_fs::remove_dir_all(temp).await;
+        todo!();
     }
+}
+
+/// 移动整个目录，并跳过已有文件
+#[async_recursion::async_recursion]
+async fn merge_move(src: &Path, dst: &Path) -> Result<()> {
+    let mut entries = async_fs::read_dir(src).await?;
+    while let Some(entry) = entries.next().await {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ty = entry.file_type().await?;
+        if ty.is_dir() {
+            if dst_path.exists() {
+                merge_move(&src_path, &dst_path).await?;
+            } else {
+                async_fs::rename(&src_path, &dst_path).await?;
+            }
+        } else {
+            if dst_path.exists() {
+                continue;
+            }
+            async_fs::rename(&src_path, &dst_path).await?;
+        }
+    }
+    Ok(())
 }
 
 impl LoaderMeta for NeoForgeVersion {

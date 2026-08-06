@@ -41,7 +41,7 @@ pub struct Storage {
     authlib_injector: PathBuf,
 
     /// 目录能力
-    capability: DirCapability,
+    pub(crate) capability: DirCapability,
     /// 共享储存桶策略
     /// 根据目录能力已 Fallback
     share_strategy: SharePreference,
@@ -139,7 +139,7 @@ impl Storage {
 /// 分平台的链接
 async fn symlink_async(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
     #[cfg(target_family = "unix")]
-    let symlink = async_fs::unix::symlink(source.as_ref(), target.as_ref()).await?;
+    async_fs::unix::symlink(source.as_ref(), target.as_ref()).await?;
 
     #[cfg(target_os = "windows")]
     async_fs::windows::symlink_file(source.as_ref(), target.as_ref()).await?;
@@ -150,7 +150,7 @@ async fn symlink_async(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Re
 /// 分平台的链接，用于阻塞线程
 fn symlink(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
     #[cfg(target_family = "unix")]
-    let symlink = std::os::unix::fs::symlink(source.as_ref(), target.as_ref())?;
+    std::os::unix::fs::symlink(source.as_ref(), target.as_ref())?;
 
     #[cfg(target_os = "windows")]
     std::os::windows::fs::symlink_file(source.as_ref(), target.as_ref())?;

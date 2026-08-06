@@ -245,6 +245,7 @@ impl Instance<'_, JavaRuntime, Ready> {
             arg_file.write_all(line.as_bytes()).await?;
             arg_file.write_all(b"\n").await?;
         }
+        arg_file.flush().await?;
         drop(arg_file);
 
         let mut cmd = async_process::Command::new(self.runtime.clone());

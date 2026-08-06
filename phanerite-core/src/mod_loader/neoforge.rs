@@ -127,6 +127,7 @@ impl LoaderInstall for NeoForge {
         drop(profile);
         // 运行安装器
         async_process::Command::new(&raw.runtime)
+            .current_dir(&temp)
             .arg("-jar")
             .arg(installer)
             .arg("--installClient")

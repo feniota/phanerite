@@ -1,10 +1,13 @@
 use crate::error::{Error, Result};
 use crate::storage::Storage;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-const CHUNK_SIZE: usize = 8192;
+/// 解压缓冲（新线程栈上）
+const CHUNK_SIZE: usize = 64 * 1024;
+/// 线程栈 = 4× 缓冲，给解压库内部留足空间
+const STACK_SIZE: usize = CHUNK_SIZE * 4; // 256 KiB
 
 pub struct Missing;
 
@@ -53,20 +56,23 @@ impl ExtractTask {
         let linker = storage.linker();
 
         let (tx, rx) = async_channel::bounded(1);
-        std::thread::spawn(move || {
-            let result = extract(
-                &archive_path,
-                &target,
-                bucket,
-                auto_flattens,
-                &exclude,
-                &linker,
-            );
-            if result.is_ok() {
-                let _ = fs::remove_file(&archive_path);
-            }
-            let _ = tx.send_blocking(result);
-        });
+        let _ = std::thread::Builder::new()
+            .stack_size(STACK_SIZE)
+            .name("extractor".to_string())
+            .spawn(move || {
+                let result = extract(
+                    &archive_path,
+                    &target,
+                    bucket,
+                    auto_flattens,
+                    &exclude,
+                    &linker,
+                );
+                if result.is_ok() {
+                    let _ = fs::remove_file(&archive_path);
+                }
+                let _ = tx.send_blocking(result);
+            });
         rx.recv()
             .await
             .map_err(|_| Error::other("extract thread panicked"))?
@@ -83,20 +89,15 @@ fn extract(
     exclude: &[ExcludePattern],
     linker: &impl Fn(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
-    let file = fs::File::open(archive)?;
-    let mut reader = BufReader::new(file);
-
-    // Peek magic bytes to determine format.
-    let magic = reader.fill_buf()?;
-    if magic.len() < 4 {
-        return Err(Error::other("archive too small"));
-    }
+    // Peek magic bytes without allocating a BufReader.
+    let mut magic = [0u8; 4];
+    fs::File::open(archive)?
+        .read_exact(&mut magic)
+        .map_err(|_| Error::other("archive too small"))?;
 
     if &magic[..2] == b"PK" {
-        drop(reader);
         unzip(archive, target, bucket, auto_flattens, exclude, linker)
     } else {
-        drop(reader);
         untar(archive, target, bucket, auto_flattens, exclude, linker)
     }
 }
@@ -114,7 +115,7 @@ fn unzip(
     let file = fs::File::open(archive)?;
     let mut reader = zip::ZipArchive::new(file)?;
 
-    let mut entries: Vec<(String, u64)> = Vec::with_capacity(reader.len());
+    let mut entries: Vec<String> = Vec::with_capacity(reader.len());
     for i in 0..reader.len() {
         let entry = reader.by_index(i)?;
         let name = entry.name().to_owned();
@@ -124,16 +125,16 @@ fn unzip(
         if exclude.iter().any(|p| p.matches(&name)) {
             continue;
         }
-        entries.push((name, entry.size()));
+        entries.push(name);
     }
 
     let prefix = if auto_flattens {
-        common_prefix(entries.iter().map(|(n, _)| n.as_str()))
+        common_prefix(entries.iter().map(|n| n.as_str()))
     } else {
         ""
     };
 
-    for (name, _) in &entries {
+    for name in &entries {
         let stored_path = strip_prefix(name, prefix);
         let mut entry = reader.by_name(name)?;
         let dest = target.join(stored_path);
@@ -154,11 +155,8 @@ fn untar(
     linker: &impl Fn(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
     fn open_tar(archive: &Path) -> Result<tar::Archive<Box<dyn Read>>> {
-        let file = fs::File::open(archive)?;
-        let mut reader = BufReader::new(file);
-        let magic = reader.fill_buf()?.to_vec();
-        let len = magic.len();
-        drop(reader);
+        let mut magic = [0u8; 6];
+        let len = fs::File::open(archive)?.read(&mut magic).unwrap_or(0);
 
         let file = fs::File::open(archive)?;
         let decoder: Box<dyn Read> = if len >= 3 && magic[0] == 0x1f && magic[1] == 0x8b {
@@ -175,41 +173,38 @@ fn untar(
         Ok(tar::Archive::new(decoder))
     }
 
-    // ── List entries ──────────────────────────────────────────────
-    let mut entries: Vec<(String, u64)> = Vec::new();
+    // ── First pass: collect names for prefix detection ────────────
+    let mut names: Vec<String> = Vec::new();
     {
         let mut tar = open_tar(archive_path)?;
         for entry in tar.entries()? {
             let entry = entry?;
-            let header = entry.header();
-            if header.entry_type() != tar::EntryType::Regular {
+            if entry.header().entry_type() != tar::EntryType::Regular {
                 continue;
             }
             let name = entry.path()?.to_string_lossy().into_owned();
             if exclude.iter().any(|p| p.matches(&name)) {
                 continue;
             }
-            let size = header.size()?;
-            entries.push((name, size));
+            names.push(name);
         }
     }
 
     let prefix = if auto_flattens {
-        common_prefix(entries.iter().map(|(n, _)| n.as_str()))
+        common_prefix(names.iter().map(|n| n.as_str()))
     } else {
         ""
     };
 
-    // ── Re-open and extract ───────────────────────────────────────
+    // ── Second pass: extract, re-applying exclusions ──────────────
     let mut tar = open_tar(archive_path)?;
     for entry in tar.entries()? {
         let entry = entry?;
-        let header = entry.header();
-        if header.entry_type() != tar::EntryType::Regular {
+        if entry.header().entry_type() != tar::EntryType::Regular {
             continue;
         }
         let name = entry.path()?.to_string_lossy().into_owned();
-        if !entries.iter().any(|(n, _)| n == &name) {
+        if exclude.iter().any(|p| p.matches(&name)) {
             continue;
         }
         let stored_path = strip_prefix(&name, prefix);
@@ -237,7 +232,7 @@ fn extract_entry(
     }
 
     let mut hasher = blake3::Hasher::new();
-    let mut chunk = vec![0u8; CHUNK_SIZE];
+    let mut chunk = [0u8; CHUNK_SIZE];
 
     let tmp = temp_path(dest);
     let mut tmp_file = fs::File::create(&tmp)?;

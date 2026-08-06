@@ -43,7 +43,7 @@ impl<R, C> Instance<'_, R, C> {
     pub async fn save(&self) -> Result<()> {
         let file = self.instance_dir.join(format!("{}.json", self.manifest.id));
         let mut file = async_fs::File::create(file).await?;
-        let json = serde_json::to_vec_pretty(&self.manifest.id)?;
+        let json = serde_json::to_vec_pretty(&self.manifest)?;
         file.write_all(&json).await?;
         Ok(())
     }

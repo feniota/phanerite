@@ -1,15 +1,16 @@
 use crate::download::Downloader;
 use crate::error::{Error, Result};
 use crate::instance::Instance;
+use crate::instance::overlay::OverlayManifest;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
-use futures::{AsyncWriteExt, StreamExt, TryStreamExt};
+use futures::{AsyncWriteExt, StreamExt};
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
-use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
+use std::io::Read;
 use std::path::Path;
 use std::sync::LazyLock;
 use tracing::debug;
@@ -104,6 +105,14 @@ impl LoaderInstall for NeoForge {
 
         debug!("Downloading NeoForge Installer: {url}");
         let body = downloader.fetch(url, None).await?;
+        let reader = std::io::Cursor::new(&body);
+        let mut archive = zip::ZipArchive::new(reader)?;
+        let mut manifest = Vec::new();
+        archive
+            .by_name("version.json")?
+            .read_to_end(&mut manifest)?;
+        drop(archive);
+        let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
         let installer = raw.storage.temp_path();
         let mut file = async_fs::File::create(&installer).await?;
         file.write_all(&body).await?;
@@ -112,10 +121,6 @@ impl LoaderInstall for NeoForge {
         debug!("Build a virtual installation environment for NeoForge");
         let temp = raw.storage.temp_path();
         async_fs::create_dir_all(&temp).await?;
-        // 下载加速
-        if raw.storage.capability.hardlink {
-            async_fs::hard_link(raw.storage.libraries_dir(), &temp.join("libraries")).await?
-        }
         // 假 launcher_profiles.json 骗 Installer 安装
         let mut profile = async_fs::File::create(&temp.join("launcher_profiles.json")).await?;
         profile.write_all(b"{\"profiles\":{}}").await?;
@@ -132,21 +137,11 @@ impl LoaderInstall for NeoForge {
             .ok_or(Error::other("The NeoForge installer exits on failure"))?;
         // 拿走安装结果
         merge_move(&temp.join("libraries"), raw.storage.libraries_dir()).await?;
-        let versions = async_fs::read_dir(temp.join("versions"))
-            .await?
-            .try_collect::<Vec<_>>()
-            .await?;
-        if versions.len() != 2 {
-            return Err(Error::other("The installer doesn't behave as expected"));
-        }
-        let _version = versions
-            .into_iter()
-            .find(|x| x.file_name() != OsStr::new(&selected.minecraft))
-            .ok_or(Error::other("The installer doesn't behave as expected"))?
-            .path();
+        // 合并版本配置
+        raw.manifest.merge_overlay(manifest, 30000);
 
         let _ = async_fs::remove_dir_all(temp).await;
-        todo!();
+        Ok(())
     }
 }
 

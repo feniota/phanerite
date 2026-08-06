@@ -1,5 +1,4 @@
 use crate::download::Downloader;
-use crate::download::downloader::RawDownloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::instance::Instance;
@@ -29,7 +28,7 @@ impl<C> Instance<'_, JavaRuntime, C> {
     pub async fn install_loader<L: LoaderInstall>(
         &mut self,
         version: impl AsRef<str>,
-        downloader: &RawDownloader<'_>,
+        downloader: &impl Downloader,
         select: impl AsyncFnOnce(L::MetaList) -> Result<L::MetaInfo>,
     ) -> Result<()> {
         let install = L::from_version(version, downloader).await?;

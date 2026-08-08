@@ -20,11 +20,11 @@ pub mod variables;
 pub struct NotReady;
 pub struct Ready;
 
-pub struct Instance<'a, R, C> {
+pub struct Instance<'storage, R, C> {
     pub instance_dir: PathBuf,
     pub manifest: InstanceManifest,
 
-    pub storage: &'a Storage,
+    pub storage: &'storage Storage,
 
     /// Runtime 的准备状态
     /// JavaRuntime 或 NotReady
@@ -238,7 +238,7 @@ impl<'a, R, C> Instance<'a, R, C> {
 
 impl Instance<'_, JavaRuntime, Ready> {
     pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Command> {
-        let arg_path = self.instance_dir.join("arguments");
+        let arg_path = self.storage.temp_file().await?;
         let mut arg_file = async_fs::File::create(&arg_path).await?;
 
         for line in auth.args(self, self.storage).await?.iter() {
@@ -251,7 +251,7 @@ impl Instance<'_, JavaRuntime, Ready> {
         let mut cmd = async_process::Command::new(self.runtime.clone());
         cmd.arg(format!(
             "@{}",
-            std::path::absolute(arg_path)?.to_string_lossy()
+            std::path::absolute(&arg_path)?.to_string_lossy()
         ))
         .current_dir(&self.instance_dir);
         Ok(cmd)

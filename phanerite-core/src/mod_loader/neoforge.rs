@@ -113,14 +113,13 @@ impl LoaderInstall for NeoForge {
             .read_to_end(&mut manifest)?;
         drop(archive);
         let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
-        let installer = raw.storage.temp_path();
-        let mut file = async_fs::File::create(&installer).await?;
+        let installer = raw.storage.temp_file().await?;
+        let mut file = async_fs::File::open(&installer).await?;
         file.write_all(&body).await?;
         drop(file);
 
         debug!("Build a virtual installation environment for NeoForge");
-        let temp = raw.storage.temp_path();
-        async_fs::create_dir_all(&temp).await?;
+        let temp = raw.storage.temp_dir().await?;
         // 假 launcher_profiles.json 骗 Installer 安装
         let mut profile = async_fs::File::create(&temp.join("launcher_profiles.json")).await?;
         profile.write_all(b"{\"profiles\":{}}").await?;
@@ -129,9 +128,9 @@ impl LoaderInstall for NeoForge {
         async_process::Command::new(&raw.runtime)
             .current_dir(&temp)
             .arg("-jar")
-            .arg(installer)
+            .arg(installer.as_ref())
             .arg("--installClient")
-            .arg(&temp)
+            .arg(temp.as_ref())
             .status()
             .await?
             .success()

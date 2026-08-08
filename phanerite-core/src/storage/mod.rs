@@ -1,10 +1,11 @@
 pub mod bucket;
 pub mod capability;
+pub mod temp;
 
 use crate::error::{Error, Result};
 use crate::storage::capability::{DirCapability, probe_tree};
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
+use std::sync::Arc;
 
 /// `Storage` 包含了启动器需要持久储存数据的地址
 /// 作为依赖注入到启动器的文件系统操作中
@@ -41,10 +42,12 @@ pub struct Storage {
     authlib_injector: PathBuf,
 
     /// 目录能力
-    pub(crate) capability: DirCapability,
+    capability: DirCapability,
     /// 共享储存桶策略
     /// 根据目录能力已 Fallback
     share_strategy: SharePreference,
+    /// 临时文件清理器
+    cleaner: Arc<async_executor::Executor<'static>>,
 }
 
 impl Storage {
@@ -74,6 +77,7 @@ impl Storage {
             capability,
             share_strategy: SharePreference::Hardlink.fallback(capability),
             root_dir,
+            cleaner: Default::default(),
         })
     }
     /// 修改偏好
@@ -83,9 +87,6 @@ impl Storage {
     }
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
-    }
-    pub fn temp_path(&self) -> PathBuf {
-        self.cache_dir.join(Uuid::now_v7().to_string())
     }
     pub fn versions_dir(&self) -> &Path {
         self.versions_dir.as_ref()
@@ -112,7 +113,7 @@ impl Storage {
         self.authlib_injector.as_ref()
     }
 
-    pub(crate) fn linker(&self) -> impl Fn(&Path, &Path) -> Result<()> + 'static {
+    pub(crate) fn linker_blocking(&self) -> impl Fn(&Path, &Path) -> Result<()> + 'static {
         let strategy = self.share_strategy;
         move |source, target| {
             match strategy {
@@ -123,7 +124,7 @@ impl Storage {
             Ok(())
         }
     }
-    pub(crate) fn linker_async(&self) -> impl AsyncFn(&Path, &Path) -> Result<()> + 'static {
+    pub(crate) fn linker(&self) -> impl AsyncFn(&Path, &Path) -> Result<()> + 'static {
         let strategy = self.share_strategy;
         async move |source, target| {
             match strategy {
@@ -166,10 +167,11 @@ async fn dir(root: &Path, name: &str) -> Result<PathBuf> {
     Ok(p)
 }
 
-/// 清理临时文件
+/// 尝试推进清理任务，不保证异步 IO 完成
 impl Drop for Storage {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.cache_dir);
+        // 不保证完全清理
+        while self.cleaner.try_tick() {}
     }
 }
 

@@ -189,10 +189,12 @@ impl Downloader for RawDownloader<'_> {
             task.process.name().unwrap_or("unknown filename")
         );
         task.process.start();
-        let cache = self.storage.temp_path();
 
         // 下载文件
         let retry_body = async || {
+            // 创建临时文件
+            let cache = self.storage.temp_file().await?;
+
             // 共享储存桶 Hasher
             let mut bucket_hasher = match task.target {
                 Target::File(_) => task.share.then_some(blake3::Hasher::new()),
@@ -247,7 +249,7 @@ impl Downloader for RawDownloader<'_> {
 
             // 校验文件
             if task.file_hash == hasher.finalize() {
-                Ok(bucket_hasher)
+                Ok((cache, bucket_hasher))
             } else {
                 Err(Error::other(format!(
                     "hash mismatch: {}",
@@ -256,7 +258,7 @@ impl Downloader for RawDownloader<'_> {
             }
         }; // RETRY_BODY
 
-        let mut last_res = Ok(None);
+        let mut last_res = Err(Error::other("Unreachable"));
         for _ in 0..=self.retries {
             match retry_body().await {
                 Ok(v) => {
@@ -269,9 +271,8 @@ impl Downloader for RawDownloader<'_> {
                 }
                 Err(e) => last_res = Err(e),
             }
-            let _ = async_fs::remove_file(&cache).await;
         }
-        let bucket_hasher = last_res?;
+        let (cache, bucket_hasher) = last_res?;
 
         match &task.target {
             // 直接保存
@@ -299,19 +300,13 @@ impl Downloader for RawDownloader<'_> {
 
                 // 如果有 bucket，将共享文件链接到 task.target
                 if task.share {
-                    self.storage.linker_async()(save_path, path).await?
+                    self.storage.linker()(save_path, path).await?
                 }
             }
             // 解压缩
             Target::Extract(extract) => {
                 task.process.extracting();
-                extract
-                    .exec(
-                        &cache,
-                        task.share.then_some(self.storage.share_dir().to_owned()),
-                        self.storage,
-                    )
-                    .await?
+                extract.exec(&cache, task.share, self.storage).await?
             }
         } // Save or Extract
 

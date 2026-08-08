@@ -28,6 +28,8 @@ fn main() {
         let storage = storage::Storage::new(".minecraft")
             .await?
             .share_preference(Hardlink);
+        let (cleaner, _shutdown) = storage.run_cleaner();
+        smol::spawn(cleaner).detach();
         let downloader = download::downloader::RawDownloader::builder(&storage)
             .build()
             .await?;

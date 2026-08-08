@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 async-channel = "2.5"
+async-executor = "1.14"
 async-fs = "2.2"
 async-process = "2.5"
 async-recursion = "1.1"

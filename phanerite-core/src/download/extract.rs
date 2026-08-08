@@ -46,14 +46,15 @@ impl ExtractTask {
     pub(super) async fn exec(
         &self,
         archive_file: impl AsRef<Path>,
-        bucket: Option<PathBuf>,
+        share: bool,
         storage: &Storage,
     ) -> Result<()> {
         let archive_path = archive_file.as_ref().to_path_buf();
         let target = self.path.clone();
         let auto_flattens = self.auto_flattens;
         let exclude = self.exclude.clone();
-        let linker = storage.linker();
+        let bucket = share.then_some(storage.share_dir().to_owned());
+        let linker = storage.linker_blocking();
 
         let (tx, rx) = async_channel::bounded(1);
         let _ = std::thread::Builder::new()

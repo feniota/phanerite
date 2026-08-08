@@ -1,6 +1,5 @@
 use crate::download::Downloader;
 use crate::download::authlib_injector::AuthlibInjector;
-use crate::download::downloader::RawDownloader;
 use crate::error::{Error, Result};
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
@@ -75,8 +74,8 @@ pub struct Authentication<'a> {
     authlib_injector: Option<&'a AuthlibInjector<'a>>,
 }
 
-pub struct Login<'a, S, U, P> {
-    downloader: &'a RawDownloader<'a>,
+pub struct Login<'a, S, U, P, D: Downloader> {
+    downloader: &'a D,
     authlib_injector: Option<&'a AuthlibInjector<'a>>,
 
     // 登录服务器
@@ -94,7 +93,7 @@ pub struct Missing;
 
 impl<'a> Authentication<'a> {
     /// 创建登录会话
-    pub fn new_login(downloader: &'a RawDownloader<'a>) -> Login<'a, Missing, Missing, Missing> {
+    pub fn new_login<D: Downloader>(downloader: &'a D) -> Login<'a, Missing, Missing, Missing, D> {
         Login {
             downloader,
             authlib_injector: None,
@@ -303,15 +302,15 @@ impl super::Authentication for Authentication<'_> {
     }
 }
 
-impl<'a, S, U, P> Login<'a, S, U, P> {
+impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
     pub fn inject(mut self, authlib_injector: &'a AuthlibInjector) -> Self {
         self.authlib_injector = Some(authlib_injector);
         self
     }
 }
 
-impl<'a, U, P> Login<'a, Missing, U, P> {
-    pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P>> {
+impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
+    pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P, D>> {
         let url = self.get_ali(url.into()).await;
         self.update_meta(&url).await?;
         Ok(Login {
@@ -348,8 +347,8 @@ impl<'a, U, P> Login<'a, Missing, U, P> {
     }
 }
 
-impl<'a, S, P> Login<'a, S, Missing, P> {
-    pub fn username(self, username: impl Into<String>) -> Login<'a, S, String, P> {
+impl<'a, S, P, D: Downloader> Login<'a, S, Missing, P, D> {
+    pub fn username(self, username: impl Into<String>) -> Login<'a, S, String, P, D> {
         Login {
             downloader: self.downloader,
             authlib_injector: self.authlib_injector,
@@ -363,8 +362,8 @@ impl<'a, S, P> Login<'a, S, Missing, P> {
     }
 }
 
-impl<'a, S, U> Login<'a, S, U, Missing> {
-    pub fn password(self, password: impl Into<String>) -> Login<'a, S, U, SecretString> {
+impl<'a, S, U, D: Downloader> Login<'a, S, U, Missing, D> {
+    pub fn password(self, password: impl Into<String>) -> Login<'a, S, U, SecretString, D> {
         Login {
             downloader: self.downloader,
             authlib_injector: self.authlib_injector,
@@ -423,7 +422,7 @@ pub struct ProfileProperty {
     pub signature: Option<String>,
 }
 
-impl<'a> Login<'a, Url, String, SecretString> {
+impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
     pub async fn login(self) -> Result<Authentication<'a>> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
 

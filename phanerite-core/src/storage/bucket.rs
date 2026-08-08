@@ -4,8 +4,8 @@ use async_fs::Metadata;
 use futures::StreamExt;
 use tracing::trace;
 
-/// 清理共享储存桶中的孤立文件
 impl Storage {
+    /// 清理共享储存桶中的孤立硬链接和空目录
     pub async fn clean_hardlink(&self) -> Result<()> {
         let bucket = self.share_dir();
         const CONCURRENT: usize = 16;
@@ -65,6 +65,7 @@ impl Storage {
     }
 }
 
+/// 硬链接引用计数
 #[cfg(target_family = "unix")]
 #[inline]
 fn ref_count(meta: &Metadata) -> Result<u64> {
@@ -72,6 +73,7 @@ fn ref_count(meta: &Metadata) -> Result<u64> {
     Ok(meta.nlink())
 }
 
+/// 硬链接引用计数
 #[cfg(target_os = "windows")]
 #[inline]
 fn ref_count(meta: &Metadata) -> Result<u64> {

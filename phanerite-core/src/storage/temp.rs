@@ -6,20 +6,25 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+/// 文件类型，用于决定清理方式
 #[derive(Clone, Copy)]
 enum FileType {
     File,
     Directory,
 }
 
+/// 临时路径的包装，释放时创建清理任务
 pub struct TempGuard<'storage> {
+    /// 临时路径
     path: PathBuf,
+    /// 文件类型
     file_type: FileType,
+    /// 清理器
     ex: &'storage Executor<'static>,
 }
 
 impl TempGuard<'_> {
-    pub fn path(&self) -> &Path {
+    pub fn as_path(&self) -> &Path {
         &self.path
     }
     /// 放弃自动清理

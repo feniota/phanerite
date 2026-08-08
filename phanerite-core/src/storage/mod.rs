@@ -61,7 +61,7 @@ impl Storage {
         if !capability.read {
             return Err(Error::other("An unreadable directory exists"));
         } else if !capability.write {
-            return Err(Error::other("A non-writable directory exists"));
+            return Err(Error::other("An unwritable directory exists"));
         }
 
         Ok(Self {
@@ -113,7 +113,8 @@ impl Storage {
         self.authlib_injector.as_ref()
     }
 
-    pub(crate) fn linker_blocking(&self) -> impl Fn(&Path, &Path) -> Result<()> + 'static {
+    /// 生成用于创建链接的闭包（阻塞 IO）
+    pub fn linker_blocking(&self) -> impl Fn(&Path, &Path) -> Result<()> + 'static {
         let strategy = self.share_strategy;
         move |source, target| {
             match strategy {
@@ -124,7 +125,8 @@ impl Storage {
             Ok(())
         }
     }
-    pub(crate) fn linker(&self) -> impl AsyncFn(&Path, &Path) -> Result<()> + 'static {
+    /// 生成用于创建链接的闭包
+    pub fn linker(&self) -> impl AsyncFn(&Path, &Path) -> Result<()> + 'static {
         let strategy = self.share_strategy;
         async move |source, target| {
             match strategy {
@@ -159,6 +161,7 @@ fn symlink(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// 拼接和创建目录
 async fn dir(root: &Path, name: &str) -> Result<PathBuf> {
     let p = root.join(name);
     if !p.is_dir() {

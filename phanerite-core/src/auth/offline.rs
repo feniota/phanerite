@@ -5,6 +5,7 @@ use crate::instance::variables::Variables;
 use crate::storage::Storage;
 use uuid::Uuid;
 
+/// 离线登录
 pub struct Authentication {
     pub nickname: String,
     pub uuid: Uuid,
@@ -34,6 +35,7 @@ impl super::Authentication for Authentication {
     }
 }
 
+/// 离线模式的 UUID 算法
 pub fn offline_uuid(username: &str) -> Uuid {
     let input = format!("OfflinePlayer:{username}");
 

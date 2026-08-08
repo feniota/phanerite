@@ -25,6 +25,23 @@ impl BitAnd for DirCapability {
     }
 }
 
+/// 遍历检查目录能力
+pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
+    walk_dirs(root)
+        .map(|dir| async move { probe_dir(&dir).await })
+        .buffer_unordered(16)
+        .fold(
+            DirCapability {
+                read: true,
+                write: true,
+                hardlink: true,
+                symlink: true,
+            },
+            |a, b| async move { a & b },
+        )
+        .await
+}
+
 /// 检查目录能力
 async fn probe_dir(current: &Path) -> DirCapability {
     let test_file = current.join(format!(".test-{}", Uuid::now_v7()));
@@ -69,21 +86,4 @@ fn walk_dirs(root: PathBuf) -> impl Stream<Item = PathBuf> {
 
         Some((dir, stack))
     })
-}
-
-/// 遍历检查目录能力
-pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
-    walk_dirs(root)
-        .map(|dir| async move { probe_dir(&dir).await })
-        .buffer_unordered(16)
-        .fold(
-            DirCapability {
-                read: true,
-                write: true,
-                hardlink: true,
-                symlink: true,
-            },
-            |a, b| async move { a & b },
-        )
-        .await
 }

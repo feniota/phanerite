@@ -1,7 +1,9 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use std::str::FromStr;
 use url::Url;
 
+/// 用于解析 Maven 坐标，并根据 Maven 坐标生成路径和 URL
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MavenArtifact {
     pub group: String,
@@ -12,6 +14,7 @@ pub struct MavenArtifact {
 }
 
 impl MavenArtifact {
+    /// 生成路径字符串
     pub fn path(&self) -> String {
         let mut filename = format!("{}-{}", self.artifact, self.version);
 
@@ -31,7 +34,7 @@ impl MavenArtifact {
             filename
         )
     }
-
+    /// 生成路径 URL
     pub fn url(&self, base: &Url) -> crate::error::Result<Url> {
         base.join(&self.path())
             .map_err(|e| crate::error::Error::other(e.to_string()))
@@ -101,8 +104,6 @@ impl Serialize for MavenArtifact {
         serializer.serialize_str(&value)
     }
 }
-
-use std::fmt;
 
 impl fmt::Display for MavenArtifact {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

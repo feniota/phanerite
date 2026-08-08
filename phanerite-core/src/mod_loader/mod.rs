@@ -31,8 +31,11 @@ impl<C> Instance<'_, JavaRuntime, C> {
         downloader: &impl Downloader,
         select: impl AsyncFnOnce(L::MetaList) -> Result<L::MetaInfo>,
     ) -> Result<()> {
+        // 根据版本获取可用加载器列表
         let install = L::from_version(version, downloader).await?;
+        // 执行安装
         install.install(self, select, downloader).await?;
+        // 持久化修改过的 `InstanceManifest`
         self.save().await?;
         Ok(())
     }
@@ -54,7 +57,7 @@ pub trait LoaderInstall: Sized {
     type MetaList: Iterator<Item = Self::MetaInfo>;
     /// 根据已有版本查找合适的 Loader
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self>;
-    /// 选择版本并下载 Profile，合并出带有 Loader 的 `InstanceManifest`
+    /// 选择版本并下载 Profile，然后安装到 `Instance`
     /// 留 AsyncFnOnce 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
     async fn install<C, S>(
         self,
@@ -65,7 +68,7 @@ pub trait LoaderInstall: Sized {
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>;
     /// 从 `InstanceManifest` 里面找出无法被正常构建的下载任务
-    /// 例如 `FabricLibrary`
+    /// 例如 `FabricLibrary` 是 Fabric 的自定义格式
     async fn extra_downloads(
         _manifest: &InstanceManifest,
         _storage: &Storage,

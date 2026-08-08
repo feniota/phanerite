@@ -14,6 +14,8 @@ use std::fmt::{Display, Formatter};
 use url::Url;
 use uuid::Uuid;
 
+pub struct Missing;
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct YggdrasilError {
@@ -46,6 +48,7 @@ impl<T> Response<T> {
     }
 }
 
+/// Yggdrasil 登录
 pub struct Authentication<'a> {
     access_token: SecretString,
     client_token: SecretString,
@@ -59,7 +62,7 @@ pub struct Authentication<'a> {
 
     /// 邮箱
     pub username: String,
-    /// 密码
+    /// 密码，不应该被持久化
     password: SecretString,
 
     /// 服务器 base URL
@@ -88,8 +91,6 @@ pub struct Login<'a, S, U, P, D: Downloader> {
     username: U,
     password: P,
 }
-
-pub struct Missing;
 
 impl<'a> Authentication<'a> {
     /// 创建登录会话
@@ -267,6 +268,7 @@ impl<'a> Authentication<'a> {
         let arguments = variables.to_arguments(instance);
         Ok(arguments)
     }
+    /// 生成启动参数（注入 `authlib-injector`）
     async fn injected_args<R, C>(
         &self,
         instance: &Instance<'_, R, C>,
@@ -310,6 +312,7 @@ impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
 }
 
 impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
+    /// 自定义的验证服务器地址
     pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P, D>> {
         let url = self.get_ali(url.into()).await;
         self.update_meta(&url).await?;
@@ -324,6 +327,7 @@ impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
             password: self.password,
         })
     }
+    /// API Location Indication
     async fn get_ali(&self, url: Url) -> Url {
         let response = match self.downloader.head(url.clone()).await {
             Ok(v) => v,
@@ -335,6 +339,7 @@ impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
             .and_then(|t| t.parse().ok())
             .unwrap_or(url)
     }
+    /// 必须执行的操作，否则会 `unwrap()`
     async fn update_meta(&mut self, url: &Url) -> Result<()> {
         let res = self.downloader.fetch(url.clone(), None).await?;
         let res = serde_json::from_slice::<Response<FullMeta>>(&res)?.into_result()?;
@@ -423,6 +428,7 @@ pub struct ProfileProperty {
 }
 
 impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
+    /// 完成登录
     pub async fn login(self) -> Result<Authentication<'a>> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
 

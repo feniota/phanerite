@@ -2,6 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
+/// 用于序列化/反序列化无符号 UUID
 #[derive(Debug, Clone)]
 pub struct UnhyphenatedUuid(Uuid);
 

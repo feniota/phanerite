@@ -6,9 +6,11 @@ use crate::error::{Error, Result};
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
+use crate::storage::temp::TempGuard;
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashSet;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
 pub mod arguments;
@@ -237,7 +239,7 @@ impl<'a, R, C> Instance<'a, R, C> {
 }
 
 impl Instance<'_, JavaRuntime, Ready> {
-    pub async fn launch(&self, auth: &impl Authentication) -> Result<async_process::Command> {
+    pub async fn launch(&self, auth: &impl Authentication) -> Result<LaunchCommand<'_>> {
         let arg_path = self.storage.temp_file().await?;
         let mut arg_file = async_fs::File::create(&arg_path).await?;
 
@@ -254,7 +256,30 @@ impl Instance<'_, JavaRuntime, Ready> {
             std::path::absolute(&arg_path)?.to_string_lossy()
         ))
         .current_dir(&self.instance_dir);
-        Ok(cmd)
+        Ok(LaunchCommand {
+            cmd,
+            _arg_temp: arg_path,
+        })
+    }
+}
+
+/// `async_process::Command`的包装，用于保证参数文件不会被提前删除
+pub struct LaunchCommand<'a> {
+    cmd: async_process::Command,
+    _arg_temp: TempGuard<'a>,
+}
+
+impl Deref for LaunchCommand<'_> {
+    type Target = async_process::Command;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cmd
+    }
+}
+
+impl DerefMut for LaunchCommand<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.cmd
     }
 }
 

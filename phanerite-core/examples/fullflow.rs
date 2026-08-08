@@ -102,12 +102,8 @@ fn main() {
             .login()
             .await?;
 
-        let mut cmd = instance
-            .ensure_ready()
-            .bind_java(java)
-            .await?
-            .launch(&auth)
-            .await?;
+        let instance = instance.bind_java(java).await?.ensure_ready();
+        let mut cmd = instance.launch(&auth).await?;
         let exit = cmd.spawn()?.status().await?;
         println!("Game exited: {exit}");
 

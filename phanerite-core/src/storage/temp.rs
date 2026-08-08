@@ -22,6 +22,11 @@ impl TempGuard<'_> {
     pub fn path(&self) -> &Path {
         &self.path
     }
+    /// 放弃自动清理
+    #[deprecated(note = "leaking a temporary file is usually a bug")]
+    pub fn persist(mut self) -> PathBuf {
+        std::mem::take(&mut self.path)
+    }
 }
 
 impl AsRef<Path> for TempGuard<'_> {

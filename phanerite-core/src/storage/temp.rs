@@ -97,14 +97,14 @@ impl<'storage> Storage {
     /// drop(_shutdown);
     /// ```
     pub fn run_cleaner(&self) -> (impl Future<Output = ()> + 'static, ShutdownGuard) {
-        let (tx, rx) = async_channel::bounded(0);
+        let (tx, rx) = async_channel::bounded(1);
         let cleaner = self.cleaner.clone();
         let task = async move {
             cleaner
                 .run(async move {
                     let _ = rx.recv().await;
                 })
-                .await
+                .await;
         };
         (task, ShutdownGuard { _guard: tx })
     }

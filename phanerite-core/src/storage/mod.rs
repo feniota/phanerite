@@ -73,7 +73,7 @@ impl Storage {
             assets_dir: dir(&root_dir, "assets").await?,
             assets_objects: dir(&root_dir, "assets/objects").await?,
             assets_indexes: dir(&root_dir, "assets/indexes").await?,
-            authlib_injector: dir(&root_dir, "cache").await?,
+            authlib_injector: dir(&root_dir, "authlib-injector").await?,
             capability,
             share_strategy: SharePreference::Hardlink.fallback(capability),
             root_dir,

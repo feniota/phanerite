@@ -16,6 +16,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
+use std::time::Duration;
 use tracing::{Level, error};
 use url::Url;
 

@@ -114,7 +114,7 @@ impl LoaderInstall for NeoForge {
         drop(archive);
         let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
         let installer = raw.storage.temp_file().await?;
-        let mut file = async_fs::File::open(&installer).await?;
+        let mut file = async_fs::File::create(&installer).await?;
         file.write_all(&body).await?;
         drop(file);
 

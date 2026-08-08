@@ -15,7 +15,7 @@ use std::time::Duration;
 use tracing::{debug, error, warn};
 use url::Url;
 
-pub struct DownloaderBuilder<'a> {
+pub struct DownloaderBuilder<'storage> {
     /// 重试次数
     retries: usize,
     /// 最大并发数,
@@ -31,13 +31,13 @@ pub struct DownloaderBuilder<'a> {
     /// 小文件缓冲大小
     small_buffer: usize,
 
-    storage: &'a Storage,
+    storage: &'storage Storage,
 }
 
-pub struct RawDownloader<'a> {
+pub struct RawDownloader<'storage> {
     retries: usize,
     concurrency: usize,
-    storage: &'a Storage,
+    storage: &'storage Storage,
     threshold: u64,
 
     /// HTTP 客户端
@@ -52,9 +52,9 @@ pub struct RawDownloader<'a> {
     small_tx: Sender<Vec<u8>>,
 }
 
-impl<'a> DownloaderBuilder<'a> {
+impl<'storage> DownloaderBuilder<'storage> {
     /// 构建默认下载器
-    fn new(storage: &'a Storage) -> Self {
+    fn new(storage: &'storage Storage) -> Self {
         Self {
             retries: 3,
             concurrency: 32,
@@ -102,7 +102,7 @@ impl<'a> DownloaderBuilder<'a> {
         self.small_buffer = buffer;
         self
     }
-    pub async fn build(self) -> Result<RawDownloader<'a>> {
+    pub async fn build(self) -> Result<RawDownloader<'storage>> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
@@ -171,6 +171,7 @@ impl Downloader for RawDownloader<'_> {
             .clone())
     }
     async fn download(&self, task: DownloadTask) -> Result<()> {
+        /// 用于发送失败信号
         struct FailGuard<'a> {
             process: &'a DownloadProcess,
         }

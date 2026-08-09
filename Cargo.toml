@@ -4,5 +4,23 @@ members = [
     "phanerite-core"
 ]
 
+[workspace.package]
+authors = ["Enita <enitanureya@outlook.com>", "Tuxium <ursusfeline07@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/feniota/phanerite"
+homepage = "https://phenocryst.ferris.love/phanerite/"
+description = "A preconfigure-able Minecraft launcher, which connects to and is managed by an Aphanite server."
+readme = "README.md"
+keywords = ["minecraft", "launcher"]
+categories = ["games"]
+edition = "2024"
+
 [workspace.dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+http = "1.4"
+serde = { version = "1.0", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1"
+url = { version = "2.5", features = ["serde"] }
+uuid = { version = "1.24", features = ["serde", "v7"] }

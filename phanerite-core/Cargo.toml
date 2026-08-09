@@ -1,40 +1,62 @@
 [package]
 name = "phanerite-core"
 version = "0.1.0"
-edition = "2024"
+
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+edition.workspace = true
 
 [dependencies]
+
+# async runtime / async utilities
 async-channel = "2.5"
 async-executor = "1.14"
 async-fs = "2.2"
 async-process = "2.5"
 async-recursion = "1.1"
+event-listener = "5.4"
+futures.workspace = true
+
+# serialization / data format
+serde.workspace = true
+serde_json = "1.0"
+serde-xml-rs = "0.8"
+strum.workspace = true
+
+# networking / http
+http.workspace = true
+isahc = { version = "2.0", default-features = false, features = ["http2", "rustls-tls-webpki-roots", "static-curl"] }
+url.workspace = true
+
+# cryptography / encoding
 base64 = "0.23"
 blake3 = { version = "1.8", features = ["serde"] }
-bzip2 = "0.6"
-chrono = { version = "0.4", features = ["serde"] }
-event-listener = "5.4"
-flate2 = "1.1"
-futures = "0.3"
 hex = "0.4"
-http = "1.4"
-isahc = { version = "2.0", default-features = false, features = ["http2", "rustls-tls", "static-curl"] }
 md5 = "0.8"
-scc = "3.8"
-secrecy = { version = "0.10", features = ["serde"] }
-serde = { version = "1.0", features = ["derive"] }
-serde-xml-rs = "0.8"
-serde_json = "1.0"
 sha1 = "0.11"
 sha2 = "0.11"
-strum = { version = "0.28", features = ["derive"] }
+secrecy = { version = "0.10", features = ["serde"] }
+
+# archive / compression
+bzip2 = "0.6"
+flate2 = "1.1"
 tar = "0.4"
-tracing = "0.1"
-url = { version = "2.5", features = ["serde"] }
-uuid = { version = "1.24", features = ["serde", "v7"] }
 xz2 = "0.1"
 zip = "8.6"
 zstd = { version = "0.13", default-features = false }
+
+# database / data structures
+scc = "3.8"
+
+# time / identifiers
+chrono.workspace = true
+uuid.workspace = true
+
+# logging / diagnostics
+tracing.workspace = true
 
 [dev-dependencies]
 dotenvy = "0.15"

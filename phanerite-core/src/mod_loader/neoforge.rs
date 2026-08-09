@@ -116,6 +116,7 @@ impl LoaderInstall for NeoForge {
         let installer = raw.storage.temp_file().await?;
         let mut file = async_fs::File::create(&installer).await?;
         file.write_all(&body).await?;
+        drop(body);
         drop(file);
 
         debug!("Build a virtual installation environment for NeoForge");
@@ -140,7 +141,6 @@ impl LoaderInstall for NeoForge {
         // 合并版本配置
         raw.manifest.merge_overlay(manifest, 30000);
 
-        let _ = async_fs::remove_dir_all(temp).await;
         Ok(())
     }
 }

@@ -292,11 +292,9 @@ impl Downloader for RawDownloader<'_> {
                     async_fs::create_dir_all(parent).await?;
                 }
 
-                // 移动到目标位置，共享桶存在文件则删除缓存，不执行操作
+                // 移动到目标位置，共享桶存在文件则不执行操作
                 if task.share || !save_path.exists() {
                     async_fs::rename(&cache, &save_path).await?
-                } else {
-                    async_fs::remove_file(&cache).await?
                 };
 
                 // 如果有 bucket，将共享文件链接到 task.target

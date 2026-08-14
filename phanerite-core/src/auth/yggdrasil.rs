@@ -4,7 +4,6 @@ use crate::error::{Error, Result};
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
@@ -251,19 +250,19 @@ impl<'a> Authentication<'a> {
         Ok(encoded)
     }
     /// 生成启动参数
-    fn args<R, C>(&self, instance: &Instance<R, C>, storage: &Storage) -> Result<LaunchArguments> {
+    fn args<R, C>(&self, instance: &Instance<R, C>) -> Result<LaunchArguments> {
         let Some(profile) = &self.selected_profile else {
             return Err(Error::other("No selected profile"));
         };
 
-        let variables = Variables::builder()
+        let variables = Variables::new()
             .required(
                 profile.name.clone().unwrap_or_default(),
                 profile.id.to_string(),
                 self.access_token.expose_secret(),
             )
             .legacy(self.access_token.expose_secret(), "mojang")
-            .build(instance, storage)?;
+            .generated(instance)?;
 
         let arguments = variables.to_arguments(instance);
         Ok(arguments)
@@ -272,10 +271,9 @@ impl<'a> Authentication<'a> {
     async fn injected_args<R, C>(
         &self,
         instance: &Instance<'_, R, C>,
-        storage: &Storage,
         authlib_injector: &AuthlibInjector<'_>,
     ) -> Result<LaunchArguments> {
-        let mut args = self.args(instance, storage)?;
+        let mut args = self.args(instance)?;
         let agent = format!(
             "-javaagent:{}={}",
             authlib_injector.get().await?.to_string_lossy(),
@@ -285,21 +283,17 @@ impl<'a> Authentication<'a> {
             "-Dauthlibinjector.yggdrasil.prefetched={}",
             self.meta_base64()?
         );
-        args.jvm.push((agent, None));
-        args.jvm.push((meta, None));
+        args.jvm.insert(agent, None);
+        args.jvm.insert(meta, None);
         Ok(args)
     }
 }
 
 impl super::Authentication for Authentication<'_> {
-    async fn args<R, C>(
-        &self,
-        instance: &Instance<'_, R, C>,
-        storage: &Storage,
-    ) -> Result<LaunchArguments> {
+    async fn args<R, C>(&self, instance: &Instance<'_, R, C>) -> Result<LaunchArguments> {
         Ok(match self.authlib_injector {
-            None => self.args(instance, storage)?,
-            Some(i) => self.injected_args(instance, storage, i).await?,
+            None => self.args(instance)?,
+            Some(i) => self.injected_args(instance, i).await?,
         })
     }
 }

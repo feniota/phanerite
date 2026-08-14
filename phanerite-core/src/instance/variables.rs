@@ -1,10 +1,10 @@
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::manifest::VersionType;
-use crate::storage::Storage;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+#[derive(Default)]
 pub struct Variables {
     vars: HashMap<&'static str, String>,
 
@@ -12,23 +12,8 @@ pub struct Variables {
 }
 
 impl Variables {
-    pub fn builder() -> VariablesBuilder<Missing, Missing, Missing> {
-        VariablesBuilder {
-            auth_player_name: Missing,
-            auth_uuid: Missing,
-            auth_access_token: Missing,
-            auth_session: Missing,
-            user_type: Missing,
-            clientid: Missing,
-            auth_xuid: Missing,
-            resolution_width: None,
-            resolution_height: None,
-            quick_play_path: None,
-            quick_play_singleplayer: None,
-            quick_play_multiplayer: None,
-            quick_play_realms: None,
-            features: HashSet::new(),
-        }
+    pub fn new() -> Self {
+        Default::default()
     }
     pub(super) fn resolve(&self, input: &str) -> Option<String> {
         if let Some(key) = input.strip_prefix("${").and_then(|x| x.strip_suffix('}')) {
@@ -53,166 +38,71 @@ impl Variables {
         output.push_str(rest);
         Some(output)
     }
-}
-
-pub struct Missing;
-
-pub struct VariablesBuilder<Required, Legacy, Modern> {
-    // 新版 + 旧版
-    auth_player_name: Required,
-    auth_uuid: Required,
-    auth_access_token: Required,
-    // 仅旧版
-    auth_session: Legacy,
-    user_type: Legacy,
-    // 仅新版
-    clientid: Modern,
-    auth_xuid: Modern,
-
-    // 新版可选设置
-    resolution_width: Option<String>,
-    resolution_height: Option<String>,
-    quick_play_path: Option<String>,
-    quick_play_singleplayer: Option<String>,
-    quick_play_multiplayer: Option<String>,
-    quick_play_realms: Option<String>,
-
-    // Features
-    features: HashSet<&'static str>,
-}
-
-// ————————————————————————————————————————
-// 新旧版必选配置
-// ————————————————————————————————————————
-
-impl<Legacy, Modern> VariablesBuilder<Missing, Legacy, Modern> {
+    /// 新旧版必选配置
     pub fn required(
-        self,
+        mut self,
         auth_player_name: impl Into<String>,
         auth_uuid: impl Into<String>,
         auth_access_token: impl Into<String>,
-    ) -> VariablesBuilder<String, Legacy, Modern> {
-        VariablesBuilder {
-            auth_player_name: auth_player_name.into(),
-            auth_uuid: auth_uuid.into(),
-            auth_access_token: auth_access_token.into(),
-            auth_session: self.auth_session,
-            user_type: self.user_type,
-            clientid: self.clientid,
-            auth_xuid: self.auth_xuid,
-            resolution_width: self.resolution_width,
-            resolution_height: self.resolution_height,
-            quick_play_path: self.quick_play_path,
-            quick_play_singleplayer: self.quick_play_singleplayer,
-            quick_play_multiplayer: self.quick_play_multiplayer,
-            quick_play_realms: self.quick_play_realms,
-            features: self.features,
-        }
+    ) -> Self {
+        self.vars
+            .insert("auth_player_name", auth_player_name.into());
+        self.vars.insert("auth_uuid", auth_uuid.into());
+        self.vars
+            .insert("auth_access_token", auth_access_token.into());
+        self
     }
-}
-
-// ————————————————————————————————————————
-// 旧版必选配置
-// ————————————————————————————————————————
-
-impl<Modern> VariablesBuilder<String, Missing, Modern> {
-    pub fn legacy(
-        self,
-        auth_session: impl Into<String>,
-        user_type: impl Into<String>,
-    ) -> VariablesBuilder<String, String, Modern> {
-        VariablesBuilder {
-            auth_player_name: self.auth_player_name,
-            auth_uuid: self.auth_uuid,
-            auth_access_token: self.auth_access_token,
-            auth_session: auth_session.into(),
-            user_type: user_type.into(),
-            clientid: self.clientid,
-            auth_xuid: self.auth_xuid,
-            resolution_width: self.resolution_width,
-            resolution_height: self.resolution_height,
-            quick_play_path: self.quick_play_path,
-            quick_play_singleplayer: self.quick_play_singleplayer,
-            quick_play_multiplayer: self.quick_play_multiplayer,
-            quick_play_realms: self.quick_play_realms,
-            features: self.features,
-        }
+    /// 旧版必选配置
+    pub fn legacy(mut self, auth_session: impl Into<String>, user_type: impl Into<String>) -> Self {
+        self.vars.insert("auth_session", auth_session.into());
+        self.vars.insert("user_type", user_type.into());
+        self
     }
-}
-
-// ————————————————————————————————————————
-// 新版必选配置
-// ————————————————————————————————————————
-
-impl<Legacy> VariablesBuilder<String, Legacy, Missing> {
-    pub fn modern(
-        self,
-        clientid: impl Into<String>,
-        auth_xuid: impl Into<String>,
-    ) -> VariablesBuilder<String, Legacy, String> {
-        VariablesBuilder {
-            auth_player_name: self.auth_player_name,
-            auth_uuid: self.auth_uuid,
-            auth_access_token: self.auth_access_token,
-            auth_session: self.auth_session,
-            user_type: self.user_type,
-            clientid: clientid.into(),
-            auth_xuid: auth_xuid.into(),
-            resolution_width: self.resolution_width,
-            resolution_height: self.resolution_height,
-            quick_play_path: self.quick_play_path,
-            quick_play_singleplayer: self.quick_play_singleplayer,
-            quick_play_multiplayer: self.quick_play_multiplayer,
-            quick_play_realms: self.quick_play_realms,
-            features: self.features,
-        }
+    /// 新版必选配置
+    pub fn modern(mut self, clientid: impl Into<String>, auth_xuid: impl Into<String>) -> Self {
+        self.vars.insert("clientid", clientid.into());
+        self.vars.insert("auth_xuid", auth_xuid.into());
+        self
     }
-}
-
-// ————————————————————————————————————————
-// 新版可选设置
-// ————————————————————————————————————————
-impl VariablesBuilder<String, Missing, String> {
     pub fn resolution_width(mut self, width: u32) -> Self {
-        self.resolution_width = Some(width.to_string());
+        self.vars.insert("resolution_width", width.to_string());
         self
     }
     pub fn resolution_height(mut self, height: u32) -> Self {
-        self.resolution_height = Some(height.to_string());
+        self.vars.insert("resolution_height", height.to_string());
         self
     }
-    pub fn quick_play_path(mut self, value: impl Into<String>) -> Self {
-        self.quick_play_path = Some(value.into());
+    pub fn quick_play_path(mut self, quick_play_path: impl Into<String>) -> Self {
+        self.vars.insert("quick_play_path", quick_play_path.into());
         self
     }
-    pub fn quick_play_singleplayer(mut self, value: impl Into<String>) -> Self {
-        self.quick_play_singleplayer = Some(value.into());
+    pub fn quick_play_singleplayer(mut self, quick_play_singleplayer: impl Into<String>) -> Self {
+        self.vars
+            .insert("quick_play_singleplayer", quick_play_singleplayer.into());
         self
     }
-    pub fn quick_play_multiplayer(mut self, value: impl Into<String>) -> Self {
-        self.quick_play_multiplayer = Some(value.into());
+    pub fn quick_play_multiplayer(mut self, quick_play_multiplayer: impl Into<String>) -> Self {
+        self.vars
+            .insert("quick_play_multiplayer", quick_play_multiplayer.into());
         self
     }
-    pub fn quick_play_realms(mut self, value: impl Into<String>) -> Self {
-        self.quick_play_realms = Some(value.into());
+    pub fn quick_play_realms(mut self, quick_play_realms: impl Into<String>) -> Self {
+        self.vars
+            .insert("quick_play_realms", quick_play_realms.into());
         self
     }
-}
-
-// ————————————————————————————————————————
-// 启用特性
-// ————————————————————————————————————————
-
-impl<R, L, M> VariablesBuilder<R, L, M> {
+    /// 从实例生成必要项
+    pub fn generated<R, C>(mut self, instance: &Instance<R, C>) -> Result<Self> {
+        let generated = Generated::from_instance(instance)?;
+        generated.insert_into(&mut self.vars);
+        Ok(self)
+    }
+    /// 启用特性
     pub fn feature(mut self, feature: &'static str) -> Self {
-        self.features.insert(feature);
+        self.feat.insert(feature);
         self
     }
 }
-
-// ————————————————————————————————————————
-// 自动生成配置
-// ————————————————————————————————————————
 
 struct Generated {
     /// 实例名称
@@ -244,14 +134,12 @@ struct Generated {
 }
 
 impl Generated {
-    fn from_instance<R, C>(instance: &Instance<R, C>, storage: &Storage) -> Result<Self> {
-        let instance_dir = &instance.instance_dir;
-
+    fn from_instance<R, C>(instance: &Instance<R, C>) -> Result<Self> {
         let cp = instance
             .manifest
             .libraries
             .iter()
-            .map(|lib| storage.libraries_dir().join(lib.name.path()))
+            .map(|lib| instance.storage.libraries_dir().join(lib.name.path()))
             .chain(std::iter::once(instance.client_file()))
             .map(std::path::absolute)
             .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
@@ -263,15 +151,15 @@ impl Generated {
         Ok(Self {
             version_name: instance.manifest.id.clone(),
             version_type: instance.manifest.version_type,
-            game_directory: std::path::absolute(instance_dir)?,
-            assets_root: std::path::absolute(storage.assets_dir())?,
+            game_directory: std::path::absolute(&instance.instance_dir)?,
+            assets_root: std::path::absolute(instance.storage.assets_dir())?,
             assets_index_name: instance.manifest.assets.clone(),
             classpath: cp,
-            natives_directory: instance_dir.join("native"),
+            natives_directory: instance.instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),
-            path: std::path::absolute(instance_dir.join("../../../logs"))?,
-            library_directory: storage.libraries_dir().to_owned(),
+            path: std::path::absolute(instance.instance_dir.join("logs"))?,
+            library_directory: instance.storage.libraries_dir().to_owned(),
             classpath_separator: if cfg!(windows) { ";" } else { ":" },
         })
     }
@@ -298,133 +186,5 @@ impl Generated {
             self.library_directory.to_string_lossy().into(),
         );
         vars.insert("classpath_separator", self.classpath_separator.to_string());
-    }
-}
-
-// ————————————————————————————————————————
-// 构建完整变量
-// ————————————————————————————————————————
-
-macro_rules! insert_fields {
-    ($map:expr, $self:expr, [$($field:ident),* $(,)?]) => {
-        $(
-            $map.insert(stringify!($field), $self.$field.into());
-        )*
-    };
-
-    ($map:expr, $self:expr, optional [$($field:ident),* $(,)?]) => {
-        $(
-            if let Some(value) = $self.$field {
-                $map.insert(stringify!($field), value.into());
-            }
-        )*
-    };
-}
-
-/// 旧版配置
-impl VariablesBuilder<String, String, Missing> {
-    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
-        let mut vars = HashMap::new();
-
-        insert_fields!(
-            vars,
-            self,
-            [
-                auth_player_name,
-                auth_uuid,
-                auth_access_token,
-                auth_session,
-                user_type,
-            ]
-        );
-
-        let generated = Generated::from_instance(instance, storage)?;
-        generated.insert_into(&mut vars);
-
-        Ok(Variables {
-            vars,
-            feat: self.features,
-        })
-    }
-}
-
-/// 新版配置
-impl VariablesBuilder<String, Missing, String> {
-    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
-        let mut vars = HashMap::new();
-
-        insert_fields!(
-            vars,
-            self,
-            [
-                auth_player_name,
-                auth_uuid,
-                auth_access_token,
-                clientid,
-                auth_xuid
-            ]
-        );
-
-        insert_fields!(
-            vars,
-            self,
-            optional [
-                resolution_width,
-                resolution_height,
-                quick_play_path,
-                quick_play_singleplayer,
-                quick_play_multiplayer,
-                quick_play_realms,
-            ]
-        );
-
-        let generated = Generated::from_instance(instance, storage)?;
-        generated.insert_into(&mut vars);
-
-        Ok(Variables {
-            vars,
-            feat: self.features,
-        })
-    }
-}
-
-impl VariablesBuilder<String, String, String> {
-    pub fn build<R, C>(self, instance: &Instance<R, C>, storage: &Storage) -> Result<Variables> {
-        let mut vars = HashMap::new();
-
-        insert_fields!(
-            vars,
-            self,
-            [
-                auth_player_name,
-                auth_uuid,
-                auth_access_token,
-                auth_session,
-                user_type,
-                clientid,
-                auth_xuid
-            ]
-        );
-
-        insert_fields!(
-            vars,
-            self,
-            optional [
-                resolution_width,
-                resolution_height,
-                quick_play_path,
-                quick_play_singleplayer,
-                quick_play_multiplayer,
-                quick_play_realms,
-            ]
-        );
-
-        let generated = Generated::from_instance(instance, storage)?;
-        generated.insert_into(&mut vars);
-
-        Ok(Variables {
-            vars,
-            feat: self.features,
-        })
     }
 }

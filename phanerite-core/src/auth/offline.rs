@@ -2,7 +2,6 @@ use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::storage::Storage;
 use uuid::Uuid;
 
 /// 离线登录
@@ -22,15 +21,11 @@ impl Authentication {
 }
 
 impl super::Authentication for Authentication {
-    async fn args<R, C>(
-        &self,
-        instance: &Instance<'_, R, C>,
-        storage: &Storage,
-    ) -> Result<LaunchArguments> {
-        let variables = Variables::builder()
+    async fn args<R, C>(&self, instance: &Instance<'_, R, C>) -> Result<LaunchArguments> {
+        let variables = Variables::new()
             .required(&self.nickname, self.uuid.to_string(), "0")
             .legacy("0", "legacy")
-            .build(instance, storage)?;
+            .generated(instance)?;
         Ok(variables.to_arguments(instance))
     }
 }

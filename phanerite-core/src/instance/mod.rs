@@ -242,11 +242,9 @@ impl Instance<'_, JavaRuntime, Ready> {
     pub async fn launch(&self, auth: &impl Authentication) -> Result<LaunchCommand<'_>> {
         let arg_path = self.storage.temp_file().await?;
         let mut arg_file = async_fs::File::create(&arg_path).await?;
-
-        for line in auth.args(self, self.storage).await?.iter() {
-            arg_file.write_all(line.as_bytes()).await?;
-            arg_file.write_all(b"\n").await?;
-        }
+        arg_file
+            .write_all(auth.args(self).await?.to_string().as_bytes())
+            .await?;
         arg_file.flush().await?;
         drop(arg_file);
 

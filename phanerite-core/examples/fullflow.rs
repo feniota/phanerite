@@ -7,16 +7,13 @@ use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::instance::manifest::InstanceManifest;
-use phanerite_core::mod_loader::LoaderMeta;
-use phanerite_core::mod_loader::neoforge::NeoForge;
 use phanerite_core::runtime::java::install_java;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::*;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
 use tracing::{Level, error};
 use url::Url;
 
@@ -38,14 +35,14 @@ fn main() {
         let mut group = DownloadGroup::new(&downloader);
         let _g = monitor(&group).await;
 
-        let _ = async_fs::remove_dir_all(storage.versions_dir().join("1.21.1-nf")).await;
+        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
         let version: InstanceManifest = VersionIndex::sync(&downloader)
             .await?
-            .iter()
-            .find(|x| x.id == "1.21.1")
-            .expect("Version not found")
-            // .latest_release()?
+            // .iter()
+            // .find(|x| x.id == "1.21.1")
+            // .expect("Version not found")
+            .latest_release()?
             .get_manifest(&downloader)
             .await?
             .into();
@@ -54,7 +51,7 @@ fn main() {
         group.extend(injector.update(&downloader).await?);
         group.exec().await.iter().for_each(|e| error!("{e}"));
 
-        let instance = Instance::create(version, Some("1.21.1-nf"), &storage, &downloader).await?;
+        let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
 
         let java = instance
             .find_java(&storage)
@@ -64,23 +61,23 @@ fn main() {
             .ok_or(Error::other("No available java"))?;
         let mut instance = instance.bind_java(java.clone()).await?;
 
-        instance
-            .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
-                // let iter = iter
-                //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-                let latest = iter
-                    .collect::<BTreeSet<_>>()
-                    .pop_last()
-                    .expect("No available loader version");
-                println!(
-                    "{}:{} stable:{}",
-                    latest.name(),
-                    latest.version(),
-                    latest.stable()
-                );
-                Ok(latest)
-            })
-            .await?;
+        // instance
+        //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
+        //         // let iter = iter
+        //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+        //         let latest = iter
+        //             .collect::<BTreeSet<_>>()
+        //             .pop_last()
+        //             .expect("No available loader version");
+        //         println!(
+        //             "{}:{} stable:{}",
+        //             latest.name(),
+        //             latest.version(),
+        //             latest.stable()
+        //         );
+        //         Ok(latest)
+        //     })
+        //     .await?;
 
         group
             .join(instance.install_less(HashSet::new()).await?)

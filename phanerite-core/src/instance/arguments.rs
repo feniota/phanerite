@@ -1,13 +1,63 @@
 use crate::instance::Instance;
 use crate::instance::manifest::{Action, Argument};
 use crate::instance::variables::Variables;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 
+/// jvm 参数 + main_class + game 参数
 pub struct LaunchArguments {
     pub(crate) main_class: String,
-    pub(crate) jvm: Vec<(String, Option<String>)>,
-    pub(crate) game: Vec<(String, Option<String>)>,
+    pub(crate) jvm: HashMap<String, Option<String>>,
+    pub(crate) game: HashMap<String, Option<String>>,
+}
+
+impl LaunchArguments {
+    /// 设置 JVM 内存，单位 MiB
+    pub fn set_memory(mut self, min: Option<u64>, max: Option<u64>) -> Self {
+        match min {
+            Some(size) => {
+                self.jvm.insert("-Xms".into(), Some(format!("{size}M")));
+            }
+            None => {
+                self.jvm.remove("-Xms");
+            }
+        }
+        match max {
+            Some(size) => {
+                self.jvm.insert("-Xmx".into(), Some(format!("{size}M")));
+            }
+            None => {
+                self.jvm.remove("-Xmx");
+            }
+        }
+        self
+    }
+}
+
+impl Display for LaunchArguments {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (key, value) in &self.jvm {
+            write!(f, "{key}")?;
+            if let Some(value) = value {
+                write!(f, " {value}")?;
+            }
+            writeln!(f)?;
+        }
+
+        writeln!(f, "{}", self.main_class)?;
+
+        for (key, value) in &self.game {
+            write!(f, "{key}")?;
+            if let Some(value) = value {
+                write!(f, " {value}")?;
+            }
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Variables {
@@ -32,32 +82,20 @@ impl Variables {
         } else if let Some(args) = &instance.manifest.minecraft_arguments
             && let Some(args) = self.resolve(args)
         {
+            let mut game = HashMap::new();
+            game.insert(args, None);
             LaunchArguments {
                 main_class,
-                jvm: vec![],
-                game: vec![(args, None)],
+                jvm: HashMap::new(),
+                game,
             }
         } else {
             LaunchArguments {
                 main_class,
-                jvm: vec![],
-                game: vec![],
+                jvm: HashMap::new(),
+                game: HashMap::new(),
             }
         }
-    }
-}
-
-impl LaunchArguments {
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
-        self.jvm
-            .iter()
-            .flat_map(|(x, y)| std::iter::once(x).chain(y))
-            .chain(std::iter::once(&self.main_class))
-            .chain(
-                self.game
-                    .iter()
-                    .flat_map(|(x, y)| std::iter::once(x).chain(y)),
-            )
     }
 }
 

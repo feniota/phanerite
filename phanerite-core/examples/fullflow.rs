@@ -1,3 +1,4 @@
+use async_executor::Executor;
 use phanerite_core::auth::yggdrasil::Authentication;
 use phanerite_core::download::Downloader;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
@@ -12,8 +13,9 @@ use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::*;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::time::{Duration, Instant};
 use tracing::{Level, error};
 use url::Url;
 
@@ -22,7 +24,9 @@ fn main() {
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
         .init();
-    if let Err(e) = smol::block_on(async {
+    let executor = Executor::new();
+    let _guard = BlockingGuard::new(&executor);
+    if let Err(e) = smol::block_on(executor.run(async {
         let storage = storage::Storage::new(".minecraft")
             .await?
             .share_preference(Hardlink);
@@ -59,7 +63,7 @@ fn main() {
             .into_iter()
             .next()
             .ok_or(Error::other("No available java"))?;
-        let mut instance = instance.bind_java(java.clone()).await?;
+        let instance = instance.bind_java(java.clone()).await?;
 
         // instance
         //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
@@ -106,7 +110,7 @@ fn main() {
         println!("Game exited: {exit}");
 
         Ok::<(), Error>(())
-    }) {
+    })) {
         error!("{}", e)
     }
 }
@@ -133,7 +137,7 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
             let downloading = monitor.downloading().await;
             let number = monitor.len();
             let speed = monitor
-                .speed_by_timer(smol::Timer::after(std::time::Duration::from_secs(1)))
+                .speed_by_timer(smol::Timer::after(Duration::from_secs(1)))
                 .await;
             let current = monitor.current().await;
             let total = monitor.total().await;
@@ -151,4 +155,58 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
     })
         .detach();
     g
+}
+
+/// 检测阻塞时间
+pub struct BlockingGuard {
+    stopped: Arc<AtomicBool>,
+    max_blocking_ns: Arc<AtomicU64>,
+}
+
+impl BlockingGuard {
+    pub fn new(executor: &Executor<'static>) -> Self {
+        let stopped = Arc::new(AtomicBool::new(false));
+        let max_blocking_ns = Arc::new(AtomicU64::new(0));
+
+        let stopped2 = stopped.clone();
+        let max_blocking_ns2 = max_blocking_ns.clone();
+
+        executor
+            .spawn(async move {
+                let mut last = Instant::now();
+
+                loop {
+                    smol::Timer::after(Duration::from_millis(1)).await;
+
+                    let now = Instant::now();
+                    let elapsed = now.duration_since(last);
+                    last = now;
+
+                    // Timer 本身也可能因为 worker 被 blocking 而延迟执行
+                    let ns = elapsed.as_nanos() as u64;
+
+                    max_blocking_ns2.fetch_max(ns, Relaxed);
+
+                    if stopped2.load(Relaxed) {
+                        break;
+                    }
+                }
+            })
+            .detach();
+
+        Self {
+            stopped,
+            max_blocking_ns,
+        }
+    }
+}
+
+impl Drop for BlockingGuard {
+    fn drop(&mut self) {
+        self.stopped.store(true, Relaxed);
+
+        let max = Duration::from_nanos(self.max_blocking_ns.load(Relaxed));
+
+        eprintln!("max blocking: {:.3} ms", max.as_secs_f64() * 1000.0,);
+    }
 }

@@ -10,9 +10,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .init();
     smol::block_on(async {
         let storage = Storage::new(".minecraft").await?;
-        let instance = Instance::open("1.21.1-nf", &storage).await?;
+        let instance = Instance::open("latest", &storage).await?;
         let auth = phanerite_core::auth::offline::Authentication::new("Steve");
-        let arguments = auth.args(&instance).await?;
+        let arguments = auth
+            .args(&instance)
+            .await?
+            .set_memory(Some(2048), Some(2048));
 
         println!("{arguments}");
 

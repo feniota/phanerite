@@ -26,7 +26,7 @@ pub struct Fabric {
 
 impl LoaderInstall for Fabric {
     type MetaInfo = MetaData;
-    type MetaList = std::vec::IntoIter<Self::MetaInfo>;
+    type MetaList = Vec<MetaData>;
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self> {
         let mut url = FABRIC_META.clone();
         url.path_segments_mut()
@@ -47,7 +47,7 @@ impl LoaderInstall for Fabric {
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
     {
-        let selected = select(self.list.into_iter()).await?;
+        let selected = select(self.list).await?;
 
         let mut url = FABRIC_META.clone();
         url.path_segments_mut().unwrap().extend([
@@ -74,11 +74,11 @@ impl LoaderInstall for Fabric {
 }
 
 impl LoaderMeta for MetaData {
-    fn name(&self) -> impl Display {
+    fn name(&self) -> impl Display + '_ {
         &self.loader.maven.artifact
     }
 
-    fn version(&self) -> impl Display {
+    fn version(&self) -> impl Display + '_ {
         &self.loader.version
     }
 

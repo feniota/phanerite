@@ -43,7 +43,7 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
         self.monitor.clone()
     }
     /// 立即执行任务
-    pub async fn join(&self, tasks: impl Iterator<Item = DownloadTask>) -> Vec<Error> {
+    pub async fn join(&self, tasks: impl IntoIterator<Item = DownloadTask>) -> Vec<Error> {
         let tasks = futures::stream::iter(tasks).then(async |x| {
             self.monitor.push_async(x.process.clone()).await;
             x
@@ -61,7 +61,7 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
     /// 执行暂存区的任务
     pub async fn exec(&mut self) -> Vec<Error> {
         let tasks = std::mem::take(&mut self.stage);
-        self.join(tasks.into_iter()).await
+        self.join(tasks).await
     }
 }
 

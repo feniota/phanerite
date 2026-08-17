@@ -19,6 +19,7 @@ async-process = "2.5"
 async-recursion = "1.1"
 event-listener = "5.4"
 futures.workspace = true
+futures-lite = "2.6"
 
 # serialization / data format
 serde.workspace = true
@@ -47,6 +48,10 @@ tar = "0.4"
 xz2 = "0.1"
 zip = "8.6"
 zstd = { version = "0.13", default-features = false }
+
+# image / media
+bytes.workspace = true
+image.workspace = true
 
 # database / data structures
 scc = "3.8"

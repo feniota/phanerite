@@ -59,7 +59,7 @@ pub struct NeoForgeVersion {
 
 impl LoaderInstall for NeoForge {
     type MetaInfo = NeoForgeVersion;
-    type MetaList = std::vec::IntoIter<Self::MetaInfo>;
+    type MetaList = Vec<NeoForgeVersion>;
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self> {
         let body = downloader.fetch(NEOFORGE_META.clone(), None).await?;
         let reader = std::io::Cursor::new(body);
@@ -93,7 +93,7 @@ impl LoaderInstall for NeoForge {
     where
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>,
     {
-        let selected = select(self.list.into_iter()).await?;
+        let selected = select(self.list).await?;
         let maven = MavenArtifact {
             group: self.group_id,
             artifact: self.artifact_id,
@@ -171,11 +171,11 @@ async fn merge_move(src: &Path, dst: &Path) -> Result<()> {
 }
 
 impl LoaderMeta for NeoForgeVersion {
-    fn name(&self) -> impl Display {
+    fn name(&self) -> impl Display + '_ {
         "neoforge"
     }
 
-    fn version(&self) -> impl Display {
+    fn version(&self) -> impl Display + '_ {
         &self.neoforge
     }
 

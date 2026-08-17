@@ -1,6 +1,12 @@
 use futures::StreamExt;
-pub mod bmclapi;
-pub mod granodiorite;
+
+// BMCL API
+mod bmclapi;
+pub use bmclapi::Bmclapi;
+
+// Granodiorite
+mod granodiorite;
+pub use granodiorite::Granodiorite;
 
 use crate::download::Downloader;
 use crate::download::downloader::RawDownloader;

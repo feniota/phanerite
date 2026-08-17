@@ -1,6 +1,6 @@
 use phanerite_core::download::Downloader;
 use phanerite_core::download::group::DownloadGroup;
-use phanerite_core::download::mirror::granodiorite::Granodiorite;
+use phanerite_core::download::mirror::Granodiorite;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::instance::Instance;
 use phanerite_core::*;

@@ -44,8 +44,8 @@ impl<C> Instance<'_, JavaRuntime, C> {
 /// Loader 元信息
 /// 根据版本大小全序
 pub trait LoaderMeta: Ord {
-    fn name(&self) -> impl Display;
-    fn version(&self) -> impl Display;
+    fn name(&self) -> impl Display + '_;
+    fn version(&self) -> impl Display + '_;
     fn stable(&self) -> bool;
 }
 
@@ -54,7 +54,7 @@ pub trait LoaderInstall: Sized {
     /// 展示给用户的 Loader 元信息
     type MetaInfo: LoaderMeta;
     /// 当前版本可选的 Loader 列表
-    type MetaList: Iterator<Item = Self::MetaInfo>;
+    type MetaList: IntoIterator<Item = Self::MetaInfo>;
     /// 根据已有版本查找合适的 Loader
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self>;
     /// 选择版本并下载 Profile，然后安装到 `Instance`

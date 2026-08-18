@@ -1,1 +1,3 @@
-// State contracts are introduced by subsequent migration tasks.
+pub mod storage;
+
+pub use storage::{StorageEntry, StorageRegistry, StorageRegistryError};

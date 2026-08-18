@@ -1,10 +1,10 @@
 use async_executor::Executor;
 use phanerite_core::auth::yggdrasil::Authentication;
-use phanerite_core::download::Downloader;
 use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
+use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::instance::manifest::InstanceManifest;
@@ -32,12 +32,14 @@ fn main() {
             .share_preference(Hardlink);
         let (cleaner, _shutdown) = storage.run_cleaner();
         smol::spawn(cleaner).detach();
-        let downloader = download::downloader::RawDownloader::builder(&storage)
+        let raw_downloader = download::downloader::RawDownloader::builder(&storage)
             .build()
             .await?;
+        let cached_downloader = raw_downloader.with_cache_default();
+        let mut downloader = cached_downloader.with_group();
+        let _g = monitor(&downloader).await;
+
         let injector = AuthlibInjector::new(&storage);
-        let mut group = DownloadGroup::new(&downloader);
-        let _g = monitor(&group).await;
 
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
@@ -51,9 +53,9 @@ fn main() {
             .await?
             .into();
 
-        group.extend(install_java::<Zulu>(version.java_major(), &storage, &downloader).await?);
-        group.extend(injector.update(&downloader).await?);
-        group.exec().await.iter().for_each(|e| error!("{e}"));
+        downloader.extend(install_java::<Zulu>(version.java_major(), &storage, &downloader).await?);
+        downloader.extend(injector.update(&downloader).await?);
+        downloader.exec().await.iter().for_each(|e| error!("{e}"));
 
         let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
 
@@ -83,7 +85,7 @@ fn main() {
         //     })
         //     .await?;
 
-        group
+        downloader
             .join(instance.install_less(HashSet::new()).await?)
             .await
             .iter()

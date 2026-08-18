@@ -1,7 +1,8 @@
 use crate::download::cached::DownloaderWithCache;
+use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
 use http::{HeaderMap, StatusCode};
@@ -33,15 +34,18 @@ pub trait Downloader {
     fn download_concurrent(
         &self,
         tasks: impl Stream<Item = DownloadTask>,
-    ) -> impl Stream<Item = Error> {
+    ) -> impl Stream<Item = Result<()>> {
         tasks
             .map(async |task| self.download(task).await)
             .buffer_unordered(self.concurrency())
-            .filter_map(async |res| res.err())
     }
 }
 
 pub trait DownloaderExt: Downloader + Sized {
+    /// 获取适合读取进度的下载任务组
+    fn with_group(&self) -> DownloadGroup<'_, Self> {
+        DownloadGroup::new(self)
+    }
     /// 获得带有镜像的下载器
     fn with_mirror<M: Mirror>(&self, mirror: M) -> DownloaderWithMirror<'_, Self, M> {
         DownloaderWithMirror::new(self, mirror)

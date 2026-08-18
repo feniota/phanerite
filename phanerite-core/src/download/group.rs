@@ -1,10 +1,13 @@
 use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask};
-use crate::error::Error;
-use futures::StreamExt;
+use crate::error::{Error, Result};
+use crate::utils::Hash;
+use futures::{Stream, StreamExt};
+use http::{HeaderMap, StatusCode};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
+use url::Url;
 
 pub struct DownloadGroup<'a, D: Downloader> {
     downloader: &'a D,
@@ -23,7 +26,7 @@ struct MonitorInner {
     processes: scc::HashMap<usize, DownloadProcess>,
 }
 
-/// 扩展暂存区
+/// 批量添加任务到暂存区
 impl<D: Downloader> Extend<DownloadTask> for DownloadGroup<'_, D> {
     fn extend<T: IntoIterator<Item = DownloadTask>>(&mut self, iter: T) {
         self.stage.extend(iter)
@@ -31,7 +34,7 @@ impl<D: Downloader> Extend<DownloadTask> for DownloadGroup<'_, D> {
 }
 
 impl<'a, D: Downloader> DownloadGroup<'a, D> {
-    pub fn new(downloader: &'a D) -> Self {
+    pub(crate) fn new(downloader: &'a D) -> Self {
         Self {
             downloader,
             stage: vec![],
@@ -44,11 +47,10 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
     }
     /// 立即执行任务
     pub async fn join(&self, tasks: impl IntoIterator<Item = DownloadTask>) -> Vec<Error> {
-        let tasks = futures::stream::iter(tasks).then(async |x| {
-            self.monitor.push_async(x.process.clone()).await;
-            x
-        });
-        self.downloader.download_concurrent(tasks).collect().await
+        self.download_concurrent(futures::stream::iter(tasks))
+            .filter_map(async |x| x.err())
+            .collect()
+            .await
     }
     /// 添加任务到暂存区
     pub fn push(&mut self, task: DownloadTask) {
@@ -130,5 +132,56 @@ impl Monitor {
         let start = self.current().await;
         timer.await;
         self.current().await - start
+    }
+}
+
+impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+        self.downloader.fetch(url, hash).await
+    }
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<(StatusCode, Vec<u8>)> {
+        self.downloader.post_json(url, body).await
+    }
+    async fn head(&self, url: Url) -> Result<HeaderMap> {
+        self.downloader.head(url).await
+    }
+    async fn download(&self, task: DownloadTask) -> Result<()> {
+        self.monitor.push_async(task.process.clone()).await;
+        self.downloader.download(task).await
+    }
+    fn concurrency(&self) -> usize {
+        self.downloader.concurrency()
+    }
+    fn download_concurrent(
+        &self,
+        tasks: impl Stream<Item = DownloadTask>,
+    ) -> impl Stream<Item = Result<()>> {
+        enum CollectState<S, I>
+        where
+            S: Stream<Item = DownloadTask>,
+            I: Iterator<Item = DownloadTask>,
+        {
+            Collect(S),
+            Ready(I),
+        }
+        futures::stream::unfold(
+            CollectState::<_, std::vec::IntoIter<DownloadTask>>::Collect(tasks),
+            async |state| match state {
+                CollectState::Collect(s) => {
+                    let mut iter = s
+                        .then(async |x| {
+                            self.monitor.push_async(x.process.clone()).await;
+                            x
+                        })
+                        .collect::<Vec<_>>()
+                        .await
+                        .into_iter();
+                    iter.next().map(|t| (t, CollectState::Ready(iter)))
+                }
+                CollectState::Ready(mut i) => i.next().map(|t| (t, CollectState::Ready(i))),
+            },
+        )
+        .map(async |x| self.downloader.download(x).await)
+        .buffer_unordered(self.concurrency())
     }
 }

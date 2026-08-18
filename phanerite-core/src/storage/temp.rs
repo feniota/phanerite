@@ -122,6 +122,10 @@ pub struct ShutdownGuard {
 
 impl Drop for TempGuard<'_> {
     fn drop(&mut self) {
+        if self.path.as_os_str().is_empty() {
+            return;
+        }
+
         let path = std::mem::take(&mut self.path);
         let file_type = self.file_type;
 

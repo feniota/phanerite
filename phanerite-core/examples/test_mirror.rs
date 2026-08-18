@@ -33,7 +33,7 @@ fn main() -> error::Result<()> {
         let manifest = version.get_manifest(&downloader).await?;
 
         let mirror = downloader.with_mirror(Granodiorite);
-        let mut group = DownloadGroup::new(&mirror);
+        let mut group = mirror.with_group();
         let _g = monitor(&group).await;
         group.extend(
             Instance::create(manifest, Some(&version.id), &storage, &downloader)

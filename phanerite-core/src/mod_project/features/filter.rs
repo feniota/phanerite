@@ -1,7 +1,6 @@
 use crate::error::Result;
 use crate::mod_project::{ModProject, ModsRepository};
-use futures::Stream;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use strum::{AsRefStr, Display, EnumString};
 
 /// 项目类型
@@ -16,14 +15,14 @@ pub enum ProjectType {
 }
 
 /// 模组加载器
-#[derive(Copy, Clone, PartialEq, Eq, AsRefStr, EnumString, Display)]
+#[derive(Clone, PartialEq, Eq, AsRefStr, EnumString, Display)]
 pub enum ModsLoader {
     #[strum(serialize = "neoforge")]
     NeoForge,
     #[strum(serialize = "fabric")]
     Fabric,
-
-    Other,
+    #[strum(default)]
+    Other(String),
 }
 
 /// 筛选条件
@@ -35,17 +34,18 @@ pub struct FilterCriteria {
     pub loader_version: Vec<String>,
 }
 
-pub trait ModProjectFilterExt: ModProject {
-    fn filter_criteria(&self) -> &FilterCriteria;
+#[allow(async_fn_in_trait)]
+pub trait ModFilter: ModProject {
+    async fn filter_criteria(&self) -> Result<&FilterCriteria>;
 }
 
-pub struct FilteredModsRepository<'repo, R: ModsRepository<ModType: ModProjectFilterExt>> {
+pub struct FilteredModsRepository<'repo, R: ModsRepository<ModType: ModFilter>> {
     filter_criteria: FilterCriteria,
     repo: &'repo R,
 }
 
 pub impl(crate) trait ModsRepositoryFilterExt:
-    ModsRepository<ModType: ModProjectFilterExt>
+    ModsRepository<ModType: ModFilter>
 where
     Self: Sized,
 {
@@ -78,31 +78,27 @@ impl PartialEq for FilterCriteria {
 
 impl<R> ModsRepository for FilteredModsRepository<'_, R>
 where
-    R: ModsRepository<ModType: ModProjectFilterExt>,
+    R: ModsRepository<ModType: ModFilter>,
 {
     const NAME: &'static str = R::NAME;
     const ATTRIBUTION: &'static str = R::ATTRIBUTION;
     const NOTICE: &'static str = R::NOTICE;
     type ModType = R::ModType;
-    type ModVersion = R::ModVersion;
     fn search(&self, keyword: &str) -> impl Stream<Item = Result<Self::ModType>> {
-        self.repo.search(keyword).filter(|x| {
-            futures::future::ready(match x {
-                Ok(v) => &self.filter_criteria == v.filter_criteria(),
-                Err(_) => true,
-            })
+        self.repo.search(keyword).filter_map(async |x| {
+            let x = match x {
+                Ok(x) => x,
+                Err(e) => return Some(Err(e)),
+            };
+            let filter = match x.filter_criteria().await {
+                Ok(filter) => filter,
+                Err(e) => return Some(Err(e)),
+            };
+            if self.filter_criteria == *filter {
+                Some(Ok(x))
+            } else {
+                None
+            }
         })
-    }
-    async fn versions(
-        &self,
-        project: &Self::ModType,
-    ) -> Result<impl Iterator<Item = Self::ModVersion>> {
-        self.repo.versions(project).await
-    }
-    async fn dependencies(
-        &self,
-        version: &Self::ModVersion,
-    ) -> Result<impl Iterator<Item = Self::ModVersion>> {
-        self.repo.dependencies(version).await
     }
 }

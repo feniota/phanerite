@@ -1,12 +1,12 @@
-use crate::download::Downloader;
 use crate::download::authlib_injector::AuthlibInjector;
+use crate::download::Downloader;
 use crate::error::{Error, Result};
-use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
+use crate::instance::Instance;
 use crate::utils::uuid::UnhyphenatedUuid;
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -250,7 +250,7 @@ impl<'a> Authentication<'a> {
         Ok(encoded)
     }
     /// 生成启动参数
-    fn args<R, C>(&self, instance: &Instance<R, C>) -> Result<LaunchArguments> {
+    fn args<R: Clone, C: Clone>(&self, instance: &Instance<R, C>) -> Result<LaunchArguments> {
         let Some(profile) = &self.selected_profile else {
             return Err(Error::other("No selected profile"));
         };
@@ -268,7 +268,7 @@ impl<'a> Authentication<'a> {
         Ok(arguments)
     }
     /// 生成启动参数（注入 `authlib-injector`）
-    async fn injected_args<R, C>(
+    async fn injected_args<R: Clone, C: Clone>(
         &self,
         instance: &Instance<'_, R, C>,
         authlib_injector: &AuthlibInjector<'_>,
@@ -290,7 +290,10 @@ impl<'a> Authentication<'a> {
 }
 
 impl super::Authentication for Authentication<'_> {
-    async fn args<R, C>(&self, instance: &Instance<'_, R, C>) -> Result<LaunchArguments> {
+    async fn args<R: Clone, C: Clone>(
+        &self,
+        instance: &Instance<'_, R, C>,
+    ) -> Result<LaunchArguments> {
         Ok(match self.authlib_injector {
             None => self.args(instance)?,
             Some(i) => self.injected_args(instance, i).await?,

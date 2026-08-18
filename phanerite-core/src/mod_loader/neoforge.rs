@@ -1,7 +1,7 @@
 use crate::download::Downloader;
 use crate::error::{Error, Result};
-use crate::instance::Instance;
 use crate::instance::overlay::OverlayManifest;
+use crate::instance::Instance;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;
@@ -84,7 +84,7 @@ impl LoaderInstall for NeoForge {
             list: filter,
         })
     }
-    async fn install<C, S>(
+    async fn install<C: Clone, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

@@ -1,14 +1,14 @@
 use crate::auth::Authentication;
-use crate::download::Downloader;
-use crate::download::task::{DownloadTask, filter_existed, filter_hash};
+use crate::download::task::{filter_existed, filter_hash, DownloadTask};
 use crate::download::vanilla::assets::AssetIndexList;
+use crate::download::Downloader;
 use crate::error::{Error, Result};
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::java::JavaRuntime;
-use crate::storage::Storage;
 use crate::storage::temp::TempGuard;
-use futures::StreamExt;
+use crate::storage::Storage;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use futures::{Stream, StreamExt};
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -16,13 +16,14 @@ use std::path::PathBuf;
 pub mod arguments;
 pub mod manifest;
 pub mod overlay;
-pub mod simple_info;
 pub mod variables;
 
+#[derive(Clone)]
 pub struct NotReady;
+#[derive(Clone)]
 pub struct Ready;
 
-pub struct Instance<'storage, R, C> {
+pub struct Instance<'storage, R: Clone, C: Clone> {
     pub instance_dir: PathBuf,
     pub manifest: InstanceManifest,
 
@@ -36,10 +37,116 @@ pub struct Instance<'storage, R, C> {
     pub completeness: C,
 }
 
-impl<R, C> Instance<'_, R, C> {
+impl<'storage> Instance<'storage, NotReady, NotReady> {
+    /// 创建实例
+    pub async fn create(
+        manifest: impl Into<InstanceManifest>,
+        name: Option<impl AsRef<str>>,
+        storage: &'storage Storage,
+        downloader: &'storage impl Downloader,
+    ) -> Result<Self> {
+        let mut manifest = manifest.into();
+        if let Some(name) = name {
+            manifest.rename(name.as_ref())
+        }
+
+        // 准备实例目录
+        let path = storage.versions_dir().join(&manifest.id);
+        if path.exists() {
+            return Err(Error::other("Instance exists"));
+        }
+        async_fs::create_dir_all(&path).await?;
+
+        // versions/{name}/{name}.json
+        let info_file = path.join(format!("{}.json", manifest.id));
+        let mut info_file = async_fs::File::create(info_file).await?;
+        let info_json = serde_json::to_vec_pretty(&manifest)?;
+        info_file.write_all(&info_json).await?;
+
+        // assets/indexes/{id}.json
+        let index_file = storage
+            .assets_indexes()
+            .join(format!("{}.json", manifest.asset_index.id));
+        let mut index_file = async_fs::File::create(index_file).await?;
+        let assets_index = manifest.asset_index.get_list(downloader).await?;
+        let index_json = serde_json::to_vec_pretty(&assets_index)?;
+        index_file.write_all(&index_json).await?;
+
+        Self::open(&manifest.id, storage).await
+    }
+    /// 打开本地实例
+    pub async fn open(name: impl AsRef<str>, storage: &'storage Storage) -> Result<Self> {
+        let instance_dir = storage.versions_dir().join(name.as_ref());
+        let json = find_manifest(name.as_ref(), &instance_dir).await?;
+        Ok(Self {
+            instance_dir,
+            manifest: serde_json::from_slice::<InstanceManifest>(&json)?,
+            storage,
+            runtime: NotReady,
+            completeness: NotReady,
+        })
+    }
+    /// 扫描实例
+    pub fn scan(storage: &'storage Storage) -> impl Stream<Item = Result<Self>> + 'storage {
+        futures::stream::try_unfold((storage, None), |(storage, dir)| async move {
+            let mut dir = match dir {
+                Some(dir) => dir,
+                None => async_fs::read_dir(storage.versions_dir()).await?,
+            };
+            match dir.next().await {
+                Some(entry) => {
+                    let entry = entry?;
+                    let value = Self::open(entry.file_name().to_string_lossy(), storage).await?;
+                    Ok(Some((value, (storage, Some(dir)))))
+                }
+                None => Ok(None),
+            }
+        })
+    }
+}
+
+impl<R: Clone, C: Clone> Instance<'_, R, C> {
     /// 获取当前实例的游戏文件路径
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
+    }
+    /// 重命名
+    pub async fn rename(&mut self, name: impl Into<String>) -> Result<()> {
+        let name = name.into();
+        let path = self.storage.versions_dir().join(&name);
+        if path.exists() {
+            return Err(Error::other("Instance exists"));
+        }
+        async_fs::rename(&self.instance_dir, &path).await?;
+        self.instance_dir = path;
+        self.manifest.rename(name);
+        self.save().await?;
+        Ok(())
+    }
+    /// 复制
+    pub async fn copy(&self, name: impl Into<String>) -> Result<Self> {
+        let name = name.into();
+        let path = self.storage.versions_dir().join(&name);
+        if path.exists() {
+            return Err(Error::other("Instance exists"));
+        }
+        async_fs::copy(&self.instance_dir, &path).await?;
+        let mut manifest = self.manifest.clone();
+        manifest.rename(name);
+        let new = Instance {
+            instance_dir: path,
+            manifest,
+            storage: self.storage,
+            runtime: self.runtime.clone(),
+            completeness: self.completeness.clone(),
+        };
+        Ok(new)
+    }
+    /// 删除
+    pub async fn delete(self) -> Result<()> {
+        async_fs::remove_dir_all(self.instance_dir).await?;
+        self.storage.clean_hardlink().await?;
+        Ok(())
     }
     /// 持久化版本清单
     pub async fn save(&self) -> Result<()> {
@@ -161,59 +268,7 @@ impl<R, C> Instance<'_, R, C> {
     }
 }
 
-impl<'a> Instance<'a, NotReady, NotReady> {
-    /// 创建实例
-    pub async fn create(
-        manifest: impl Into<InstanceManifest>,
-        name: Option<impl AsRef<str>>,
-        storage: &'a Storage,
-        downloader: &'a impl Downloader,
-    ) -> Result<Self> {
-        let manifest = if let Some(name) = name {
-            manifest.into().rename(name.as_ref())
-        } else {
-            manifest.into()
-        };
-
-        // 准备实例目录
-        let path = storage.versions_dir().join(&manifest.id);
-        if path.exists() {
-            return Err(Error::other("Instance exists"));
-        }
-        async_fs::create_dir_all(&path).await?;
-
-        // versions/{name}/{name}.json
-        let info_file = path.join(format!("{}.json", manifest.id));
-        let mut info_file = async_fs::File::create(info_file).await?;
-        let info_json = serde_json::to_vec_pretty(&manifest)?;
-        info_file.write_all(&info_json).await?;
-
-        // assets/indexes/{id}.json
-        let index_file = storage
-            .assets_indexes()
-            .join(format!("{}.json", manifest.asset_index.id));
-        let mut index_file = async_fs::File::create(index_file).await?;
-        let assets_index = manifest.asset_index.get_list(downloader).await?;
-        let index_json = serde_json::to_vec_pretty(&assets_index)?;
-        index_file.write_all(&index_json).await?;
-
-        Self::open(&manifest.id, storage).await
-    }
-    /// 打开本地实例
-    pub async fn open(name: impl AsRef<str>, storage: &'a Storage) -> Result<Self> {
-        let instance_dir = storage.versions_dir().join(name.as_ref());
-        let json = find_manifest(name.as_ref(), &instance_dir).await?;
-        Ok(Self {
-            instance_dir,
-            manifest: serde_json::from_slice::<InstanceManifest>(&json)?,
-            storage,
-            runtime: NotReady,
-            completeness: NotReady,
-        })
-    }
-}
-
-impl<'a, R> Instance<'a, R, NotReady> {
+impl<'a, R: Clone> Instance<'a, R, NotReady> {
     /// 确定已经完成了完整性检查
     pub fn ensure_ready(self) -> Instance<'a, R, Ready> {
         Instance {
@@ -226,7 +281,7 @@ impl<'a, R> Instance<'a, R, NotReady> {
     }
 }
 
-impl<'a, R, C> Instance<'a, R, C> {
+impl<'a, R: Clone, C: Clone> Instance<'a, R, C> {
     pub async fn bind_java(self, java: JavaRuntime) -> Result<Instance<'a, JavaRuntime, C>> {
         Ok(Instance {
             instance_dir: self.instance_dir,

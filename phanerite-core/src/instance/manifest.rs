@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::instance::overlay::Patch;
-use crate::utils::Sha1Hash;
 use crate::utils::maven::MavenArtifact;
+use crate::utils::Sha1Hash;
 use chrono::{DateTime, FixedOffset};
 use futures::AsyncReadExt;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
@@ -301,11 +301,10 @@ impl InstanceManifest {
     }
 
     /// Override `id` and `jar` with the given instance name.
-    pub fn rename(mut self, name: impl Into<String>) -> Self {
+    pub fn rename(&mut self, name: impl Into<String>) {
         let name = name.into();
         self.id = name.clone();
         self.jar = name;
-        self
     }
 }
 

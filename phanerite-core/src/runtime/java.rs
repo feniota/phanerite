@@ -1,9 +1,9 @@
-use crate::download::Downloader;
 use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
+use crate::download::Downloader;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
+use crate::instance::Instance;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
 use futures::StreamExt;
@@ -42,7 +42,7 @@ pub async fn find_java(major: u32, storage: &Storage) -> Vec<JavaRuntime> {
         .collect()
 }
 
-impl<R, C> Instance<'_, R, C> {
+impl<R: Clone, C: Clone> Instance<'_, R, C> {
     pub async fn install_java<J: JavaDownload>(
         &self,
         storage: &Storage,

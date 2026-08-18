@@ -10,45 +10,46 @@ pub struct Rgb {
     pub b: u8,
 }
 
-pub trait ModProjectDisplayExt: ModProject {
+#[allow(async_fn_in_trait)]
+pub trait ModDisplay: ModProject {
     /// 展示名称
-    fn title(&self) -> impl Display + '_;
+    async fn title(&self) -> impl Display + '_;
     /// 描述
-    fn description(&self) -> impl Display + '_;
+    async fn description(&self) -> impl Display + '_;
     /// 具体描述
-    fn body(&self) -> impl Display + '_;
+    async fn body(&self) -> impl Display + '_;
     /// 作者
-    fn author(&self) -> impl Display + '_;
+    async fn author(&self) -> impl Display + '_;
     /// 创建时间
-    fn created_time(&self) -> &DateTime<FixedOffset>;
+    async fn created_time(&self) -> &DateTime<FixedOffset>;
     /// 修改时间
-    fn updated_time(&self) -> &DateTime<FixedOffset>;
+    async fn updated_time(&self) -> &DateTime<FixedOffset>;
     /// 许可证
-    fn license(&self) -> impl Iterator<Item = impl Display + '_> {
+    async fn license(&self) -> impl Iterator<Item = impl Display + '_> {
         std::iter::empty::<&str>()
     }
     /// 展示分类
-    fn categories(&self) -> impl Iterator<Item = impl Display + '_> {
+    async fn categories(&self) -> impl Iterator<Item = impl Display + '_> {
         std::iter::empty::<&str>()
     }
     /// 图标文件
-    fn icon(&self) -> Option<Url> {
+    async fn icon(&self) -> Option<Url> {
         None
     }
     /// 颜色
-    fn color(&self) -> Option<Rgb> {
+    async fn color(&self) -> Option<Rgb> {
         None
     }
     /// 下载量
-    fn downloads(&self) -> Option<usize> {
+    async fn downloads(&self) -> Option<usize> {
         None
     }
     /// 关注量
-    fn follows(&self) -> Option<usize> {
+    async fn follows(&self) -> Option<usize> {
         None
     }
     /// 展示相册
-    fn gallery(&self) -> Vec<Url> {
+    async fn gallery(&self) -> Vec<Url> {
         vec![]
     }
 }

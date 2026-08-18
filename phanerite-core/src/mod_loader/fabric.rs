@@ -1,15 +1,15 @@
-use crate::download::Downloader;
 use crate::download::task::DownloadTask;
+use crate::download::Downloader;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::instance::overlay::OverlayManifest;
+use crate::instance::Instance;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
-use crate::utils::Sha256Hash;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::compare_versions;
+use crate::utils::Sha256Hash;
 use serde::Deserialize;
 use std::cmp::Ordering;
 use std::fmt::Display;
@@ -38,7 +38,7 @@ impl LoaderInstall for Fabric {
 
         Ok(Fabric { list: json })
     }
-    async fn install<C, S>(
+    async fn install<C: Clone, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

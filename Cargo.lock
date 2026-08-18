@@ -1258,6 +1258,7 @@ dependencies = [
  "async-channel",
  "async-executor",
  "async-fs",
+ "async-lock",
  "async-process",
  "async-recursion",
  "base64",

@@ -1,8 +1,8 @@
-use crate::download::Downloader;
 use crate::download::task::DownloadTask;
+use crate::download::Downloader;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
+use crate::instance::Instance;
 use crate::mod_loader::fabric::Fabric;
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
@@ -12,7 +12,7 @@ pub mod fabric;
 pub mod forge;
 pub mod neoforge;
 
-impl<R, C> Instance<'_, R, C> {
+impl<R: Clone, C: Clone> Instance<'_, R, C> {
     /// 由于模组加载器而存在的额外下载任务
     /// 需要手动注册
     pub(crate) async fn extra_downloads(
@@ -23,7 +23,7 @@ impl<R, C> Instance<'_, R, C> {
     }
 }
 
-impl<C> Instance<'_, JavaRuntime, C> {
+impl<C: Clone> Instance<'_, JavaRuntime, C> {
     /// 为实例安装模组加载器
     pub async fn install_loader<L: LoaderInstall>(
         &mut self,
@@ -59,7 +59,7 @@ pub trait LoaderInstall: Sized {
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self>;
     /// 选择版本并下载 Profile，然后安装到 `Instance`
     /// 留 AsyncFnOnce 给用户选择，警惕阻塞操作，不选返回 `crate::error::Error::Cancelled`
-    async fn install<C, S>(
+    async fn install<C: Clone, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

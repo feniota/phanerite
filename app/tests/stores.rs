@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use phanerite::{route::StorageId, state::*};
 
 #[test]
@@ -16,7 +18,11 @@ fn stale_storage_results_are_ignored() {
     let two = StorageId::for_test(2);
     let mut store = InstanceStore::new(Vec::new());
     store.set_storage_context(two);
-    assert!(!store.apply_for_storage(one, phanerite::seed::seed_instances(one)));
+    assert!(!store.apply_for_storage(
+        &StorageRegistry::new(),
+        one,
+        phanerite::seed::seed_instances(one)
+    ));
     assert!(store.all().is_empty());
 }
 
@@ -26,4 +32,52 @@ fn settings_equal_values_do_not_notify() {
     assert!(!store.set_accent("emerald"));
     assert!(store.set_accent("gold"));
     assert!(!store.set_accent("gold"));
+}
+
+#[test]
+fn all_mutable_stores_ignore_equal_values() {
+    let mut accounts = AccountStore::new(phanerite::seed::seed_accounts());
+    assert!(!accounts.set_active_profile("acc-enita", "profile-enita"));
+    assert_eq!(accounts.revision(), 0);
+
+    let mut launch = LaunchStore::default();
+    assert!(!launch.set_job(None));
+    assert_eq!(launch.revision(), 0);
+
+    let mut sessions = SessionStore::default();
+    let session = SessionSummary {
+        id: SessionId::from("session-a"),
+        instance_id: "inst-fog".into(),
+        started_at: "now".into(),
+        exit_code: None,
+        running: true,
+    };
+    assert!(sessions.start(session.clone()));
+    assert!(!sessions.start(session));
+    assert!(!sessions.finish("missing", 1));
+    assert_eq!(sessions.revision(), 1);
+
+    let root = tempfile::tempdir().unwrap();
+    let storage =
+        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root.path())).unwrap());
+    let mut registry = StorageRegistry::new();
+    let storage_id = registry.add(root.path(), storage).unwrap();
+    let mut crashes = CrashStore::default();
+    crashes.set_storage_context(storage_id);
+    assert!(!crashes.apply_for_storage(&registry, storage_id, vec![]));
+    assert_eq!(crashes.revision(), 0);
+}
+
+#[test]
+fn storage_registry_and_context_both_guard_late_results() {
+    let a = StorageId::for_test(1);
+    let b = StorageId::for_test(2);
+    let mut store = InstanceStore::new(Vec::new());
+    let registry = StorageRegistry::new();
+    store.set_storage_context(a);
+    assert!(!store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
+    store.set_storage_context(b);
+    assert!(!store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
+    assert!(store.all().is_empty());
+    let _ = b;
 }

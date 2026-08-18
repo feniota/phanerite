@@ -1,4 +1,4 @@
-use crate::route::StorageId;
+use crate::{route::StorageId, state::StorageRegistry};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModSummary {
@@ -53,6 +53,7 @@ pub struct InstanceLaunchOverrides {
 pub struct InstanceSummary {
     pub storage_id: StorageId,
     pub id: String,
+    pub icon_seed: u64,
     pub name: String,
     pub aphanite: bool,
     pub favorite: bool,
@@ -153,8 +154,16 @@ impl InstanceStore {
         }
         false
     }
-    pub fn apply_for_storage(&mut self, storage: StorageId, result: Vec<InstanceSummary>) -> bool {
-        if self.current_storage == Some(storage) {
+    pub fn apply_for_storage(
+        &mut self,
+        registry: &StorageRegistry,
+        storage: StorageId,
+        result: Vec<InstanceSummary>,
+    ) -> bool {
+        if registry.get(storage).is_some()
+            && self.current_storage == Some(storage)
+            && self.instances != result
+        {
             self.instances = result;
             self.revision += 1;
             true

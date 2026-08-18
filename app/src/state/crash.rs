@@ -1,4 +1,4 @@
-use crate::route::StorageId;
+use crate::{route::StorageId, state::StorageRegistry};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrashFinding {
     pub rule: String,
@@ -68,8 +68,16 @@ impl CrashStore {
     pub fn set_storage_context(&mut self, s: StorageId) {
         self.current_storage = Some(s)
     }
-    pub fn apply_for_storage(&mut self, s: StorageId, r: Vec<CrashReport>) -> bool {
-        if self.current_storage != Some(s) {
+    pub fn apply_for_storage(
+        &mut self,
+        registry: &StorageRegistry,
+        s: StorageId,
+        r: Vec<CrashReport>,
+    ) -> bool {
+        if registry.get(s).is_none() || self.current_storage != Some(s) {
+            return false;
+        }
+        if self.reports == r {
             return false;
         }
         self.reports = r;

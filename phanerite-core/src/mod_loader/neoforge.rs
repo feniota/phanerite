@@ -1,4 +1,5 @@
 use crate::download::Downloader;
+use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::instance::Instance;
 use crate::instance::overlay::OverlayManifest;
@@ -6,7 +7,7 @@ use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
-use futures::{AsyncWriteExt, StreamExt};
+use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
@@ -104,7 +105,18 @@ impl LoaderInstall for NeoForge {
         let url = maven.url(&NEOFORGE_MAVEN)?;
 
         debug!("Downloading NeoForge Installer: {url}");
-        let body = downloader.fetch(url, None).await?;
+        let installer = raw.storage.temp_file().await?;
+        let task = DownloadTask::builder()
+            .url(url)
+            .to_path(installer.to_owned())
+            .file_name(format!("NeoForge-{}", selected))
+            .build();
+        downloader.download(task).await?;
+        let mut body = Vec::new();
+        async_fs::File::open(&installer)
+            .await?
+            .read_to_end(&mut body)
+            .await?;
         let reader = std::io::Cursor::new(&body);
         let mut archive = zip::ZipArchive::new(reader)?;
         let mut manifest = Vec::new();
@@ -112,12 +124,8 @@ impl LoaderInstall for NeoForge {
             .by_name("version.json")?
             .read_to_end(&mut manifest)?;
         drop(archive);
-        let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
-        let installer = raw.storage.temp_file().await?;
-        let mut file = async_fs::File::create(&installer).await?;
-        file.write_all(&body).await?;
         drop(body);
-        drop(file);
+        let manifest = serde_json::from_slice::<OverlayManifest>(&manifest)?;
 
         debug!("Build a virtual installation environment for NeoForge");
         let temp = raw.storage.temp_dir().await?;

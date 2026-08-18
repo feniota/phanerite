@@ -4,12 +4,14 @@ use crate::error::{Error, Result};
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
+use crate::storage::Storage;
 use crate::utils::uuid::UnhyphenatedUuid;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use std::path::{Path, PathBuf};
 use url::Url;
 use uuid::Uuid;
 
@@ -48,7 +50,7 @@ impl<T> Response<T> {
 }
 
 /// Yggdrasil 登录
-pub struct Authentication<'a> {
+pub struct Authentication {
     access_token: SecretString,
     client_token: SecretString,
 
@@ -73,12 +75,12 @@ pub struct Authentication<'a> {
     /// 服务器元信息
     pub meta_info: MetaInfo,
 
-    authlib_injector: Option<&'a AuthlibInjector<'a>>,
+    authlib_injector: Option<PathBuf>,
 }
 
 pub struct Login<'a, S, U, P, D: Downloader> {
     downloader: &'a D,
-    authlib_injector: Option<&'a AuthlibInjector<'a>>,
+    authlib_injector: Option<PathBuf>,
 
     // 登录服务器
     server: S,
@@ -91,7 +93,7 @@ pub struct Login<'a, S, U, P, D: Downloader> {
     password: P,
 }
 
-impl<'a> Authentication<'a> {
+impl<'a> Authentication {
     /// 创建登录会话
     pub fn new_login<D: Downloader>(downloader: &'a D) -> Login<'a, Missing, Missing, Missing, D> {
         Login {
@@ -271,12 +273,12 @@ impl<'a> Authentication<'a> {
     async fn injected_args<R: Clone, C: Clone>(
         &self,
         instance: &Instance<'_, R, C>,
-        authlib_injector: &AuthlibInjector<'_>,
+        authlib_injector: &Path,
     ) -> Result<LaunchArguments> {
         let mut args = self.args(instance)?;
         let agent = format!(
             "-javaagent:{}={}",
-            authlib_injector.get().await?.to_string_lossy(),
+            authlib_injector.to_string_lossy(),
             self.server,
         );
         let meta = format!(
@@ -289,12 +291,12 @@ impl<'a> Authentication<'a> {
     }
 }
 
-impl super::Authentication for Authentication<'_> {
+impl super::Authentication for Authentication {
     async fn args<R: Clone, C: Clone>(
         &self,
         instance: &Instance<'_, R, C>,
     ) -> Result<LaunchArguments> {
-        Ok(match self.authlib_injector {
+        Ok(match &self.authlib_injector {
             None => self.args(instance)?,
             Some(i) => self.injected_args(instance, i).await?,
         })
@@ -302,9 +304,13 @@ impl super::Authentication for Authentication<'_> {
 }
 
 impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
-    pub fn inject(mut self, authlib_injector: &'a AuthlibInjector) -> Self {
-        self.authlib_injector = Some(authlib_injector);
-        self
+    pub async fn inject(mut self, storage: &Storage) -> Result<Self> {
+        let path = AuthlibInjector::new(storage)
+            .get_or_init(self.downloader)
+            .await?
+            .clone();
+        self.authlib_injector = Some(path);
+        Ok(self)
     }
 }
 
@@ -426,7 +432,7 @@ pub struct ProfileProperty {
 
 impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
     /// 完成登录
-    pub async fn login(self) -> Result<Authentication<'a>> {
+    pub async fn login(self) -> Result<Authentication> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
 
         #[derive(Serialize)]

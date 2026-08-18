@@ -3,6 +3,7 @@ use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::storage::Storage;
 use crate::utils::Sha256Hash;
+use async_lock::OnceCell;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -36,29 +37,57 @@ struct Checksums {
 
 pub struct AuthlibInjector<'a> {
     storage: &'a Storage,
+    path: OnceCell<PathBuf>,
 }
 
 impl<'a> AuthlibInjector<'a> {
     pub fn new(storage: &'a Storage) -> Self {
-        Self { storage }
+        Self {
+            storage,
+            path: Default::default(),
+        }
     }
-    pub async fn update(&self, downloader: &impl Downloader) -> Result<Option<DownloadTask>> {
+    pub async fn update_and_get(&self, downloader: &impl Downloader) -> Result<&PathBuf> {
+        self.path
+            .get_or_try_init(async || {
+                self.update(downloader).await?;
+                self.detect().await
+            })
+            .await
+    }
+    pub async fn get_or_init(&self, downloader: &impl Downloader) -> Result<&PathBuf> {
+        self.path
+            .get_or_try_init(async || {
+                if let Ok(v) = self.detect().await {
+                    return Ok(v);
+                }
+                self.update(downloader).await?;
+                self.detect().await
+            })
+            .await
+    }
+    async fn update(&self, downloader: &impl Downloader) -> Result<()> {
         match self.find_latest().await {
-            Err(_) => Ok(Some(self.install_latest(downloader).await?)),
             Ok(v) => {
                 let res = downloader
                     .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
                     .await?;
                 let res = serde_json::from_slice::<Artifact>(&res)?;
-                if res.build_number != v {
-                    Ok(Some(self.install_latest(downloader).await?))
-                } else {
-                    Ok(None)
+                if res.build_number > v {
+                    downloader
+                        .download(self.install_latest(downloader).await?)
+                        .await?;
                 }
             }
+            Err(_) => {
+                downloader
+                    .download(self.install_latest(downloader).await?)
+                    .await?
+            }
         }
+        Ok(())
     }
-    pub async fn get(&self) -> Result<PathBuf> {
+    async fn detect(&self) -> Result<PathBuf> {
         Ok(self.storage.authlib_injector().join(format!(
             "authlib-injector-{}.jar",
             self.find_latest().await?
@@ -85,6 +114,7 @@ impl<'a> AuthlibInjector<'a> {
             Some(v) => Ok(v),
         }
     }
+
     async fn install_latest(&self, downloader: &impl Downloader) -> Result<DownloadTask> {
         let res = downloader
             .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)

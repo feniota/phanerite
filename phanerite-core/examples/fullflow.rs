@@ -39,8 +39,6 @@ fn main() {
         let mut downloader = cached_downloader.with_group();
         let _g = monitor(&downloader).await;
 
-        let injector = AuthlibInjector::new(&storage);
-
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
         let version: InstanceManifest = VersionIndex::sync(&downloader)
@@ -54,7 +52,6 @@ fn main() {
             .into();
 
         downloader.extend(install_java::<Zulu>(version.java_major(), &storage, &downloader).await?);
-        downloader.extend(injector.update(&downloader).await?);
         downloader.exec().await.iter().for_each(|e| error!("{e}"));
 
         let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
@@ -92,7 +89,8 @@ fn main() {
             .for_each(|e| error!("{e}"));
 
         let auth = Authentication::new_login(&downloader)
-            .inject(&injector)
+            .inject(&storage)
+            .await?
             .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
             .await?
             .username(

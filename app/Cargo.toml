@@ -11,6 +11,23 @@ keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "phanerite"
+path = "src/main.rs"
+
+[[bin]]
+name = "gallery"
+path = "src/bin/gallery.rs"
+required-features = ["gallery"]
+
+[features]
+default = ["seed"]
+seed = []
+gallery = ["seed"]
+
 [dependencies]
 # zed-industries/zed?rev=08827f9 (pinned by gpui-component)
 gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
@@ -23,3 +40,6 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "56f3d903eaef3b2504cf31518ed1ad69d80166ff" }
 anyhow = "1.0"
 rust-embed = "8.12.0"
+
+[dev-dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }

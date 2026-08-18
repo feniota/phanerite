@@ -1,7 +1,7 @@
 use crate::download::Downloader;
 use crate::error::{Error, Result};
-use crate::instance::overlay::OverlayManifest;
 use crate::instance::Instance;
+use crate::instance::overlay::OverlayManifest;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
 use crate::utils::maven::MavenArtifact;

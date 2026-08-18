@@ -1,82 +1,40 @@
 use crate::auth::yggdrasil::YggdrasilError;
+use std::sync::Arc;
+use thiserror::Error;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
-    Io(std::io::Error),
-    Http(isahc::Error),
-    SerdeJson(serde_json::Error),
-    SerdeXml(serde_xml_rs::Error),
-    Zip(zip::result::ZipError),
-    Yggdrasil(YggdrasilError),
-    UrlParseErr(url::ParseError),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("HTTP error: {0}")]
+    Http(#[from] isahc::Error),
+    #[error("Serde JSON error: {0}")]
+    SerdeJson(#[from] serde_json::Error),
+    #[error("Serde Xml error: {0}")]
+    SerdeXml(#[from] serde_xml_rs::Error),
+    #[error("ZIP error: {0}")]
+    Zip(#[from] zip::result::ZipError),
+    #[error("Url parse error: {0}")]
+    UrlParseErr(#[from] url::ParseError),
+
+    /// 用于 Moka 的缓存错误
+    #[error(transparent)]
+    CacheErrors(#[from] Arc<Self>),
+    /// Yggdrasil 错误，迁移自 Aphanite
+    #[error(transparent)]
+    Yggdrasil(#[from] YggdrasilError),
+
+    /// 用户取消操作
+    #[error("Operation cancelled")]
     Cancelled,
+    #[error("{0}")]
     Other(String),
 }
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Io(e) => write!(f, "I/O error: {e}"),
-            Error::Http(status) => write!(f, "HTTP {status}"),
-            Error::SerdeJson(e) => write!(f, "Serde JSON error: {e}"),
-            Error::SerdeXml(e) => write!(f, "Serde XML error: {e}"),
-            Error::Yggdrasil(e) => write!(f, "{}", e),
-            Error::Cancelled => write!(f, "Operation cancelled"),
-            Error::Zip(e) => write!(f, "ZIP error: {e}"),
-            Error::UrlParseErr(e) => write!(f, "Url parse error: {e}"),
-            Error::Other(msg) => f.write_str(msg),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 impl Error {
     pub fn other(msg: impl Into<String>) -> Self {
         Error::Other(msg.into())
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::Io(e)
-    }
-}
-
-impl From<isahc::Error> for Error {
-    fn from(e: isahc::Error) -> Self {
-        Error::Http(e)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Error::SerdeJson(e)
-    }
-}
-
-impl From<zip::result::ZipError> for Error {
-    fn from(e: zip::result::ZipError) -> Self {
-        Error::Zip(e)
-    }
-}
-
-impl From<YggdrasilError> for Error {
-    fn from(e: YggdrasilError) -> Self {
-        Error::Yggdrasil(e)
-    }
-}
-
-impl From<url::ParseError> for Error {
-    fn from(e: url::ParseError) -> Self {
-        Error::UrlParseErr(e)
-    }
-}
-
-impl From<serde_xml_rs::Error> for Error {
-    fn from(e: serde_xml_rs::Error) -> Self {
-        Error::SerdeXml(e)
     }
 }

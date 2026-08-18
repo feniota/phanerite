@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::instance::arguments::LaunchArguments;
 use crate::instance::Instance;
+use crate::instance::arguments::LaunchArguments;
 
 pub mod offline;
 pub mod yggdrasil;

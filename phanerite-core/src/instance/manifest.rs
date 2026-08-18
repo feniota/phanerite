@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::instance::overlay::Patch;
-use crate::utils::maven::MavenArtifact;
 use crate::utils::Sha1Hash;
+use crate::utils::maven::MavenArtifact;
 use chrono::{DateTime, FixedOffset};
 use futures::AsyncReadExt;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};

@@ -1,10 +1,10 @@
 use crate::download::Downloader;
 use crate::error::{Error, Result};
+use crate::mod_project::ModProject;
 use crate::mod_project::features::display::{ModDisplay, Rgb};
 use crate::mod_project::features::filter::{FilterCriteria, ModFilter};
-use crate::mod_project::modrinth::serde::{DetailProject, SearchProject, Version};
 use crate::mod_project::modrinth::MODRINTH_API;
-use crate::mod_project::ModProject;
+use crate::mod_project::modrinth::serde::{DetailProject, SearchProject, Version};
 use async_lock::OnceCell;
 use chrono::{DateTime, FixedOffset};
 use std::fmt::Display;

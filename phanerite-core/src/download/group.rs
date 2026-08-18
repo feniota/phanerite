@@ -48,11 +48,7 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
             self.monitor.push_async(x.process.clone()).await;
             x
         });
-        self.downloader
-            .download_concurrent(tasks)
-            .await
-            .collect()
-            .await
+        self.downloader.download_concurrent(tasks).collect().await
     }
     /// 添加任务到暂存区
     pub fn push(&mut self, task: DownloadTask) {

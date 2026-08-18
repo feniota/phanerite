@@ -1,7 +1,7 @@
 use crate::error::Result;
+use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use uuid::Uuid;
 
 /// 离线登录

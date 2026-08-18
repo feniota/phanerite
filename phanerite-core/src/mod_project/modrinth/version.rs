@@ -1,7 +1,7 @@
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
-use crate::mod_project::modrinth::serde::Version;
 use crate::mod_project::ModVersion;
+use crate::mod_project::modrinth::serde::Version;
 use std::fmt::Display;
 use std::path::Path;
 

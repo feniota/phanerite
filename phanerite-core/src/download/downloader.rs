@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
-use futures::{AsyncReadExt, AsyncWriteExt, Stream, StreamExt};
+use futures::{AsyncReadExt, AsyncWriteExt};
 use http::{HeaderMap, StatusCode};
 use isahc::config::{Configurable, RedirectPolicy};
 use isahc::{AsyncReadResponseExt, HttpClient};
@@ -313,14 +313,8 @@ impl Downloader for RawDownloader<'_> {
         forget(guard);
         Ok(())
     }
-    async fn download_concurrent(
-        &self,
-        tasks: impl Stream<Item = DownloadTask>,
-    ) -> impl Stream<Item = Error> {
-        tasks
-            .map(async |task| self.download(task).await)
-            .buffer_unordered(self.concurrency)
-            .filter_map(async |res| res.err())
+    fn concurrency(&self) -> usize {
+        self.concurrency
     }
 }
 

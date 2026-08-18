@@ -1,5 +1,31 @@
+use crate::error::{Error, Result};
+use futures::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::path::Path;
+
+/// 校验文件 Hash
+pub(crate) async fn hash_file(path: &Path, hash: &Hash) -> Result<()> {
+    // 空哈希表示不要求校验，直接通过
+    if hash.is_empty() {
+        return Ok(());
+    }
+    let mut file = async_fs::File::open(path).await?;
+    let mut buffer = vec![0u8; 128 * 1024];
+    let mut hasher = hash.hasher();
+    loop {
+        let n = file.read(&mut buffer).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n])
+    }
+    if hasher.finalize() == *hash {
+        Ok(())
+    } else {
+        Err(Error::other("hash mismatch"))
+    }
+}
 
 // =======================
 // Hash Value
@@ -34,7 +60,7 @@ pub trait HashValue:
 // Hash Enum
 // =======================
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "algorithm", content = "value")]
 pub enum Hash {
     Empty(EmptyHash),
@@ -69,6 +95,10 @@ impl Hash {
             Self::Sha1(_) => HashHasher::Sha1(Sha1Algorithm::create()),
             Self::Sha256(_) => HashHasher::Sha256(Sha256Algorithm::create()),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Hash::Empty(_))
     }
 }
 
@@ -143,7 +173,7 @@ macro_rules! impl_hash_value {
         $algorithm:ty,
         $variant:ident
     ) => {
-        #[derive(Clone, Eq, PartialEq)]
+        #[derive(Clone, Eq, PartialEq, Hash)]
         pub struct $name(pub(crate) [u8; $size]);
 
         impl AsRef<[u8]> for $name {
@@ -183,7 +213,7 @@ macro_rules! impl_hash_value {
         }
 
         impl Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,
             {
@@ -192,7 +222,7 @@ macro_rules! impl_hash_value {
         }
 
         impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
             where
                 D: serde::Deserializer<'de>,
             {
@@ -229,7 +259,7 @@ macro_rules! impl_hash_value {
 // Empty Hash
 // =======================
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct EmptyHash;
 
 impl AsRef<[u8]> for EmptyHash {
@@ -251,7 +281,7 @@ impl fmt::Display for EmptyHash {
 }
 
 impl Serialize for EmptyHash {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -260,7 +290,7 @@ impl Serialize for EmptyHash {
 }
 
 impl<'de> Deserialize<'de> for EmptyHash {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -270,14 +300,14 @@ impl<'de> Deserialize<'de> for EmptyHash {
 }
 
 impl PartialEq<str> for EmptyHash {
-    fn eq(&self, _: &str) -> bool {
-        true
+    fn eq(&self, other: &str) -> bool {
+        other.is_empty()
     }
 }
 
 impl PartialEq<&str> for EmptyHash {
-    fn eq(&self, _: &&str) -> bool {
-        true
+    fn eq(&self, other: &&str) -> bool {
+        other.is_empty()
     }
 }
 
@@ -286,8 +316,8 @@ impl HashValue for EmptyHash {
 
     type Algorithm = EmptyAlgorithm;
 
-    fn from_bytes(_: &[u8]) -> Option<Self> {
-        Some(Self)
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        bytes.is_empty().then_some(Self)
     }
 }
 

@@ -1,6 +1,6 @@
+use crate::instance::Instance;
 use crate::instance::manifest::{Action, Argument};
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Display, Formatter};

@@ -9,9 +9,7 @@ mod granodiorite;
 pub use granodiorite::Granodiorite;
 
 use crate::download::Downloader;
-use crate::download::downloader::RawDownloader;
 use crate::download::task::DownloadTask;
-use crate::error::Error;
 use crate::error::Result;
 use crate::utils::Hash;
 use futures::Stream;
@@ -46,26 +44,22 @@ pub trait Mirror {
     }
 }
 
-pub struct DownloaderWithMirror<'a, M: Mirror> {
-    downloader: &'a RawDownloader<'a>,
+pub struct DownloaderWithMirror<'a, D: Downloader, M: Mirror> {
+    downloader: &'a D,
     mirror: M,
 }
 
-impl<'a> RawDownloader<'a> {
-    pub fn with_mirror<M: Mirror>(&'a self, mirror: M) -> DownloaderWithMirror<'a, M> {
-        DownloaderWithMirror {
-            downloader: self,
-            mirror,
-        }
+impl<'a, D: Downloader, M: Mirror> DownloaderWithMirror<'a, D, M> {
+    pub(crate) fn new(downloader: &'a D, mirror: M) -> Self {
+        Self { downloader, mirror }
     }
 }
 
-impl<M: Mirror> Downloader for DownloaderWithMirror<'_, M> {
+impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
     async fn fetch(&self, mut url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
         self.mirror.resolve(&mut url);
         self.downloader.fetch(url, hash).await
     }
-
     async fn post_json(
         &self,
         mut url: Url,
@@ -74,23 +68,15 @@ impl<M: Mirror> Downloader for DownloaderWithMirror<'_, M> {
         self.mirror.resolve(&mut url);
         self.downloader.post_json(url, body).await
     }
-
     async fn head(&self, mut url: Url) -> Result<HeaderMap> {
         self.mirror.resolve(&mut url);
         self.downloader.head(url).await
     }
-
     async fn download(&self, mut task: DownloadTask) -> Result<()> {
         self.mirror.resolve_task(&mut task);
         self.downloader.download(task).await
     }
-
-    async fn download_concurrent(
-        &self,
-        tasks: impl Stream<Item = DownloadTask>,
-    ) -> impl Stream<Item = Error> {
-        self.downloader
-            .download_concurrent(self.mirror.resolve_stream(tasks))
-            .await
+    fn concurrency(&self) -> usize {
+        self.downloader.concurrency()
     }
 }

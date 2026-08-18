@@ -1,12 +1,12 @@
-use crate::download::authlib_injector::AuthlibInjector;
 use crate::download::Downloader;
+use crate::download::authlib_injector::AuthlibInjector;
 use crate::error::{Error, Result};
+use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::instance::Instance;
 use crate::utils::uuid::UnhyphenatedUuid;
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};

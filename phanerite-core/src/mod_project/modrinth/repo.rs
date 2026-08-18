@@ -1,9 +1,9 @@
 use crate::download::Downloader;
 use crate::error::Result;
+use crate::mod_project::ModsRepository;
+use crate::mod_project::modrinth::MODRINTH_API;
 use crate::mod_project::modrinth::project::Project;
 use crate::mod_project::modrinth::serde::SearchProject;
-use crate::mod_project::modrinth::MODRINTH_API;
-use crate::mod_project::ModsRepository;
 use futures::Stream;
 use futures_lite::stream::StreamExt;
 use serde::Deserialize;

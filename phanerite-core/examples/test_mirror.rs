@@ -1,7 +1,7 @@
-use phanerite_core::download::Downloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::mirror::Granodiorite;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
+use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::instance::Instance;
 use phanerite_core::*;
 use std::collections::HashSet;

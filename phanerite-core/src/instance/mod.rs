@@ -1,12 +1,12 @@
 use crate::auth::Authentication;
-use crate::download::task::{filter_existed, filter_hash, DownloadTask};
-use crate::download::vanilla::assets::AssetIndexList;
 use crate::download::Downloader;
+use crate::download::task::{DownloadTask, filter_existed, filter_hash};
+use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::{Error, Result};
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::java::JavaRuntime;
-use crate::storage::temp::TempGuard;
 use crate::storage::Storage;
+use crate::storage::temp::TempGuard;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use futures::{Stream, StreamExt};
 use std::collections::HashSet;

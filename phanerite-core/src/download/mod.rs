@@ -33,9 +33,9 @@ pub trait Downloader {
     /// 并发下载文件到储存
     fn download_concurrent(
         &self,
-        tasks: impl Stream<Item = DownloadTask>,
+        tasks: impl IntoIterator<Item = DownloadTask>,
     ) -> impl Stream<Item = Result<()>> {
-        tasks
+        futures::stream::iter(tasks)
             .map(async |task| self.download(task).await)
             .buffer_unordered(self.concurrency())
     }

@@ -5020,7 +5020,9 @@ dependencies = [
  "gpui-component-assets",
  "gpui_platform",
  "phanerite-core",
+ "pollster 0.4.0",
  "rust-embed",
+ "tempfile",
 ]
 
 [[package]]

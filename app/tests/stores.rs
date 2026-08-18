@@ -70,14 +70,23 @@ fn all_mutable_stores_ignore_equal_values() {
 
 #[test]
 fn storage_registry_and_context_both_guard_late_results() {
-    let a = StorageId::for_test(1);
-    let b = StorageId::for_test(2);
+    let root_a = tempfile::tempdir().unwrap();
+    let root_b = tempfile::tempdir().unwrap();
+    let storage_a =
+        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root_a.path())).unwrap());
+    let storage_b =
+        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root_b.path())).unwrap());
+    let mut registry = StorageRegistry::new();
+    let a = registry.add(root_a.path(), storage_a).unwrap();
+    let b = registry.add(root_b.path(), storage_b).unwrap();
+    registry.set_default(b).unwrap();
     let mut store = InstanceStore::new(Vec::new());
-    let registry = StorageRegistry::new();
     store.set_storage_context(a);
-    assert!(!store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
+    assert!(store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
+    assert_eq!(store.all()[0].storage_id, a);
     store.set_storage_context(b);
     assert!(!store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
-    assert!(store.all().is_empty());
-    let _ = b;
+    assert_eq!(store.all()[0].storage_id, a);
+    assert!(store.apply_for_storage(&registry, b, phanerite::seed::seed_instances(b)));
+    assert_eq!(store.all()[0].storage_id, b);
 }

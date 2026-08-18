@@ -30,7 +30,11 @@ strum.workspace = true
 
 # networking / http
 http.workspace = true
-isahc = { version = "2.0", default-features = false, features = ["http2", "rustls-tls-webpki-roots", "static-curl"] }
+isahc = { version = "2.0", default-features = false, features = [
+  "http2",
+  "rustls-tls-webpki-roots",
+  "static-curl",
+] }
 url.workspace = true
 
 # cryptography / encoding

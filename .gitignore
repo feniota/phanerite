@@ -6,3 +6,4 @@ logs/
 authlib-injector.log
 *.log
 .env
+design/

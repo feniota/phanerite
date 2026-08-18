@@ -88,7 +88,7 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
     }
     /// 扫描实例
     pub fn scan(storage: &'storage Storage) -> impl Stream<Item = Result<Self>> + 'storage {
-        futures::stream::try_unfold((storage, None), |(storage, dir)| async move {
+        futures::stream::try_unfold((storage, None), async |(storage, dir)| {
             let mut dir = match dir {
                 Some(dir) => dir,
                 None => async_fs::read_dir(storage.versions_dir()).await?,

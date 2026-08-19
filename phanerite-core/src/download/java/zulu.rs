@@ -4,8 +4,8 @@ use crate::download::java::JavaDownload;
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
 use crate::runtime::RuntimePath;
-use crate::storage::Storage;
 use serde::Deserialize;
+use std::path::Path;
 use std::sync::LazyLock;
 use url::Url;
 
@@ -21,7 +21,7 @@ impl JavaDownload for Zulu {
     async fn get_major(
         major: u32,
         downloader: &impl Downloader,
-        storage: &Storage,
+        runtime_dir: &Path,
     ) -> Result<DownloadTask> {
         let mut url = ZULU_PACKAGE_META.clone();
 
@@ -64,11 +64,7 @@ impl JavaDownload for Zulu {
         };
 
         let extract = ExtractTask::builder()
-            .target(
-                storage
-                    .runtime_dir()
-                    .join(RuntimePath::new("jre", major as usize, "zulu").to_string()),
-            )
+            .target(runtime_dir.join(RuntimePath::new("jre", major as usize, "zulu").to_string()))
             .flatten()
             .build();
 

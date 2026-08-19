@@ -133,6 +133,9 @@ impl LoaderInstall for NeoForge {
         let mut profile = async_fs::File::create(&temp.join("launcher_profiles.json")).await?;
         profile.write_all(b"{\"profiles\":{}}").await?;
         drop(profile);
+
+        // TODO: 接管 NeoForge 安装器的下载任务
+
         // 运行安装器
         async_process::Command::new(&raw.runtime)
             .current_dir(&temp)

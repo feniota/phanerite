@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::storage::Storage;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
@@ -33,6 +34,17 @@ impl RuntimePath {
     }
     pub fn matches_current(&self) -> bool {
         self.os == std::env::consts::OS && self.arch == std::env::consts::ARCH
+    }
+}
+
+/// 提供 `RuntimePath` 根目录的类型，例如 `Storage`
+pub trait RuntimeScanPath {
+    fn paths(&self) -> impl Iterator<Item = PathBuf>;
+}
+
+impl RuntimeScanPath for Storage {
+    fn paths(&self) -> impl Iterator<Item = PathBuf> {
+        std::iter::once(self.runtime_dir().to_owned())
     }
 }
 

@@ -110,6 +110,10 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
+    /// 获取当前实例 Java 版本
+    pub fn java_major(&self) -> u32 {
+        self.manifest.java_version.major_version
+    }
     /// 重命名
     pub async fn rename(&mut self, name: impl Into<String>) -> Result<()> {
         let name = name.into();

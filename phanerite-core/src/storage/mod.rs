@@ -1,5 +1,6 @@
 pub mod bucket;
 pub mod capability;
+pub mod multi;
 pub mod temp;
 
 use crate::error::{Error, Result};
@@ -14,9 +15,10 @@ use std::sync::Arc;
 /// 因此写入操作并不总是在需要注入 `Storage` 的调用
 /// 例如 `DownloadTask` 在构建时可能需要注入 `Storage`
 /// 但实际的写入操作是在执行下载时
+#[derive(Debug)]
 pub struct Storage {
     /// 启动器数据的根目录，例如 `.minecraft`
-    root_dir: PathBuf,
+    pub root_dir: PathBuf,
     /// 临时文件目录， `{root_dir}/cache`
     /// `Storage` 释放时删除
     cache_dir: PathBuf,
@@ -178,9 +180,17 @@ impl Drop for Storage {
     }
 }
 
+impl PartialEq for Storage {
+    fn eq(&self, other: &Self) -> bool {
+        self.root_dir == other.root_dir
+    }
+}
+
+impl Eq for Storage {}
+
 /// 共享桶储存偏好
 /// 自下往上 Fallback
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum SharePreference {
     /// 下载后移动到目标，不共享
     /// 注意：从别的方案迁移至此方案会破坏原有共享文件

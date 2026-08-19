@@ -5051,6 +5051,7 @@ dependencies = [
  "moka",
  "scc",
  "secrecy",
+ "self_cell",
  "serde",
  "serde-xml-rs",
  "serde_json",

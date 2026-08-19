@@ -157,6 +157,7 @@ impl LoaderInstall for NeoForge {
 }
 
 /// 移动整个目录，并跳过已有文件
+#[allow(clippy::double_must_use)]
 #[async_recursion::async_recursion]
 async fn merge_move(src: &Path, dst: &Path) -> Result<()> {
     let mut entries = async_fs::read_dir(src).await?;

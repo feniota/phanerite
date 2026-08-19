@@ -6,11 +6,11 @@ use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
-use async_lock::Mutex;
 use futures::StreamExt;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsStr;
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use tracing::trace;
 
@@ -60,12 +60,24 @@ impl InstanceManifest {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct JavaRuntime {
     pub name: String,
     pub major: u32,
     pub version: String,
     pub path: PathBuf,
+}
+
+impl PartialEq for JavaRuntime {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
+impl std::hash::Hash for JavaRuntime {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.path.hash(state)
+    }
 }
 
 impl AsRef<OsStr> for JavaRuntime {
@@ -151,26 +163,4 @@ pub async fn detect_system() -> Vec<JavaRuntime> {
         .filter_map(async |x| x.ok())
         .collect()
         .await
-}
-
-pub struct GlobalManager<'storage> {
-    storage: &'storage Storage,
-    build_in: Mutex<Vec<JavaRuntime>>,
-    system: Mutex<Vec<JavaRuntime>>,
-}
-
-impl<'storage> GlobalManager<'storage> {
-    pub async fn new(storage: &'storage Storage) -> Self {
-        let new = Self {
-            storage,
-            build_in: Default::default(),
-            system: Default::default(),
-        };
-        new.refresh().await;
-        new
-    }
-    pub async fn refresh(&self) {
-        *self.build_in.lock().await = list_build_in(self.storage.runtime_dir()).await;
-        *self.system.lock().await = detect_system().await;
-    }
 }

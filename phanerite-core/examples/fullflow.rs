@@ -6,15 +6,15 @@ use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::runtime::java::JavaManager;
-use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::multi::MultiStorage;
+use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::*;
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{Level, error};
+use tracing::{error, Level};
 use url::Url;
 
 fn main() {
@@ -41,6 +41,7 @@ fn main() {
         // 生成临时文件清理任务
         let (cleaner, _shutdown) = storage.run_cleaner();
         smol::spawn(cleaner).detach();
+        // Storage 移动至 MultiStorage 容器
         storages.insert(storage).await.unwrap();
         // 通过 ID 在局部获取 &Storage
         let id = storages.iter(|mut iter| iter.next().map(|(id, _)| *id).unwrap());

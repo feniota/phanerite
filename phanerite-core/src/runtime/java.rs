@@ -183,13 +183,13 @@ impl<'scan, S: RuntimeScanPath> JavaManager<'scan, S> {
         &self,
         major: u32,
         downloader: &impl Downloader,
-        install_to: impl AsyncFnOnce(&S) -> &Path,
+        install_to: impl AsyncFnOnce(&S) -> PathBuf,
     ) -> Result<JavaRuntime> {
         if let Some(v) = self.find(major).await {
             return Ok(v);
         }
         let runtime_dir = install_to(self.scan_paths).await;
-        let task = J::get_major(major, downloader, runtime_dir).await?;
+        let task = J::get_major(major, downloader, &runtime_dir).await?;
         downloader.download(task).await?;
         self.refresh().await;
         self.find(major)

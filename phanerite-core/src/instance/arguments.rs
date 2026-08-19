@@ -1,6 +1,8 @@
+use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::manifest::{Action, Argument};
 use crate::instance::variables::Variables;
+use crate::utils::state::{NotReady, Ready};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -60,7 +62,17 @@ impl Display for LaunchArguments {
     }
 }
 
-impl Variables {
+impl Variables<NotReady> {
+    pub fn to_arguments<R: Clone, C: Clone>(
+        self,
+        instance: &Instance<R, C>,
+    ) -> Result<LaunchArguments> {
+        let vars = self.generated(instance)?;
+        Ok(vars.to_arguments(instance))
+    }
+}
+
+impl Variables<Ready> {
     pub fn to_arguments<R: Clone, C: Clone>(&self, instance: &Instance<R, C>) -> LaunchArguments {
         let main_class = instance.manifest.main_class.to_string();
         if let Some(args) = &instance.manifest.arguments {
@@ -140,7 +152,7 @@ where
 
 /// 排除无法替换的参数
 fn filter_none(
-    variables: &Variables,
+    variables: &Variables<Ready>,
     x: &str,
     y: Option<&String>,
 ) -> Option<(String, Option<String>)> {
@@ -153,7 +165,6 @@ fn filter_none(
     }
 }
 
-#[inline]
 fn pure_var(input: &str) -> bool {
     input
         .strip_prefix("${")

@@ -7,6 +7,7 @@ use crate::instance::manifest::InstanceManifest;
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
 use crate::storage::temp::TempGuard;
+use crate::utils::state::{NotReady, Ready};
 use futures::{AsyncReadExt, AsyncWriteExt};
 use futures::{Stream, StreamExt};
 use std::collections::HashSet;
@@ -17,11 +18,6 @@ pub mod arguments;
 pub mod manifest;
 pub mod overlay;
 pub mod variables;
-
-#[derive(Clone)]
-pub struct NotReady;
-#[derive(Clone)]
-pub struct Ready;
 
 pub struct Instance<'storage, R: Clone, C: Clone> {
     pub instance_dir: PathBuf,

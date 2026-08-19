@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .init();
     smol::block_on(async {
         phanerite_core::runtime::java::detect_system()
-            .await?
+            .await
             .iter()
             .for_each(|x| println!("{x:?}"));
 

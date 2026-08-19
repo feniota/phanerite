@@ -6,6 +6,7 @@ use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::RuntimePath;
 use crate::storage::Storage;
+use async_lock::Mutex;
 use futures::StreamExt;
 use std::collections::HashSet;
 use std::env;
@@ -31,10 +32,8 @@ pub async fn install_java<J: JavaDownload>(
 }
 
 pub async fn find_java(major: u32, storage: &Storage) -> Vec<JavaRuntime> {
-    let build_in = list_build_in(storage.runtime_dir())
-        .await
-        .unwrap_or_default();
-    let system = detect_system().await.unwrap_or_default();
+    let build_in = list_build_in(storage.runtime_dir()).await;
+    let system = detect_system().await;
     build_in
         .into_iter()
         .chain(system)
@@ -115,9 +114,9 @@ impl JavaRuntime {
 }
 
 /// 列出内建 Java
-pub async fn list_build_in(runtime_dir: &Path) -> Result<Vec<JavaRuntime>> {
-    let result = async_fs::read_dir(runtime_dir)
-        .await?
+pub async fn list_build_in(runtime_dir: &Path) -> Vec<JavaRuntime> {
+    futures::stream::iter(async_fs::read_dir(runtime_dir).await)
+        .flatten()
         .filter_map(async |x| x.ok())
         .filter_map(async |x| {
             RuntimePath::try_from(x.file_name())
@@ -131,12 +130,11 @@ pub async fn list_build_in(runtime_dir: &Path) -> Result<Vec<JavaRuntime>> {
         .buffer_unordered(4)
         .filter_map(async |x| x.ok())
         .collect()
-        .await;
-    Ok(result)
+        .await
 }
 
 /// 探测系统的 Java
-pub async fn detect_system() -> Result<Vec<JavaRuntime>> {
+pub async fn detect_system() -> Vec<JavaRuntime> {
     let java_home = env::var_os("JAVA_HOME")
         .map(PathBuf::from)
         .unwrap_or_default()
@@ -147,11 +145,32 @@ pub async fn detect_system() -> Result<Vec<JavaRuntime>> {
         .filter(|x| x.is_file())
         .map(|x| std::path::absolute(&x).unwrap_or(x))
         .collect::<HashSet<_>>();
-    let result = futures::stream::iter(javas)
+    futures::stream::iter(javas)
         .map(JavaRuntime::from_path)
         .buffer_unordered(4)
         .filter_map(async |x| x.ok())
         .collect()
-        .await;
-    Ok(result)
+        .await
+}
+
+pub struct GlobalManager<'storage> {
+    storage: &'storage Storage,
+    build_in: Mutex<Vec<JavaRuntime>>,
+    system: Mutex<Vec<JavaRuntime>>,
+}
+
+impl<'storage> GlobalManager<'storage> {
+    pub async fn new(storage: &'storage Storage) -> Self {
+        let new = Self {
+            storage,
+            build_in: Default::default(),
+            system: Default::default(),
+        };
+        new.refresh().await;
+        new
+    }
+    pub async fn refresh(&self) {
+        *self.build_in.lock().await = list_build_in(self.storage.runtime_dir()).await;
+        *self.system.lock().await = detect_system().await;
+    }
 }

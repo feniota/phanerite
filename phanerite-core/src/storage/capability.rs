@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// 目录能力
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct DirCapability {
     pub read: bool,
     pub write: bool,

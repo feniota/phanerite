@@ -1,6 +1,5 @@
 use async_executor::Executor;
 use phanerite_core::auth::yggdrasil::Authentication;
-use phanerite_core::download::authlib_injector::AuthlibInjector;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::zulu::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
@@ -8,7 +7,7 @@ use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::instance::manifest::InstanceManifest;
-use phanerite_core::runtime::java::install_java;
+use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::*;
 use std::collections::HashSet;
@@ -27,20 +26,28 @@ fn main() {
     let executor = Executor::new();
     let _guard = BlockingGuard::new(&executor);
     if let Err(e) = smol::block_on(executor.run(async {
+        // 构造 Storage
         let storage = storage::Storage::new(".minecraft")
             .await?
             .share_preference(Hardlink);
         let (cleaner, _shutdown) = storage.run_cleaner();
         smol::spawn(cleaner).detach();
+
+        // 构造 Downloader
         let raw_downloader = download::downloader::RawDownloader::builder(&storage)
             .build()
             .await?;
         let cached_downloader = raw_downloader.with_cache_default();
-        let mut downloader = cached_downloader.with_group();
+        let downloader = cached_downloader.with_group();
         let _g = monitor(&downloader).await;
 
+        // 构造 JavaManager
+        let java_manager = JavaManager::new(&storage).await.disable_system();
+
+        // （清理测试残留）
         let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
+        // 创建实例
         let version: InstanceManifest = VersionIndex::sync(&downloader)
             .await?
             // .iter()
@@ -50,20 +57,17 @@ fn main() {
             .get_manifest(&downloader)
             .await?
             .into();
-
-        downloader.extend(install_java::<Zulu>(version.java_major(), &storage, &downloader).await?);
-        downloader.exec().await.iter().for_each(|e| error!("{e}"));
-
         let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
 
-        let java = instance
-            .find_java(&storage)
-            .await
-            .into_iter()
-            .next()
-            .ok_or(Error::other("No available java"))?;
+        // 安装 Java
+        let java = java_manager
+            .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
+                x.runtime_dir()
+            })
+            .await?;
         let instance = instance.bind_java(java.clone()).await?;
 
+        // 安装模组加载器
         // instance
         //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
         //         // let iter = iter
@@ -82,12 +86,14 @@ fn main() {
         //     })
         //     .await?;
 
+        // 安装实例
         downloader
             .join(instance.install_less(HashSet::new()).await?)
             .await
             .iter()
             .for_each(|e| error!("{e}"));
 
+        // 创建登录凭据
         let auth = Authentication::new_login(&downloader)
             .inject(&storage)
             .await?
@@ -104,6 +110,7 @@ fn main() {
             .login()
             .await?;
 
+        // 启动游戏
         let instance = instance.bind_java(java).await?.ensure_ready();
         let mut cmd = instance.launch(&auth).await?;
         let exit = cmd.spawn()?.status().await?;

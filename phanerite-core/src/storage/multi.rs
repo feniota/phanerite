@@ -1,6 +1,8 @@
+use crate::runtime::RuntimeScanPath;
 use crate::storage::Storage;
 use self_cell::self_cell;
 use std::ops::Deref;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 /// 多个 Storage 的并发存储。
@@ -162,5 +164,15 @@ impl MultiStorage {
     /// 结果仅代表检查发生时的状态，不能用于同步并发修改。
     pub fn is_empty(&self) -> bool {
         self.storages.is_empty()
+    }
+}
+
+impl RuntimeScanPath for MultiStorage {
+    fn paths(&self) -> impl Iterator<Item = PathBuf> {
+        self.iter(|iter| {
+            iter.map(|(_, s)| s.runtime_dir().to_owned())
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
     }
 }

@@ -10,10 +10,10 @@ pub use granodiorite::Granodiorite;
 
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::utils::Hash;
 use futures::Stream;
-use http::{HeaderMap, StatusCode};
+use http::{Request, Response};
 use url::Url;
 
 pub trait Mirror {
@@ -60,17 +60,22 @@ impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
         self.mirror.resolve(&mut url);
         self.downloader.fetch(url, hash).await
     }
-    async fn post_json(
-        &self,
-        mut url: Url,
-        body: impl AsRef<str>,
-    ) -> Result<(StatusCode, Vec<u8>)> {
+    async fn post_json(&self, mut url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
         self.mirror.resolve(&mut url);
         self.downloader.post_json(url, body).await
     }
-    async fn head(&self, mut url: Url) -> Result<HeaderMap> {
+    async fn head(&self, mut url: Url) -> Result<Response<()>> {
         self.mirror.resolve(&mut url);
         self.downloader.head(url).await
+    }
+    async fn send(&self, mut req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+        let mut url: Url = req.uri().to_string().parse()?;
+        self.mirror.resolve(&mut url);
+        *req.uri_mut() = url
+            .as_str()
+            .parse()
+            .map_err(|e| Error::other(format!("mirror resolved to an invalid URI: {e}")))?;
+        self.downloader.send(req).await
     }
     async fn download(&self, mut task: DownloadTask) -> Result<()> {
         self.mirror.resolve_task(&mut task);

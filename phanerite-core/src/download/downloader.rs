@@ -5,7 +5,7 @@ use crate::storage::Storage;
 use crate::utils::{Hash, Hasher};
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt};
-use http::{HeaderMap, StatusCode};
+use http::{Request, Response};
 use isahc::config::{Configurable, RedirectPolicy};
 use isahc::{AsyncReadResponseExt, HttpClient};
 use std::mem::forget;
@@ -154,21 +154,25 @@ impl Downloader for RawDownloader<'_> {
         }
         Err(Error::other("download failed after retries"))
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<(StatusCode, Vec<u8>)> {
-        let req = isahc::Request::post(url.as_str())
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
+        let req = Request::post(url.as_str())
             .header("Content-Type", "application/json")
-            .body(body.as_ref())
-            .unwrap();
-        let mut res = self.client.send_async(req).await?;
-        Ok((res.status(), res.bytes().await?))
+            .body(body.as_ref().as_bytes().to_vec())
+            .expect("building a request from a valid URL should never fail");
+        self.send(req).await
     }
-    async fn head(&self, url: Url) -> Result<HeaderMap> {
-        Ok(self
-            .client
-            .head_async(url.as_ref())
-            .await?
-            .headers()
-            .clone())
+    async fn head(&self, url: Url) -> Result<Response<()>> {
+        let req = Request::head(url.as_str())
+            .body(Vec::new())
+            .expect("building a request from a valid URL should never fail");
+        let (parts, _) = self.send(req).await?.into_parts();
+        Ok(Response::from_parts(parts, ()))
+    }
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+        let mut res = self.client.send_async(req).await?;
+        let body = res.bytes().await?;
+        let (parts, _) = res.into_parts();
+        Ok(Response::from_parts(parts, body))
     }
     async fn download(&self, task: DownloadTask) -> Result<()> {
         /// 用于发送失败信号

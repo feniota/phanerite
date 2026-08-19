@@ -153,7 +153,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "refresh"]);
-        let (_, res) = downloader.post_json(url, req).await?;
+        let res = downloader.post_json(url, req).await?.into_body();
         let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
 
         self.access_token = res.access_token;
@@ -184,7 +184,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "validate"]);
-        let (status, _) = downloader.post_json(url, req).await?;
+        let status = downloader.post_json(url, req).await?.status();
 
         if status == 204 { Ok(true) } else { Ok(false) }
     }
@@ -207,7 +207,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "invalidate"]);
-        let (_, _) = downloader.post_json(url, req).await?;
+        downloader.post_json(url, req).await?;
 
         Ok(())
     }
@@ -230,12 +230,12 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "signout"]);
-        let (status, err) = downloader.post_json(url, req).await?;
+        let res = downloader.post_json(url, req).await?;
 
-        if status == 204 {
+        if res.status() == 204 {
             Ok(())
         } else {
-            let err = serde_json::from_slice::<YggdrasilError>(&err)?;
+            let err = serde_json::from_slice::<YggdrasilError>(res.body())?;
             Err(err.into())
         }
     }
@@ -315,6 +315,7 @@ impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
             Err(_) => return url,
         };
         response
+            .headers()
             .get("X-Authlib-Injector-API-Location")
             .and_then(|t| t.to_str().ok())
             .and_then(|t| t.parse().ok())
@@ -455,7 +456,7 @@ impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "authenticate"]);
-        let (_, res) = self.downloader.post_json(url, &req).await?;
+        let res = self.downloader.post_json(url, &req).await?.into_body();
         let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
 
         Ok(Authentication {

@@ -1,43 +1,19 @@
 use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::manifest::VersionType;
+use crate::utils::state::{NotReady, Ready};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Default)]
-pub struct Variables {
+pub struct Variables<S: Default> {
+    _state: S,
     vars: HashMap<&'static str, String>,
 
     pub(super) feat: HashSet<&'static str>,
 }
 
-impl Variables {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub(super) fn resolve(&self, input: &str) -> Option<String> {
-        if let Some(key) = input.strip_prefix("${").and_then(|x| x.strip_suffix('}')) {
-            return self.vars.get(key).cloned();
-        }
-        self.resolve_template(input)
-    }
-    fn resolve_template(&self, input: &str) -> Option<String> {
-        let mut output = String::with_capacity(input.len());
-        let mut rest = input;
-
-        while let Some(start) = rest.find("${") {
-            output.push_str(&rest[..start]);
-            let rest2 = &rest[start + 2..];
-            let end = rest2.find('}')?;
-            let key = &rest2[..end];
-            let value = self.vars.get(key)?;
-            output.push_str(value);
-            rest = &rest2[end + 1..];
-        }
-
-        output.push_str(rest);
-        Some(output)
-    }
+impl<S: Default> Variables<S> {
     /// 新旧版必选配置
     pub fn required(
         mut self,
@@ -91,12 +67,6 @@ impl Variables {
             .insert("quick_play_realms", quick_play_realms.into());
         self
     }
-    /// 从实例生成必要项
-    pub fn generated<R: Clone, C: Clone>(mut self, instance: &Instance<R, C>) -> Result<Self> {
-        let generated = Generated::from_instance(instance)?;
-        generated.insert_into(&mut self.vars);
-        Ok(self)
-    }
     /// 启用特性
     pub fn feature(mut self, feature: &'static str) -> Self {
         self.feat.insert(feature);
@@ -104,7 +74,52 @@ impl Variables {
     }
 }
 
-struct Generated {
+impl Variables<NotReady> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+    /// 从实例生成必要项
+    pub fn generated<R: Clone, C: Clone>(
+        mut self,
+        instance: &Instance<R, C>,
+    ) -> Result<Variables<Ready>> {
+        let generated = ReadyVariables::from_instance(instance)?;
+        generated.insert_into(&mut self.vars);
+        Ok(Variables {
+            _state: Ready,
+            vars: self.vars,
+            feat: self.feat,
+        })
+    }
+}
+
+impl Variables<Ready> {
+    pub(super) fn resolve(&self, input: &str) -> Option<String> {
+        if let Some(key) = input.strip_prefix("${").and_then(|x| x.strip_suffix('}')) {
+            return self.vars.get(key).cloned();
+        }
+        self.resolve_template(input)
+    }
+    fn resolve_template(&self, input: &str) -> Option<String> {
+        let mut output = String::with_capacity(input.len());
+        let mut rest = input;
+
+        while let Some(start) = rest.find("${") {
+            output.push_str(&rest[..start]);
+            let rest2 = &rest[start + 2..];
+            let end = rest2.find('}')?;
+            let key = &rest2[..end];
+            let value = self.vars.get(key)?;
+            output.push_str(value);
+            rest = &rest2[end + 1..];
+        }
+
+        output.push_str(rest);
+        Some(output)
+    }
+}
+
+struct ReadyVariables {
     /// 实例名称
     version_name: String,
     /// 版本类型
@@ -133,28 +148,26 @@ struct Generated {
     classpath_separator: &'static str,
 }
 
-impl Generated {
+impl ReadyVariables {
     fn from_instance<R: Clone, C: Clone>(instance: &Instance<R, C>) -> Result<Self> {
-        let cp = instance
-            .manifest
-            .libraries
-            .iter()
-            .map(|lib| instance.storage.libraries_dir().join(lib.name.path()))
-            .chain(std::iter::once(instance.client_file()))
-            .map(std::path::absolute)
-            .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
-            .try_collect::<HashSet<_>>()?
-            .into_iter()
-            .collect::<Vec<_>>()
-            .join(if cfg!(windows) { ";" } else { ":" });
-
         Ok(Self {
             version_name: instance.manifest.id.clone(),
             version_type: instance.manifest.version_type,
             game_directory: std::path::absolute(&instance.instance_dir)?,
             assets_root: std::path::absolute(instance.storage.assets_dir())?,
             assets_index_name: instance.manifest.assets.clone(),
-            classpath: cp,
+            classpath: instance
+                .manifest
+                .libraries
+                .iter()
+                .map(|lib| instance.storage.libraries_dir().join(lib.name.path()))
+                .chain(std::iter::once(instance.client_file()))
+                .map(std::path::absolute)
+                .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
+                .try_collect::<HashSet<_>>()?
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(if cfg!(windows) { ";" } else { ":" }),
             natives_directory: instance.instance_dir.join("native"),
             launcher_name: "Phanerite",
             launcher_version: env!("CARGO_PKG_VERSION"),

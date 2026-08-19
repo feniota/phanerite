@@ -1,21 +1,19 @@
 use crate::download::Downloader;
 use crate::download::authlib_injector::AuthlibInjector;
 use crate::error::{Error, Result};
-use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
 use crate::storage::Storage;
+use crate::utils::state::NotReady;
 use crate::utils::uuid::UnhyphenatedUuid;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use url::Url;
 use uuid::Uuid;
-
-pub struct Missing;
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -95,11 +93,13 @@ pub struct Login<'a, S, U, P, D: Downloader> {
 
 impl<'a> Authentication {
     /// 创建登录会话
-    pub fn new_login<D: Downloader>(downloader: &'a D) -> Login<'a, Missing, Missing, Missing, D> {
+    pub fn new_login<D: Downloader>(
+        downloader: &'a D,
+    ) -> Login<'a, NotReady, NotReady, NotReady, D> {
         Login {
             downloader,
             authlib_injector: None,
-            server: Missing,
+            server: NotReady,
             skin_domains: vec![],
             signature_publickey: None,
             meta_info: MetaInfo {
@@ -108,8 +108,8 @@ impl<'a> Authentication {
                 implementation_version: None,
                 links: None,
             },
-            username: Missing,
-            password: Missing,
+            username: NotReady,
+            password: NotReady,
         }
     }
     /// 刷新令牌
@@ -153,7 +153,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "refresh"]);
-        let (_, res) = downloader.post_json(url, req).await?;
+        let res = downloader.post_json(url, req).await?.into_body();
         let res = serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()?;
 
         self.access_token = res.access_token;
@@ -184,7 +184,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "validate"]);
-        let (status, _) = downloader.post_json(url, req).await?;
+        let status = downloader.post_json(url, req).await?.status();
 
         if status == 204 { Ok(true) } else { Ok(false) }
     }
@@ -207,7 +207,7 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "invalidate"]);
-        let (_, _) = downloader.post_json(url, req).await?;
+        downloader.post_json(url, req).await?;
 
         Ok(())
     }
@@ -230,76 +230,54 @@ impl<'a> Authentication {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "signout"]);
-        let (status, err) = downloader.post_json(url, req).await?;
+        let res = downloader.post_json(url, req).await?;
 
-        if status == 204 {
+        if res.status() == 204 {
             Ok(())
         } else {
-            let err = serde_json::from_slice::<YggdrasilError>(&err)?;
+            let err = serde_json::from_slice::<YggdrasilError>(res.body())?;
             Err(err.into())
         }
     }
 
     /// 配置预获取
-    pub fn meta_base64(&self) -> Result<String> {
+    pub fn meta_base64(&self) -> String {
         let meta = FullMeta {
             meta: self.meta_info.clone(),
             skin_domains: self.skin_domains.clone(),
             signature_publickey: self.signature_publickey.clone(),
         };
-        let meta = serde_json::to_vec(&meta)?;
-        let encoded = BASE64_STANDARD.encode(&meta);
-        Ok(encoded)
+        let meta = serde_json::to_vec(&meta).expect("serializing Value to JSON should never fail");
+        BASE64_STANDARD.encode(&meta)
     }
-    /// 生成启动参数
-    fn args<R: Clone, C: Clone>(&self, instance: &Instance<R, C>) -> Result<LaunchArguments> {
+}
+
+impl super::Authentication for Authentication {
+    async fn vars(&self) -> Result<Variables<NotReady>> {
         let Some(profile) = &self.selected_profile else {
             return Err(Error::other("No selected profile"));
         };
-
         let variables = Variables::new()
             .required(
                 profile.name.clone().unwrap_or_default(),
                 profile.id.to_string(),
                 self.access_token.expose_secret(),
             )
-            .legacy(self.access_token.expose_secret(), "mojang")
-            .generated(instance)?;
-
-        let arguments = variables.to_arguments(instance);
-        Ok(arguments)
+            .legacy(self.access_token.expose_secret(), "mojang");
+        Ok(variables)
     }
-    /// 生成启动参数（注入 `authlib-injector`）
-    async fn injected_args<R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'_, R, C>,
-        authlib_injector: &Path,
-    ) -> Result<LaunchArguments> {
-        let mut args = self.args(instance)?;
-        let agent = format!(
-            "-javaagent:{}={}",
-            authlib_injector.to_string_lossy(),
-            self.server,
-        );
-        let meta = format!(
-            "-Dauthlibinjector.yggdrasil.prefetched={}",
-            self.meta_base64()?
-        );
-        args.jvm.insert(agent, None);
-        args.jvm.insert(meta, None);
-        Ok(args)
-    }
-}
-
-impl super::Authentication for Authentication {
-    async fn args<R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'_, R, C>,
-    ) -> Result<LaunchArguments> {
-        Ok(match &self.authlib_injector {
-            None => self.args(instance)?,
-            Some(i) => self.injected_args(instance, i).await?,
-        })
+    fn inject(&self) -> impl AsyncFnOnce(&mut LaunchArguments) {
+        async |args| {
+            if let Some(i) = &self.authlib_injector {
+                let agent = format!("-javaagent:{}={}", i.to_string_lossy(), self.server,);
+                let meta = format!(
+                    "-Dauthlibinjector.yggdrasil.prefetched={}",
+                    self.meta_base64()
+                );
+                args.jvm.insert(agent, None);
+                args.jvm.insert(meta, None);
+            }
+        }
     }
 }
 
@@ -314,7 +292,7 @@ impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
     }
 }
 
-impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
+impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
     /// 自定义的验证服务器地址
     pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P, D>> {
         let url = self.get_ali(url.into()).await;
@@ -337,6 +315,7 @@ impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
             Err(_) => return url,
         };
         response
+            .headers()
             .get("X-Authlib-Injector-API-Location")
             .and_then(|t| t.to_str().ok())
             .and_then(|t| t.parse().ok())
@@ -355,7 +334,7 @@ impl<'a, U, P, D: Downloader> Login<'a, Missing, U, P, D> {
     }
 }
 
-impl<'a, S, P, D: Downloader> Login<'a, S, Missing, P, D> {
+impl<'a, S, P, D: Downloader> Login<'a, S, NotReady, P, D> {
     pub fn username(self, username: impl Into<String>) -> Login<'a, S, String, P, D> {
         Login {
             downloader: self.downloader,
@@ -370,7 +349,7 @@ impl<'a, S, P, D: Downloader> Login<'a, S, Missing, P, D> {
     }
 }
 
-impl<'a, S, U, D: Downloader> Login<'a, S, U, Missing, D> {
+impl<'a, S, U, D: Downloader> Login<'a, S, U, NotReady, D> {
     pub fn password(self, password: impl Into<String>) -> Login<'a, S, U, SecretString, D> {
         Login {
             downloader: self.downloader,
@@ -477,7 +456,7 @@ impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
             .map_err(|_| Error::other("cannot-be-a-base URL"))?
             .pop_if_empty()
             .extend(&["authserver", "authenticate"]);
-        let (_, res) = self.downloader.post_json(url, &req).await?;
+        let res = self.downloader.post_json(url, &req).await?.into_body();
         let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
 
         Ok(Authentication {

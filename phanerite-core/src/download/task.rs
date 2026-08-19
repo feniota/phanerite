@@ -1,6 +1,7 @@
 use crate::download::extract::ExtractTask;
 use crate::download::task::Target::{Extract, File};
 use crate::storage::Storage;
+use crate::utils::state::NotReady;
 use crate::utils::{EmptyHash, Hash, HashValue, hash_file};
 use event_listener::Event;
 use futures::Stream;
@@ -10,8 +11,6 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, OnceLock};
 use url::Url;
-
-pub struct Missing;
 
 pub enum Target {
     File(PathBuf),
@@ -70,10 +69,10 @@ const STATE_FAILED: u8 = 4;
 const STATE_CANCELLED: u8 = 5;
 
 impl DownloadTask {
-    pub fn builder() -> DownloadTaskBuilder<Missing, Missing> {
+    pub fn builder() -> DownloadTaskBuilder<NotReady, NotReady> {
         DownloadTaskBuilder {
-            url: Missing,
-            target: Missing,
+            url: NotReady,
+            target: NotReady,
             share: false,
             file_name: None,
             file_size: None,
@@ -82,7 +81,7 @@ impl DownloadTask {
     }
 }
 
-impl<T> DownloadTaskBuilder<Missing, T> {
+impl<T> DownloadTaskBuilder<NotReady, T> {
     pub fn url(self, url: impl Into<Url>) -> DownloadTaskBuilder<Url, T> {
         DownloadTaskBuilder {
             url: url.into(),
@@ -95,7 +94,7 @@ impl<T> DownloadTaskBuilder<Missing, T> {
     }
 }
 
-impl<U> DownloadTaskBuilder<U, Missing> {
+impl<U> DownloadTaskBuilder<U, NotReady> {
     pub fn to_asset(
         self,
         path: impl AsRef<Path>,

@@ -5,7 +5,7 @@ use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
-use http::{HeaderMap, StatusCode};
+use http::{Request, Response};
 use url::Url;
 
 pub mod authlib_injector;
@@ -23,9 +23,13 @@ pub trait Downloader {
     /// 下载到内存（GET）
     async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>>;
     /// 封装 POST
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<(StatusCode, Vec<u8>)>;
-    /// 封装 HEAD
-    async fn head(&self, url: Url) -> Result<HeaderMap>;
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>>;
+    /// 封装 HEAD，仅保证响应头与状态码有效
+    async fn head(&self, url: Url) -> Result<Response<()>>;
+    /// 发送自定义请求，用于需要额外请求头或表单编码的 API
+    ///
+    /// 优先使用 `fetch()`/`post_json()`/`head()`，仅在它们无法表达请求时使用
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>>;
     /// 下载文件到储存
     async fn download(&self, task: DownloadTask) -> Result<()>;
     /// 并发量

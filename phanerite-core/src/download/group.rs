@@ -3,7 +3,7 @@ use crate::download::task::{DownloadProcess, DownloadTask};
 use crate::error::{Error, Result};
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
-use http::{HeaderMap, StatusCode};
+use http::{Request, Response};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -30,11 +30,14 @@ impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
     async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
         self.downloader.fetch(url, hash).await
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<(StatusCode, Vec<u8>)> {
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
         self.downloader.post_json(url, body).await
     }
-    async fn head(&self, url: Url) -> Result<HeaderMap> {
+    async fn head(&self, url: Url) -> Result<Response<()>> {
         self.downloader.head(url).await
+    }
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+        self.downloader.send(req).await
     }
     async fn download(&self, task: DownloadTask) -> Result<()> {
         self.monitor.push_async(task.process.clone()).await;

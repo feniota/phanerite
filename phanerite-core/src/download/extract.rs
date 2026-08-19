@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::storage::Storage;
+use crate::utils::state::NotReady;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -8,8 +9,6 @@ use std::path::{Path, PathBuf};
 const CHUNK_SIZE: usize = 64 * 1024;
 /// 线程栈 = 4× 缓冲，给解压库内部留足空间
 const STACK_SIZE: usize = CHUNK_SIZE * 4; // 256 KiB
-
-pub struct Missing;
 
 pub struct ExtractTask {
     path: PathBuf,
@@ -35,9 +34,9 @@ impl ExcludePattern {
 }
 
 impl ExtractTask {
-    pub fn builder() -> ExtractTaskBuilder<Missing> {
+    pub fn builder() -> ExtractTaskBuilder<NotReady> {
         ExtractTaskBuilder {
-            path: Missing,
+            path: NotReady,
             auto_flattens: false,
             exclude: vec![],
         }

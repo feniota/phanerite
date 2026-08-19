@@ -6,15 +6,15 @@ use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::runtime::java::JavaManager;
-use phanerite_core::storage::multi::MultiStorage;
 use phanerite_core::storage::SharePreference::Hardlink;
+use phanerite_core::storage::multi::MultiStorage;
 use phanerite_core::*;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{error, Level};
+use tracing::{Level, error};
 use url::Url;
 
 fn main() {

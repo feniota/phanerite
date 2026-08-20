@@ -11,6 +11,7 @@ pub mod error;
 pub mod instance;
 pub mod mod_loader;
 pub mod mod_project;
+pub mod parsers;
 pub mod runtime;
 pub mod storage;
 pub mod utils;

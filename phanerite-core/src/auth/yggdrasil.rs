@@ -296,6 +296,15 @@ impl<'a> Authentication {
     }
 }
 
+/// Yggdrasil 登录由服务器与用户名确定
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        self.server == other.server && self.username == other.username
+    }
+}
+
+impl Eq for Authentication {}
+
 impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
     pub async fn inject(mut self, storage: &Storage) -> Result<Self> {
         let path = AuthlibInjector::new(storage)

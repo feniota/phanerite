@@ -21,6 +21,15 @@ impl Authentication {
     }
 }
 
+/// 离线登录由 UUID 确定
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid == other.uuid
+    }
+}
+
+impl Eq for Authentication {}
+
 impl super::Authentication for Authentication {
     async fn vars(&self) -> Result<Variables<NotReady>> {
         Ok(Variables::new()

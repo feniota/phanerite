@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
+use crate::utils::container::Container;
 use crate::utils::state::NotReady;
 use serde::{Deserialize, Serialize};
 
@@ -10,9 +11,11 @@ pub mod microsoft;
 pub mod offline;
 pub mod yggdrasil;
 
+pub type MultiAccount = Container<Account>;
+
 // 临时的 trait，可能需要改进
 #[allow(async_fn_in_trait)]
-pub trait Authentication {
+pub trait Authentication: Eq {
     /// 根据登录信息生成变量
     async fn vars(&self) -> Result<Variables<NotReady>>;
     /// 需要对启动参数的额外注入
@@ -43,7 +46,7 @@ pub trait Authentication {
 ///
 /// 落盘位置与加密方式由调用方决定，
 /// 其中的凭据都是明文，不应该直接暴露给用户
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 pub enum Account {

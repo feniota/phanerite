@@ -143,18 +143,27 @@ impl<T: Eq> Container<T> {
 
     /// 判断指定 UUID 是否存在。
     /// 结果仅代表检查发生时的状态，不能用于同步并发修改。
+    #[deprecated(
+        note = "this operation is not transactional; its result may be invalidated by concurrent modifications"
+    )]
     pub fn contains(&self, id: &Uuid) -> bool {
         self.container.contains(id)
     }
 
     /// 获取当前 Item 数量。
     /// 结果仅代表检查发生时的状态，不能用于同步并发修改。
+    #[deprecated(
+        note = "this operation is not transactional; its result may be invalidated by concurrent modifications"
+    )]
     pub fn len(&self) -> usize {
         self.container.len()
     }
 
     /// 判断当前是否为空。
     /// 结果仅代表检查发生时的状态，不能用于同步并发修改。
+    #[deprecated(
+        note = "this operation is not transactional; its result may be invalidated by concurrent modifications"
+    )]
     pub fn is_empty(&self) -> bool {
         self.container.is_empty()
     }

@@ -845,6 +845,15 @@ impl Authentication {
     }
 }
 
+/// 微软账户由 Xbox 用户 ID 确定
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        self.xuid == other.xuid
+    }
+}
+
+impl Eq for Authentication {}
+
 impl super::Authentication for Authentication {
     async fn vars(&self) -> Result<Variables<NotReady>> {
         let variables = Variables::new()

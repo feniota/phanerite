@@ -1,3 +1,5 @@
+//! Storage registry and persistence context for app-managed data.
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,

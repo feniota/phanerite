@@ -1,3 +1,5 @@
+//! Compact user avatar and username item used in account lists.
+
 use gpui::*;
 use gpui_component::{h_flex, searchable_list::SearchableListItem};
 

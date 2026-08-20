@@ -9,7 +9,7 @@
 
 default_job = "run-long"
 env.CARGO_TERM_COLOR = "always"
-env.RUST_LOG = "aphanite=debug"
+env.RUST_LOG = "debug"
 watch = ["src/", "build/", "Cargo.toml", "config.toml"]
 
 [jobs.check]
@@ -101,8 +101,11 @@ scroll_anchor = "auto"
 command = [
   "cargo",
   "run",
+  "--bin",
+  "gallery",
+  "-F",
+  "gallery",
   "--",
-  "--debug",
   # put launch parameters for your program behind a `--` separator
 ]
 need_stdout = true

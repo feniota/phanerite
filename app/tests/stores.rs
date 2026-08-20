@@ -1,3 +1,5 @@
+//! Integration tests for application store mutation and notification behavior.
+
 use std::sync::Arc;
 
 use phanerite::{route::StorageId, state::*};
@@ -7,9 +9,10 @@ fn instance_equal_mutations_do_not_notify() {
     let id = StorageId::for_test(1);
     let mut store = InstanceStore::new(phanerite::seed::seed_instances(id));
     store.set_storage_context(id);
-    assert!(!store.set_mod_enabled(id, "inst-fog", "m-sodium", true));
-    assert!(store.set_mod_enabled(id, "inst-fog", "m-sodium", false));
-    assert!(!store.set_mod_enabled(id, "inst-fog", "m-sodium", false));
+    let reference = phanerite::route::InstanceRef::new(id, "inst-fog");
+    assert!(!store.set_mod_enabled(&reference, "m-sodium", true));
+    assert!(store.set_mod_enabled(&reference, "m-sodium", false));
+    assert!(!store.set_mod_enabled(&reference, "m-sodium", false));
 }
 
 #[test]
@@ -41,20 +44,24 @@ fn all_mutable_stores_ignore_equal_values() {
     assert_eq!(accounts.revision(), 0);
 
     let mut launch = LaunchStore::default();
-    assert!(!launch.set_job(None));
-    assert_eq!(launch.revision(), 0);
+    let reference = phanerite::route::InstanceRef::new(StorageId::for_test(1), "inst-fog");
+    let job = LaunchJob::new(reference.clone(), "The Fog", "the-fog", Loader::Fabric);
+    assert!(launch.start(job.clone()));
+    assert!(!launch.start(job));
+    assert!(launch.finish(&reference));
+    assert_eq!(launch.revision(), 2);
 
     let mut sessions = SessionStore::default();
     let session = SessionSummary {
         id: SessionId::from("session-a"),
-        instance_id: "inst-fog".into(),
+        instance: reference,
         started_at: "now".into(),
         exit_code: None,
         running: true,
     };
     assert!(sessions.start(session.clone()));
     assert!(!sessions.start(session));
-    assert!(!sessions.finish("missing", 1));
+    assert!(!sessions.finish(&SessionId::from("missing"), 1));
     assert_eq!(sessions.revision(), 1);
 
     let root = tempfile::tempdir().unwrap();

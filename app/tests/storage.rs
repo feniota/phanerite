@@ -1,3 +1,5 @@
+//! Integration tests for storage registry behavior.
+
 use std::sync::Arc;
 
 use phanerite::state::{StorageRegistry, StorageRegistryError};

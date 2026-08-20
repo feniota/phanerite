@@ -1,3 +1,5 @@
+//! Navigation routes and stable references to storage-backed resources.
+
 use std::fmt;
 
 /// A stable identifier for an app-managed storage entry.

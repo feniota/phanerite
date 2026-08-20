@@ -1,3 +1,5 @@
+//! Integration tests for bounded live-log buffering and severity parsing.
+
 use phanerite::state::{LiveLogLine, LiveLogStore, LogSource, SessionId};
 
 #[test]

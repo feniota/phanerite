@@ -1,6 +1,6 @@
-use phanerite::route::{
-    CrashRef, InstanceRef, Navigation, Route, StorageId,
-};
+//! Integration tests for navigation routes and resource references.
+
+use phanerite::route::{CrashRef, InstanceRef, Navigation, Route, StorageId};
 
 #[test]
 fn back_from_root_stays_on_play() {

@@ -1,3 +1,5 @@
+//! Integration tests for palette token and color conversion contracts.
+
 use phanerite::palette;
 
 #[test]

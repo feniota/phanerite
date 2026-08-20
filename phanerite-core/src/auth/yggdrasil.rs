@@ -48,8 +48,11 @@ impl<T> Response<T> {
 }
 
 /// Yggdrasil 登录
+#[derive(Serialize, Deserialize)]
 pub struct Authentication {
+    #[serde(with = "crate::utils::secret")]
     access_token: SecretString,
+    #[serde(with = "crate::utils::secret")]
     client_token: SecretString,
 
     /// 可用的玩家档案
@@ -61,8 +64,6 @@ pub struct Authentication {
 
     /// 邮箱
     pub username: String,
-    /// 密码，不应该被持久化
-    password: SecretString,
 
     /// 服务器 base URL
     pub server: Url,
@@ -73,6 +74,8 @@ pub struct Authentication {
     /// 服务器元信息
     pub meta_info: MetaInfo,
 
+    /// Storage 局部的路径，反序列化后需要 `set_injector()` 重新解析
+    #[serde(skip)]
     authlib_injector: Option<PathBuf>,
 }
 
@@ -212,32 +215,73 @@ impl<'a> Authentication {
         Ok(())
     }
     /// 退出登录
-    pub async fn signout(&self, downloader: &impl Downloader) -> Result<()> {
-        #[derive(Serialize)]
-        struct RequestSignout<'a> {
-            username: &'a str,
-            password: &'a str,
-        }
+    pub async fn signout(
+        &self,
+        password: &SecretString,
+        downloader: &impl Downloader,
+    ) -> Result<()> {
+        signout(self.server.clone(), &self.username, password, downloader).await
+    }
+    /// 重新登录，用于 `ready()` 无法续期时
+    ///
+    /// 需要用户重新输入密码，登录后会保持原有的角色，
+    /// 原角色已不可用时返回错误
+    pub async fn relogin(
+        &mut self,
+        password: &SecretString,
+        downloader: &impl Downloader,
+    ) -> Result<()> {
+        let res = authenticate(
+            self.server.clone(),
+            &self.username,
+            password,
+            &self.client_token,
+            downloader,
+        )
+        .await?;
 
-        let req = RequestSignout {
-            username: &self.username,
-            password: self.password.expose_secret(),
+        let current = self.selected_profile.as_ref().map(GameProfile::uuid);
+
+        self.access_token = res.access_token;
+        self.client_token = res.client_token;
+        self.available_profiles = res.available_profiles;
+        self.user = res.user;
+
+        // 原本就没有选择角色，沿用服务器的选择
+        let Some(current) = current else {
+            self.selected_profile = res.selected_profile;
+            return Ok(());
         };
-        let req = serde_json::to_string(&req)?;
 
-        let mut url = self.server.clone();
-        url.path_segments_mut()
-            .map_err(|_| Error::other("cannot-be-a-base URL"))?
-            .pop_if_empty()
-            .extend(&["authserver", "signout"]);
-        let res = downloader.post_json(url, req).await?;
-
-        if res.status() == 204 {
-            Ok(())
-        } else {
-            let err = serde_json::from_slice::<YggdrasilError>(res.body())?;
-            Err(err.into())
+        // 服务器已经绑定角色，必须与原角色一致
+        if let Some(selected) = res.selected_profile {
+            if selected.uuid() != current {
+                return Err(Error::other("The original profile is no longer available"));
+            }
+            self.selected_profile = Some(selected);
+            return Ok(());
         }
+
+        // 未绑定角色时在刷新中重新选择原角色
+        if !self.available_profiles.iter().any(|p| p.uuid() == current) {
+            return Err(Error::other("The original profile is no longer available"));
+        }
+        self.refresh(true, downloader, |p| p.uuid() == current)
+            .await
+    }
+
+    /// 重新解析 Authlib-Injector 的路径，反序列化后需要
+    pub async fn set_injector(
+        &mut self,
+        storage: &Storage,
+        downloader: &impl Downloader,
+    ) -> Result<()> {
+        let path = AuthlibInjector::new(storage)
+            .get_or_init(downloader)
+            .await?
+            .clone();
+        self.authlib_injector = Some(path);
+        Ok(())
     }
 
     /// 配置预获取
@@ -252,34 +296,19 @@ impl<'a> Authentication {
     }
 }
 
-impl super::Authentication for Authentication {
-    async fn vars(&self) -> Result<Variables<NotReady>> {
-        let Some(profile) = &self.selected_profile else {
-            return Err(Error::other("No selected profile"));
-        };
-        let variables = Variables::new()
-            .required(
-                profile.name.clone().unwrap_or_default(),
-                profile.id.to_string(),
-                self.access_token.expose_secret(),
-            )
-            .legacy(self.access_token.expose_secret(), "mojang");
-        Ok(variables)
-    }
-    fn inject(&self) -> impl AsyncFnOnce(&mut LaunchArguments) {
-        async |args| {
-            if let Some(i) = &self.authlib_injector {
-                let agent = format!("-javaagent:{}={}", i.to_string_lossy(), self.server,);
-                let meta = format!(
-                    "-Dauthlibinjector.yggdrasil.prefetched={}",
-                    self.meta_base64()
-                );
-                args.jvm.insert(agent, None);
-                args.jvm.insert(meta, None);
-            }
-        }
+/// Yggdrasil 登录由服务器、用户名与角色确定
+///
+/// 同一账户下的不同角色是相互独立的
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        self.server == other.server
+            && self.username == other.username
+            && self.selected_profile.as_ref().map(GameProfile::uuid)
+                == other.selected_profile.as_ref().map(GameProfile::uuid)
     }
 }
+
+impl Eq for Authentication {}
 
 impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
     pub async fn inject(mut self, storage: &Storage) -> Result<Self> {
@@ -399,6 +428,13 @@ pub struct GameProfile {
     pub properties: Option<Vec<ProfileProperty>>,
 }
 
+impl GameProfile {
+    /// 角色的 UUID
+    pub fn uuid(&self) -> Uuid {
+        self.id.clone().into()
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ProfileProperty {
     /// The key of the property
@@ -413,51 +449,14 @@ impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
     /// 完成登录
     pub async fn login(self) -> Result<Authentication> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct RequestLogin<'a> {
-            username: &'a str,
-            password: &'a str,
-            client_token: &'a str,
-            request_user: bool,
-            agent: LoginAgent,
-        }
-        #[derive(Serialize)]
-        struct LoginAgent {
-            name: &'static str,
-            version: usize,
-        }
-
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ResponseLogin {
-            access_token: SecretString,
-            client_token: SecretString,
-            available_profiles: Vec<GameProfile>,
-            selected_profile: Option<GameProfile>,
-            user: GameProfile,
-        }
-
-        let req = RequestLogin {
-            username: &self.username,
-            password: self.password.expose_secret(),
-            client_token: client_token.expose_secret(),
-            request_user: true,
-            agent: LoginAgent {
-                name: "Minecraft",
-                version: 1,
-            },
-        };
-        let req = serde_json::to_string(&req)?;
-
-        let mut url = self.server.clone();
-        url.path_segments_mut()
-            .map_err(|_| Error::other("cannot-be-a-base URL"))?
-            .pop_if_empty()
-            .extend(&["authserver", "authenticate"]);
-        let res = self.downloader.post_json(url, &req).await?.into_body();
-        let res = serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()?;
+        let res = authenticate(
+            self.server.clone(),
+            &self.username,
+            &self.password,
+            &client_token,
+            self.downloader,
+        )
+        .await?;
 
         Ok(Authentication {
             access_token: res.access_token,
@@ -466,7 +465,6 @@ impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
             selected_profile: res.selected_profile,
             user: res.user,
             username: self.username,
-            password: self.password,
             server: self.server,
             skin_domains: self.skin_domains,
             signature_publickey: self
@@ -475,5 +473,140 @@ impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
             meta_info: self.meta_info,
             authlib_injector: self.authlib_injector,
         })
+    }
+    pub async fn signout(&self) -> Result<()> {
+        signout(
+            self.server.clone(),
+            &self.username,
+            &self.password,
+            self.downloader,
+        )
+        .await
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResponseLogin {
+    access_token: SecretString,
+    client_token: SecretString,
+    available_profiles: Vec<GameProfile>,
+    selected_profile: Option<GameProfile>,
+    user: GameProfile,
+}
+
+async fn authenticate(
+    mut server: Url,
+    username: &str,
+    password: &SecretString,
+    client_token: &SecretString,
+    downloader: &impl Downloader,
+) -> Result<ResponseLogin> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RequestLogin<'a> {
+        username: &'a str,
+        password: &'a str,
+        client_token: &'a str,
+        request_user: bool,
+        agent: LoginAgent,
+    }
+    #[derive(Serialize)]
+    struct LoginAgent {
+        name: &'static str,
+        version: usize,
+    }
+
+    let req = RequestLogin {
+        username,
+        password: password.expose_secret(),
+        client_token: client_token.expose_secret(),
+        request_user: true,
+        agent: LoginAgent {
+            name: "Minecraft",
+            version: 1,
+        },
+    };
+    let req = serde_json::to_string(&req)?;
+
+    server
+        .path_segments_mut()
+        .map_err(|_| Error::other("cannot-be-a-base URL"))?
+        .pop_if_empty()
+        .extend(&["authserver", "authenticate"]);
+    let res = downloader.post_json(server, &req).await?.into_body();
+
+    serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()
+}
+
+async fn signout(
+    mut server: Url,
+    username: &str,
+    password: &SecretString,
+    downloader: &impl Downloader,
+) -> Result<()> {
+    #[derive(Serialize)]
+    struct RequestSignout<'a> {
+        username: &'a str,
+        password: &'a str,
+    }
+
+    let req = RequestSignout {
+        username,
+        password: password.expose_secret(),
+    };
+    let req = serde_json::to_string(&req)?;
+
+    server
+        .path_segments_mut()
+        .map_err(|_| Error::other("cannot-be-a-base URL"))?
+        .pop_if_empty()
+        .extend(&["authserver", "signout"]);
+    let res = downloader.post_json(server, req).await?;
+
+    if res.status() == 204 {
+        Ok(())
+    } else {
+        let err = serde_json::from_slice::<YggdrasilError>(res.body())?;
+        Err(err.into())
+    }
+}
+
+impl super::Authentication for Authentication {
+    async fn vars(&self) -> Result<Variables<NotReady>> {
+        let Some(profile) = &self.selected_profile else {
+            return Err(Error::other("No selected profile"));
+        };
+        let variables = Variables::new()
+            .required(
+                profile.name.clone().unwrap_or_default(),
+                profile.id.to_string(),
+                self.access_token.expose_secret(),
+            )
+            .legacy(self.access_token.expose_secret(), "mojang");
+        Ok(variables)
+    }
+    fn inject(&self) -> impl AsyncFnOnce(&mut LaunchArguments) {
+        async |args| {
+            if let Some(i) = &self.authlib_injector {
+                let agent = format!("-javaagent:{}={}", i.to_string_lossy(), self.server,);
+                let meta = format!(
+                    "-Dauthlibinjector.yggdrasil.prefetched={}",
+                    self.meta_base64()
+                );
+                args.jvm.insert(agent, None);
+                args.jvm.insert(meta, None);
+            }
+        }
+    }
+    /// Yggdrasil 的令牌没有明确的有效期，只能先校验再续期
+    ///
+    /// 返回错误时需要用户重新输入密码，并调用 [`Authentication::relogin()`]
+    async fn ready(&mut self, downloader: &impl Downloader) -> Result<()> {
+        if self.validate(downloader).await? {
+            return Ok(());
+        }
+        // 令牌已经绑定角色，续期时不能再指定
+        self.refresh(true, downloader, |_| false).await
     }
 }

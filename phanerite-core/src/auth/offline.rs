@@ -1,9 +1,11 @@
 use crate::error::Result;
 use crate::instance::variables::Variables;
 use crate::utils::state::NotReady;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// 离线登录
+#[derive(Serialize, Deserialize)]
 pub struct Authentication {
     pub nickname: String,
     pub uuid: Uuid,
@@ -18,6 +20,15 @@ impl Authentication {
         }
     }
 }
+
+/// 离线登录由 UUID 确定
+impl PartialEq for Authentication {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid == other.uuid
+    }
+}
+
+impl Eq for Authentication {}
 
 impl super::Authentication for Authentication {
     async fn vars(&self) -> Result<Variables<NotReady>> {

@@ -14,9 +14,10 @@ fn main() -> error::Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft").await?;
-        let downloader = download::downloader::RawDownloader::builder(&storage)
+        let base = download::downloader::BaseDownloader::builder()
             .build()
             .await?;
+        let downloader = base.in_storage(&storage);
 
         // 下载最新正式版
         let version_id = std::env::args()

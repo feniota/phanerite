@@ -1,15 +1,17 @@
-use crate::download::cached::DownloaderWithCache;
+use crate::download::cache::{BucketRecorder, DownloaderWithCache};
 use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
 use crate::error::Result;
+use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
+use std::path::PathBuf;
 use url::Url;
 
 pub mod authlib_injector;
-pub mod cached;
+pub mod cache;
 pub mod downloader;
 pub mod extract;
 pub mod group;
@@ -32,6 +34,9 @@ pub trait Downloader {
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>>;
     /// 下载文件到储存
     async fn download(&self, task: DownloadTask) -> Result<()>;
+
+    /// Storage 上下文
+    fn context(&self) -> &Storage;
     /// 并发量
     fn concurrency(&self) -> usize;
     /// 并发下载文件到储存
@@ -56,16 +61,18 @@ pub trait DownloaderExt: Downloader + Sized {
     }
 
     /// 默认 `Downloader::fetch()` 的最大缓存字节数
-    const MAX_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024;
-    /// 默认 `Downloader::head()` 的最大缓存字节数
-    const MAX_HEAD_CACHE_BYTE: u64 = 1024 * 1024;
+    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024;
     /// 获得带有缓存的下载器
-    fn with_cache(&self, get_bytes: u64, head_bytes: u64) -> DownloaderWithCache<'_, Self> {
-        DownloaderWithCache::new(self, get_bytes, head_bytes)
+    fn with_cache<R: BucketRecorder>(
+        &self,
+        get_bytes: u64,
+        bucket_recorder: R,
+    ) -> DownloaderWithCache<'_, Self, R> {
+        DownloaderWithCache::new(self, get_bytes, bucket_recorder)
     }
     /// 获得带有缓存的下载器（默认缓存大小）
-    fn with_cache_default(&self) -> DownloaderWithCache<'_, Self> {
-        DownloaderWithCache::new(self, Self::MAX_GET_CACHE_BYTE, Self::MAX_HEAD_CACHE_BYTE)
+    fn with_cache_default(&self) -> DownloaderWithCache<'_, Self, scc::HashMap<Hash, PathBuf>> {
+        DownloaderWithCache::new(self, Self::DEFAULT_GET_CACHE_BYTE, scc::HashMap::new())
     }
 }
 

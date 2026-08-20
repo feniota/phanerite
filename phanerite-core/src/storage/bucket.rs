@@ -77,6 +77,7 @@ fn ref_count(meta: &Metadata) -> Result<u64> {
 #[cfg(target_os = "windows")]
 #[inline]
 fn ref_count(meta: &Metadata) -> Result<u64> {
+    use crate::error::Error;
     use async_fs::windows::MetadataExt;
     match meta.number_of_links() {
         None => Err(Error::other("Unknown reference count of hard link")),

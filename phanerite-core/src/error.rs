@@ -1,3 +1,4 @@
+use crate::auth::microsoft::MicrosoftError;
 use crate::auth::yggdrasil::YggdrasilError;
 use std::sync::Arc;
 use thiserror::Error;
@@ -25,6 +26,9 @@ pub enum Error {
     /// Yggdrasil 错误，迁移自 Aphanite
     #[error(transparent)]
     Yggdrasil(#[from] YggdrasilError),
+    /// 微软登录链路中的错误
+    #[error(transparent)]
+    Microsoft(#[from] MicrosoftError),
 
     /// 用户取消操作
     #[error("Operation cancelled")]

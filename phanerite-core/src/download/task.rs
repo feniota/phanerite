@@ -3,6 +3,7 @@ use crate::download::task::Target::{Extract, File};
 use crate::storage::Storage;
 use crate::utils::state::NotReady;
 use crate::utils::{EmptyHash, Hash, HashValue, hash_file};
+use async_lock::OnceCell;
 use event_listener::Event;
 use futures::Stream;
 use futures::StreamExt;
@@ -31,17 +32,17 @@ impl From<ExtractTask> for Target {
 pub struct DownloadTaskBuilder<U, T> {
     url: U,
     target: T,
-    share: bool,
     file_name: Option<String>,
     file_size: Option<u64>,
     file_hash: Hash,
+    share: Option<Arc<OnceCell<PathBuf>>>,
 }
 
 pub struct DownloadTask {
     pub(crate) url: Url,
     pub(crate) target: Target,
-    pub(crate) share: bool,
     pub(crate) file_hash: Hash,
+    pub(crate) share: Option<Arc<OnceCell<PathBuf>>>,
 
     pub process: DownloadProcess,
 }
@@ -73,7 +74,7 @@ impl DownloadTask {
         DownloadTaskBuilder {
             url: NotReady,
             target: NotReady,
-            share: false,
+            share: None,
             file_name: None,
             file_size: None,
             file_hash: Hash::Empty(EmptyHash),
@@ -159,7 +160,7 @@ impl<U, P> DownloadTaskBuilder<U, P> {
         self
     }
     pub fn share(mut self) -> Self {
-        self.share = true;
+        self.share = Some(Default::default());
         self
     }
 }

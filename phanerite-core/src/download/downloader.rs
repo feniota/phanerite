@@ -2,7 +2,8 @@ use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
 use crate::storage::Storage;
-use crate::utils::{Hash, Hasher};
+use crate::storage::temp::TempGuard;
+use crate::utils::Hash;
 use async_channel::{Receiver, Sender};
 use futures::{AsyncReadExt, AsyncWriteExt};
 use http::{Request, Response};
@@ -15,29 +16,9 @@ use std::time::Duration;
 use tracing::{debug, error, warn};
 use url::Url;
 
-pub struct DownloaderBuilder<'storage> {
-    /// 重试次数
-    retries: usize,
-    /// 最大并发数,
-    concurrency: usize,
-    /// 大文件阈值
-    threshold: u64,
-    /// 大文件并行度
-    large_parallelism: usize,
-    /// 小文件并行度
-    small_parallelism: usize,
-    /// 大文件缓冲大小
-    large_buffer: usize,
-    /// 小文件缓冲大小
-    small_buffer: usize,
-
-    storage: &'storage Storage,
-}
-
-pub struct RawDownloader<'storage> {
+pub struct BaseDownloader {
     retries: usize,
     concurrency: usize,
-    storage: &'storage Storage,
     threshold: u64,
 
     /// HTTP 客户端
@@ -52,9 +33,39 @@ pub struct RawDownloader<'storage> {
     small_tx: Sender<Vec<u8>>,
 }
 
-impl<'storage> DownloaderBuilder<'storage> {
+impl BaseDownloader {
+    pub fn builder() -> DownloaderBuilder {
+        DownloaderBuilder::new()
+    }
+    /// Downloader 需要当前 Storage 作为上下文才能使用
+    pub fn in_storage<'a>(&'a self, context: &'a Storage) -> RawDownloader<'a> {
+        RawDownloader {
+            base: self,
+            context,
+        }
+    }
+}
+
+pub struct DownloaderBuilder {
+    /// 重试次数
+    retries: usize,
+    /// 最大并发数,
+    concurrency: usize,
+    /// 大文件阈值
+    threshold: u64,
+    /// 大文件并行度
+    large_parallelism: usize,
+    /// 小文件并行度
+    small_parallelism: usize,
+    /// 大文件缓冲大小
+    large_buffer: usize,
+    /// 小文件缓冲大小
+    small_buffer: usize,
+}
+
+impl DownloaderBuilder {
     /// 构建默认下载器
-    fn new(storage: &'storage Storage) -> Self {
+    fn new() -> Self {
         Self {
             retries: 3,
             concurrency: 32,
@@ -63,8 +74,6 @@ impl<'storage> DownloaderBuilder<'storage> {
             small_parallelism: 16,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
-
-            storage,
         }
     }
     /// 设置重试次数
@@ -102,7 +111,7 @@ impl<'storage> DownloaderBuilder<'storage> {
         self.small_buffer = buffer;
         self
     }
-    pub async fn build(self) -> Result<RawDownloader<'storage>> {
+    pub async fn build(self) -> Result<BaseDownloader> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
@@ -116,10 +125,9 @@ impl<'storage> DownloaderBuilder<'storage> {
                 "The parallelism is greater than the concurrency, and thus the buffer cannot be fully utilized."
             )
         }
-        Ok(RawDownloader {
+        Ok(BaseDownloader {
             retries: self.retries,
             concurrency: self.concurrency,
-            storage: self.storage,
             threshold: self.threshold,
             client: HttpClient::builder()
                 .redirect_policy(RedirectPolicy::Limit(10))
@@ -137,10 +145,21 @@ impl<'storage> DownloaderBuilder<'storage> {
     }
 }
 
+pub struct RawDownloader<'a> {
+    base: &'a BaseDownloader,
+    context: &'a Storage,
+}
+
 impl Downloader for RawDownloader<'_> {
     async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
-        for _ in 0..self.retries {
-            let res = self.client.get_async(url.as_str()).await?.bytes().await?;
+        for _ in 0..self.base.retries {
+            let res = self
+                .base
+                .client
+                .get_async(url.as_str())
+                .await?
+                .bytes()
+                .await?;
             if let Some(h) = &hash {
                 let mut hasher = h.hasher();
                 hasher.update(&res);
@@ -169,7 +188,7 @@ impl Downloader for RawDownloader<'_> {
         Ok(Response::from_parts(parts, ()))
     }
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
-        let mut res = self.client.send_async(req).await?;
+        let mut res = self.base.client.send_async(req).await?;
         let body = res.bytes().await?;
         let (parts, _) = res.into_parts();
         Ok(Response::from_parts(parts, body))
@@ -196,76 +215,9 @@ impl Downloader for RawDownloader<'_> {
         task.process.start();
 
         // 下载文件
-        let retry_body = async || {
-            // 创建临时文件
-            let cache = self.storage.temp_file().await?;
-
-            // 共享储存桶 Hasher
-            let mut bucket_hasher = match task.target {
-                Target::File(_) => task.share.then_some(blake3::Hasher::new()),
-                // 解压需要单独计算文件 Hash
-                Target::Extract(_) => None,
-            };
-
-            // 构造和发送请求
-            let uri = task.url.as_str();
-            let mut res = self.client.get_async(uri).await?;
-
-            // 补充文件大小（如果不存在）
-            if let Ok(len) = res
-                .headers()
-                .get("content-length")
-                .and_then(|t| t.to_str().ok())
-                .unwrap_or_default()
-                .parse()
-            {
-                task.process.set_total(len);
-            }
-
-            // 创建文件
-            let mut file = async_fs::File::create(&cache).await?;
-            let reader = res.body_mut();
-            let mut hasher = task.file_hash.hasher();
-
-            // 申请缓存并等待
-            let mut buf = self.alloc_buf(task.process.total()).await;
-            // 流式下载
-            loop {
-                let n = reader.read(&mut buf).await?;
-                if n == 0 {
-                    break;
-                }
-                if task.process.is_canceled() {
-                    async_fs::remove_file(&cache).await?;
-                    return Err(Error::Cancelled);
-                }
-                file.write_all(&buf[..n]).await?;
-
-                hasher.update(&buf[..n]);
-                if let Some(ref mut h) = bucket_hasher {
-                    h.update(&buf[..n]);
-                }
-                task.process.step(n as u64);
-            }
-            file.flush().await?;
-            drop(buf);
-            drop(res);
-            drop(file);
-
-            // 校验文件
-            if task.file_hash == hasher.finalize() {
-                Ok((cache, bucket_hasher))
-            } else {
-                Err(Error::other(format!(
-                    "hash mismatch: {}",
-                    task.process.name().unwrap_or("Unknow file")
-                )))
-            }
-        }; // RETRY_BODY
-
         let mut last_res = Err(Error::other("Unreachable"));
-        for _ in 0..=self.retries {
-            match retry_body().await {
+        for _ in 0..=self.base.retries {
+            match self.retry_body(&task).await {
                 Ok(v) => {
                     last_res = Ok(v);
                     break;
@@ -277,15 +229,116 @@ impl Downloader for RawDownloader<'_> {
                 Err(e) => last_res = Err(e),
             }
         }
-        let (cache, bucket_hasher) = last_res?;
 
+        // 保存或解压
+        self.post_download(&task, last_res?).await?;
+
+        task.process.finish();
+        forget(guard);
+        Ok(())
+    }
+
+    fn context(&self) -> &Storage {
+        self.context
+    }
+
+    fn concurrency(&self) -> usize {
+        self.base.concurrency
+    }
+}
+
+impl RawDownloader<'_> {
+    /// 重试体
+    async fn retry_body(
+        &self,
+        task: &DownloadTask,
+    ) -> Result<(TempGuard<'_>, Option<blake3::Hash>)> {
+        // 创建临时文件
+        let cache = self.context.temp_file().await?;
+
+        // 共享储存桶 Hasher
+        let mut bucket_hasher = match task.target {
+            Target::File(_) => task.share.is_some().then_some(blake3::Hasher::new()),
+            // 解压需要单独计算文件 Hash
+            Target::Extract(_) => None,
+        };
+
+        // 构造和发送请求
+        let uri = task.url.as_str();
+        let mut res = self.base.client.get_async(uri).await?;
+
+        // 补充文件大小（如果不存在）
+        if let Ok(len) = res
+            .headers()
+            .get("content-length")
+            .and_then(|t| t.to_str().ok())
+            .unwrap_or_default()
+            .parse()
+        {
+            task.process.set_total(len);
+        }
+
+        // 创建文件
+        let mut file = async_fs::File::create(&cache).await?;
+        let reader = res.body_mut();
+        let mut hasher = task.file_hash.hasher();
+
+        // 申请缓存并等待
+        let mut buf = self.alloc_buf(task.process.total()).await;
+        // 流式下载
+        loop {
+            let n = reader.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            if task.process.is_canceled() {
+                async_fs::remove_file(&cache).await?;
+                return Err(Error::Cancelled);
+            }
+            file.write_all(&buf[..n]).await?;
+
+            hasher.update(&buf[..n]);
+            if let Some(ref mut h) = bucket_hasher {
+                h.update(&buf[..n]);
+            }
+            task.process.step(n as u64);
+        }
+        file.flush().await?;
+        drop(buf);
+        drop(res);
+        drop(file);
+
+        // 校验文件
+        if task.file_hash == hasher.finalize() {
+            Ok((cache, bucket_hasher.map(|t| blake3::Hasher::finalize(&t))))
+        } else {
+            Err(Error::other(format!(
+                "hash mismatch: {}",
+                task.process.name().unwrap_or("Unknow file")
+            )))
+        }
+    }
+    /// 下载后的保存和解压
+    async fn post_download(
+        &self,
+        task: &DownloadTask,
+        (cache, bucket_hash): (TempGuard<'_>, Option<blake3::Hash>),
+    ) -> Result<()> {
         match &task.target {
             // 直接保存
             Target::File(path) => {
+                // 若 task.share.is_some() 此值可以 unwrap()
+                let bucket_path = bucket_hash.map(|hash| {
+                    let file_name = hash.to_string();
+                    self.context
+                        .share_dir()
+                        .join(&file_name[..2])
+                        .join(file_name)
+                });
+
                 // 确定保存路径
-                let save_path = if task.share {
-                    let hash = bucket_hasher.unwrap().finalize().to_string();
-                    &self.storage.share_dir().join(&hash[..2]).join(hash)
+                let save_path = if task.share.is_some() {
+                    bucket_path.as_ref().unwrap()
                 } else {
                     path
                 };
@@ -297,83 +350,95 @@ impl Downloader for RawDownloader<'_> {
                 }
 
                 // 移动到目标位置，共享桶存在文件则不执行操作
-                if task.share || !save_path.exists() {
+                if task.share.is_some() || !save_path.exists() {
                     async_fs::rename(&cache, &save_path).await?
                 };
 
                 // 如果有 bucket，将共享文件链接到 task.target
-                if task.share {
-                    self.storage.linker()(save_path, path).await?
+                if let Some(record) = &task.share {
+                    self.context.linker()(save_path, path).await?;
+
+                    // 初始化 Task 的共享位置（用于外部记录）
+                    let _ = record.set(bucket_path.unwrap()).await;
                 }
             }
             // 解压缩
             Target::Extract(extract) => {
                 task.process.extracting();
-                extract.exec(&cache, task.share, self.storage).await?
+                extract
+                    .exec(&cache, task.share.is_some(), self.context)
+                    .await?
             }
-        } // Save or Extract
+        }
 
-        task.process.finish();
-        forget(guard);
         Ok(())
     }
-    fn concurrency(&self) -> usize {
-        self.concurrency
-    }
-}
-
-impl RawDownloader<'_> {
-    pub fn builder(storage: &Storage) -> DownloaderBuilder<'_> {
-        DownloaderBuilder::new(storage)
-    }
     /// 申请下载缓存，限制总并行度
-    async fn alloc_buf(&self, size: Option<u64>) -> BufferGuard {
-        match size {
-            Some(size) if size > self.threshold => BufferGuard {
-                buf: Some(self.large_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.large_tx.clone(),
-            }, // >=阈值
-            Some(size) if size <= self.threshold => BufferGuard {
-                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.small_tx.clone(),
-            }, // <=阈值
-            _ => BufferGuard {
-                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.small_tx.clone(),
-            }, // 默认小文件
+    async fn alloc_buf(&self, size: Option<u64>) -> impl DerefMut<Target = [u8]> {
+        struct BufferGuard {
+            buf: Option<Vec<u8>>,
+            pool: Sender<Vec<u8>>,
         }
-    }
-}
 
-struct BufferGuard {
-    buf: Option<Vec<u8>>,
-    pool: Sender<Vec<u8>>,
-}
+        impl Deref for BufferGuard {
+            type Target = [u8];
 
-impl Deref for BufferGuard {
-    type Target = [u8];
+            fn deref(&self) -> &Self::Target {
+                self.buf.as_deref().unwrap()
+            }
+        }
 
-    fn deref(&self) -> &Self::Target {
-        self.buf.as_deref().unwrap()
-    }
-}
+        impl DerefMut for BufferGuard {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                self.buf.as_deref_mut().unwrap()
+            }
+        }
 
-impl DerefMut for BufferGuard {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.buf.as_deref_mut().unwrap()
-    }
-}
-
-impl Drop for BufferGuard {
-    fn drop(&mut self) {
-        if let Some(buf) = self.buf.take() {
-            match self.pool.try_send(buf) {
-                Ok(_) => {}
-                Err(async_channel::TrySendError::Full(_))
-                | Err(async_channel::TrySendError::Closed(_)) => {
-                    error!("Buffer loss")
+        impl Drop for BufferGuard {
+            fn drop(&mut self) {
+                if let Some(buf) = self.buf.take() {
+                    match self.pool.try_send(buf) {
+                        Ok(_) => {}
+                        Err(async_channel::TrySendError::Full(_))
+                        | Err(async_channel::TrySendError::Closed(_)) => {
+                            error!("Buffer loss")
+                        }
+                    }
                 }
             }
+        }
+
+        match size {
+            Some(size) if size > self.base.threshold => BufferGuard {
+                buf: Some(
+                    self.base
+                        .large_rx
+                        .recv()
+                        .await
+                        .expect("Failed to alloc buffer"),
+                ),
+                pool: self.base.large_tx.clone(),
+            }, // >=阈值
+            Some(size) if size <= self.base.threshold => BufferGuard {
+                buf: Some(
+                    self.base
+                        .small_rx
+                        .recv()
+                        .await
+                        .expect("Failed to alloc buffer"),
+                ),
+                pool: self.base.small_tx.clone(),
+            }, // <=阈值
+            _ => BufferGuard {
+                buf: Some(
+                    self.base
+                        .small_rx
+                        .recv()
+                        .await
+                        .expect("Failed to alloc buffer"),
+                ),
+                pool: self.base.small_tx.clone(),
+            }, // 默认小文件
         }
     }
 }

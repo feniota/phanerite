@@ -296,10 +296,15 @@ impl<'a> Authentication {
     }
 }
 
-/// Yggdrasil 登录由服务器与用户名确定
+/// Yggdrasil 登录由服务器、用户名与角色确定
+///
+/// 同一账户下的不同角色是相互独立的
 impl PartialEq for Authentication {
     fn eq(&self, other: &Self) -> bool {
-        self.server == other.server && self.username == other.username
+        self.server == other.server
+            && self.username == other.username
+            && self.selected_profile.as_ref().map(GameProfile::uuid)
+                == other.selected_profile.as_ref().map(GameProfile::uuid)
     }
 }
 

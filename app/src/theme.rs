@@ -167,7 +167,7 @@ pub fn apply_palette(theme: &mut Theme) {
     colors.tiles = background;
 
     colors.sidebar = sidebar;
-    colors.sidebar_foreground = foreground;
+    colors.sidebar_foreground = muted_foreground;
     colors.sidebar_accent = accent;
     colors.sidebar_accent_foreground = accent_foreground;
     colors.sidebar_border = border;

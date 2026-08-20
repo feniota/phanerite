@@ -1,13 +1,9 @@
 //! Dialog for collecting the fields needed to create a Minecraft instance.
 
-use gpui::{
-    App, AppContext as _, Entity, IntoElement, ParentElement as _, Styled as _, Window,
-    prelude::FluentBuilder as _,
-};
+use gpui::{App, AppContext as _, Entity, IntoElement, ParentElement as _, Styled as _, Window};
 use gpui_component::{
-    StyledExt, WindowExt,
+    WindowExt,
     button::{Button, ButtonVariants as _},
-    dialog::Dialog,
     h_flex,
     input::{Input, InputState},
     v_flex,

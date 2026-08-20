@@ -640,6 +640,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.71.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1921,6 +1930,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-regex"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "998b056554fbe42e03ae0e152895cd1a7e1002aec800fdc6635d20270260c46f"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2489,6 +2509,7 @@ dependencies = [
  "gpui_macros",
  "gpui_shared_string",
  "gpui_util",
+ "hdrhistogram",
  "heapless",
  "http_client",
  "image",
@@ -2544,7 +2565,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=56f3d903eaef3b2504cf31518ed1ad69d80166ff#56f3d903eaef3b2504cf31518ed1ad69d80166ff"
+source = "git+https://github.com/longbridge/gpui-component?rev=c6ffd3e166abb43bff8845f0aa61711adb128dcf#c6ffd3e166abb43bff8845f0aa61711adb128dcf"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2552,6 +2573,7 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui_macros",
+ "gpui_platform",
  "instant",
  "lsp-types",
  "objc2 0.6.4",
@@ -2565,6 +2587,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "smol",
+ "syntect",
  "tracing",
  "unicode-segmentation",
  "web-time",
@@ -2574,7 +2597,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=56f3d903eaef3b2504cf31518ed1ad69d80166ff#56f3d903eaef3b2504cf31518ed1ad69d80166ff"
+source = "git+https://github.com/longbridge/gpui-component?rev=c6ffd3e166abb43bff8845f0aa61711adb128dcf#c6ffd3e166abb43bff8845f0aa61711adb128dcf"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2619,7 +2642,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-assets"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=56f3d903eaef3b2504cf31518ed1ad69d80166ff#56f3d903eaef3b2504cf31518ed1ad69d80166ff"
+source = "git+https://github.com/longbridge/gpui-component?rev=c6ffd3e166abb43bff8845f0aa61711adb128dcf#c6ffd3e166abb43bff8845f0aa61711adb128dcf"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2633,7 +2656,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=56f3d903eaef3b2504cf31518ed1ad69d80166ff#56f3d903eaef3b2504cf31518ed1ad69d80166ff"
+source = "git+https://github.com/longbridge/gpui-component?rev=c6ffd3e166abb43bff8845f0aa61711adb128dcf#c6ffd3e166abb43bff8845f0aa61711adb128dcf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2981,6 +3004,20 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
+name = "hdrhistogram"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49d1053f4708f0af3cf9fc5bffc7e68a914a3c45becb231c80068c9c3f78bea"
+dependencies = [
+ "base64 0.22.1",
+ "byteorder",
+ "crossbeam-channel",
+ "flate2",
+ "nom 8.0.0",
+ "num-traits",
+]
 
 [[package]]
 name = "heapless"
@@ -5023,6 +5060,7 @@ dependencies = [
  "phanerite-core",
  "pollster 0.4.0",
  "rust-embed",
+ "smallvec",
  "tempfile",
 ]
 
@@ -7096,6 +7134,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "syntect"
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "656b45c05d95a5704399aeef6bd0ddec7b2b3531b7c9e900abbf7c4d2190c925"
+dependencies = [
+ "bincode",
+ "fancy-regex",
+ "flate2",
+ "fnv",
+ "once_cell",
+ "regex-syntax",
+ "serde",
+ "serde_derive",
+ "thiserror 2.0.20",
+ "walkdir",
 ]
 
 [[package]]

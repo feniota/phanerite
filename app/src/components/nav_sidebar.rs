@@ -2,7 +2,8 @@
 
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, StyledExt,
+    ActiveTheme as _, IconName,
+    badge::Badge,
     button::ButtonVariants as _,
     sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarMenu, SidebarMenuItem},
     v_flex,
@@ -49,59 +50,71 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
             })
             .on_click(activate(app.clone(), Route::InstanceDetail(reference)))
     };
+    let favorites_len = favorites.len();
 
     v_flex()
         .h_full()
-        .w(gpui::px(208.))
+        .w_full()
         .flex_shrink_0()
         .border_r_1()
         .border_color(cx.theme().sidebar_border)
         .child(
             Sidebar::new("launcher-sidebar")
+                .border_0()
+                .w_full()
                 .child(
-                    SidebarGroup::new("LIBRARY").child(
-                        SidebarMenu::new()
-                            .child(
-                                SidebarMenuItem::new("Quick Play")
-                                    .icon(IconName::Play)
-                                    .active(matches!(current, Route::Play))
-                                    .suffix({
-                                        let count = sessions.running_count();
-                                        move |_, _| {
-                                            if count > 0 {
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(primary)
-                                                    .child(count.to_string())
-                                            } else {
-                                                div()
-                                            }
+                    SidebarMenu::new()
+                        .child(
+                            SidebarMenuItem::new("Quick Play")
+                                .icon(IconName::Play)
+                                .active(matches!(current, Route::Play))
+                                .suffix({
+                                    let count = sessions.running_count();
+                                    move |_, _| {
+                                        if count > 0 {
+                                            div()
+                                                .text_xs()
+                                                .text_color(primary)
+                                                .child(count.to_string())
+                                        } else {
+                                            div()
                                         }
-                                    })
-                                    .on_click(activate(app.clone(), Route::Play)),
-                            )
-                            .child(
-                                SidebarMenuItem::new(format!("Favorites {}", favorites.len()))
-                                    .icon(IconName::Star)
-                                    .children(favorites.iter().map(|item| instance_item(item))),
-                            )
-                            .child(
-                                SidebarMenuItem::new(format!("Instances {}", local.len()))
-                                    .icon(IconName::Folder)
-                                    .active(matches!(current, Route::Instances))
-                                    .click_to_toggle(true)
-                                    .children(local.iter().map(|item| instance_item(item)))
-                                    .on_click(activate(app.clone(), Route::Instances)),
-                            )
-                            .child(
-                                SidebarMenuItem::new(format!("Aphanite {}", aphanite.len()))
-                                    .icon(crate::assets::PhaIcon::Layers)
-                                    .active(matches!(current, Route::Aphanite))
-                                    .click_to_toggle(true)
-                                    .children(aphanite.iter().map(|item| instance_item(item)))
-                                    .on_click(activate(app.clone(), Route::Aphanite)),
-                            ),
-                    ),
+                                    }
+                                })
+                                .on_click(activate(app.clone(), Route::Play)),
+                        )
+                        .child(
+                            SidebarMenuItem::new("Favorites")
+                                .suffix(move |_, _| div().child(format!("{}", favorites_len)))
+                                .icon(IconName::Star)
+                                .default_open(true)
+                                .click_to_toggle(true)
+                                .children(favorites.iter().map(|item| instance_item(item))),
+                        )
+                        .child(
+                            SidebarMenuItem::new("Instances")
+                                .suffix({
+                                    let count = local.len();
+                                    move |_, _| div().child(count.to_string())
+                                })
+                                .icon(IconName::Folder)
+                                .active(matches!(current, Route::Instances))
+                                .click_to_toggle(true)
+                                .children(local.iter().map(|item| instance_item(item)))
+                                .on_click(activate(app.clone(), Route::Instances)),
+                        )
+                        .child(
+                            SidebarMenuItem::new("Aphanite")
+                                .suffix({
+                                    let count = aphanite.len();
+                                    move |_, _| div().child(count.to_string())
+                                })
+                                .icon(crate::assets::PhaIcon::Layers)
+                                .active(matches!(current, Route::Aphanite))
+                                .click_to_toggle(true)
+                                .children(aphanite.iter().map(|item| instance_item(item)))
+                                .on_click(activate(app.clone(), Route::Aphanite)),
+                        ),
                 )
                 .footer(
                     SidebarFooter::new().child(

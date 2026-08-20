@@ -1,10 +1,9 @@
 //! Dialog for importing resource packs and shader packs into an instance.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window};
+use gpui::{App, Entity, ParentElement as _, Styled as _, Window};
 use gpui_component::{
-    StyledExt, WindowExt,
+    WindowExt,
     button::{Button, ButtonVariants as _},
-    dialog::Dialog,
     v_flex,
 };
 

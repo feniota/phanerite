@@ -12,10 +12,12 @@ pub mod theme;
 
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Styled as _, Window, div,
+    ParentElement as _, Render, Styled as _, Window, div, px,
 };
-use gpui_component::{ActiveTheme as _, Root, StyledExt, TitleBar, v_flex};
+use gpui_base::{h_resizable, resizable_panel};
+use gpui_component::{ActiveTheme as _, Root, StyledExt, scroll::ScrollableElement, v_flex};
 
+use crate::components::titlebar::TitleBar;
 use crate::state::{
     AccountStore, AppState, CrashStore, InstanceStore, SessionStore, Settings, SettingsStore,
     StorageRegistry,
@@ -99,17 +101,22 @@ impl Render for Phanerite {
                 ),
             )
             .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .child(components::nav_sidebar::render(self.app.clone(), cx))
-                    .child(div().flex_1().min_w_0().min_h_0().child(pages::render(
-                        &route,
-                        self.app.clone(),
-                        window,
-                        cx,
-                    ))),
+                h_resizable("window-root-resizable")
+                    .child(
+                        resizable_panel()
+                            .size(px(250.))
+                            .size_range(px(240.)..px(400.))
+                            .child(components::nav_sidebar::render(self.app.clone(), cx)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .overflow_y_scrollbar()
+                            .child(pages::render(&route, self.app.clone(), window, cx))
+                            .into_any_element(),
+                    ),
             )
             .child(components::status_bar::render(self.app.clone(), cx))
             .children(Root::render_dialog_layer(window, cx))

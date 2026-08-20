@@ -6,8 +6,7 @@ use crate::{
     state::{AppState, LaunchSettings},
 };
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::button::ButtonVariants as _;
-use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt, h_flex, v_flex};
+use gpui_component::{ActiveTheme as _, StyledExt, h_flex, v_flex};
 pub fn render(
     reference: &InstanceRef,
     app: Entity<AppState>,

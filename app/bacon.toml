@@ -101,7 +101,7 @@ scroll_anchor = "auto"
 command = [
   "cargo",
   "run",
-  "--bin",
+  "--example",
   "gallery",
   "-F",
   "gallery",

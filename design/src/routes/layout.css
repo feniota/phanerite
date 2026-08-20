@@ -1,0 +1,225 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Phanerite launcher theme.
+ *
+ * Dark-only, flat surfaces, small radii. The palette is a cool neutral
+ * "stone" grey with a green (phanerite mineral) primary and a restrained
+ * gold accent. No gradients anywhere by design.
+ */
+:root {
+  --background: oklch(0.145 0.005 150);
+  --foreground: oklch(0.955 0.003 150);
+  --card: oklch(0.19 0.006 150);
+  --card-foreground: oklch(0.955 0.003 150);
+  --popover: oklch(0.21 0.007 150);
+  --popover-foreground: oklch(0.955 0.003 150);
+  --primary: oklch(0.62 0.13 155);
+  --primary-foreground: oklch(0.17 0.03 155);
+  --launch: oklch(0.4 0.06 155);
+  --launch-foreground: oklch(0.94 0.01 155);
+  --secondary: oklch(0.24 0.008 150);
+  --secondary-foreground: oklch(0.955 0.003 150);
+  --muted: oklch(0.22 0.006 150);
+  --muted-foreground: oklch(0.69 0.01 150);
+  /*
+   * The dimmer step of muted text. Exists as its own token so its contrast is
+   * checkable: an opacity modifier (text-muted-foreground/60) composites against
+   * whatever surface it lands on, so the resulting ratio cannot be audited
+   * statically. Against --sidebar this is ~4.8:1, against --card ~4.7:1, both
+   * over the 4.5:1 WCAG AA floor. Do not dim text with /NN modifiers.
+   */
+  --muted-foreground-subtle: oklch(0.6 0.01 150);
+  --accent: oklch(0.26 0.009 150);
+  --accent-foreground: oklch(0.97 0.003 150);
+  --destructive: oklch(0.66 0.19 25);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.62 0.13 155);
+  --chart-1: oklch(0.62 0.13 155);
+  --chart-2: oklch(0.69 0.01 150);
+  --chart-3: oklch(0.46 0.07 150);
+  --chart-4: oklch(0.78 0.11 80);
+  --chart-5: oklch(0.44 0.05 150);
+  --radius: 0.375rem;
+  --sidebar: oklch(0.175 0.005 150);
+  --sidebar-foreground: oklch(0.955 0.003 150);
+  --sidebar-primary: oklch(0.62 0.13 155);
+  --sidebar-primary-foreground: oklch(0.17 0.03 155);
+  --sidebar-accent: oklch(0.26 0.009 150);
+  --sidebar-accent-foreground: oklch(0.97 0.003 150);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.62 0.13 155);
+
+  /* Brand + block-pixel accents (used by the pixel instance icons). */
+  --gold: oklch(0.78 0.11 80);
+  --mc-grass: oklch(0.57 0.13 140);
+  --mc-grass-dark: oklch(0.47 0.12 140);
+  --mc-dirt: oklch(0.4 0.06 55);
+  --mc-dirt-dark: oklch(0.31 0.05 55);
+  --mc-stone: oklch(0.53 0.004 120);
+  --mc-stone-dark: oklch(0.42 0.004 120);
+  --mc-sand: oklch(0.73 0.09 85);
+  --mc-sand-dark: oklch(0.62 0.09 85);
+  --mc-wood: oklch(0.46 0.07 60);
+  --mc-wood-dark: oklch(0.35 0.06 60);
+  --mc-nether: oklch(0.38 0.1 20);
+  --mc-nether-dark: oklch(0.28 0.09 20);
+  --mc-lava: oklch(0.68 0.19 45);
+  --mc-end: oklch(0.36 0.045 310);
+  --mc-end-dark: oklch(0.25 0.045 310);
+
+  /*
+   * Per-loader ramps, ordered darkest -> lightest.
+   *
+   * The block palettes above are *sets* of block colours; these are single-hue
+   * *ramps*. A crystal cluster only reads as one mineral if its faces are steps
+   * of one hue, so shading picks indices out of these rather than sampling the
+   * mc-* set. Vanilla is the emerald of --primary, not grass/dirt/sand.
+   */
+  --loader-vanilla-1: oklch(0.38 0.09 152);
+  --loader-vanilla-2: oklch(0.5 0.12 150);
+  --loader-vanilla-3: oklch(0.62 0.14 148);
+  --loader-vanilla-4: oklch(0.76 0.13 146);
+  --loader-fabric-1: oklch(0.38 0.012 65);
+  --loader-fabric-2: oklch(0.5 0.016 68);
+  --loader-fabric-3: oklch(0.62 0.02 70);
+  --loader-fabric-4: oklch(0.76 0.022 72);
+  --loader-forge-1: oklch(0.34 0.055 275);
+  --loader-forge-2: oklch(0.45 0.075 272);
+  --loader-forge-3: oklch(0.57 0.09 270);
+  --loader-forge-4: oklch(0.71 0.085 268);
+  --loader-neoforge-1: oklch(0.45 0.095 48);
+  --loader-neoforge-2: oklch(0.56 0.12 52);
+  --loader-neoforge-3: oklch(0.68 0.13 56);
+  --loader-neoforge-4: oklch(0.8 0.1 62);
+
+  /* Accent swatches for the appearance settings. */
+  --swatch-emerald: oklch(0.62 0.13 155);
+  --swatch-slate: oklch(0.72 0.02 250);
+  --swatch-teal: oklch(0.66 0.1 190);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /*
+   * Type scale. Declared explicitly so the ramp is a reviewable artifact rather
+   * than whatever Tailwind class each component happened to reach for.
+   *
+   *   micro 11  meta / counts / timestamps — the floor, nothing smaller
+   *   xs    12  dense body: list rows, descriptions, most of the app chrome
+   *   sm    14  emphasized body, form labels
+   *   base  16  reserved
+   *   lg    18  view titles
+   *
+   * xs..lg match Tailwind's defaults, so declaring them shifts nothing. Use
+   * these tokens; do not reintroduce arbitrary values like text-[10px].
+   */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: calc(1 / 0.6875);
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+
+  --color-gold: var(--gold);
+  --color-mc-grass: var(--mc-grass);
+  --color-mc-grass-dark: var(--mc-grass-dark);
+  --color-mc-dirt: var(--mc-dirt);
+  --color-mc-dirt-dark: var(--mc-dirt-dark);
+  --color-mc-stone: var(--mc-stone);
+  --color-mc-stone-dark: var(--mc-stone-dark);
+  --color-mc-sand: var(--mc-sand);
+  --color-mc-sand-dark: var(--mc-sand-dark);
+  --color-mc-wood: var(--mc-wood);
+  --color-mc-wood-dark: var(--mc-wood-dark);
+  --color-mc-nether: var(--mc-nether);
+  --color-mc-nether-dark: var(--mc-nether-dark);
+  --color-mc-lava: var(--mc-lava);
+  --color-mc-end: var(--mc-end);
+  --color-mc-end-dark: var(--mc-end-dark);
+  --color-swatch-slate: var(--swatch-slate);
+  --color-swatch-teal: var(--swatch-teal);
+  --color-swatch-emerald: var(--swatch-emerald);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground-subtle: var(--muted-foreground-subtle);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-launch-foreground: var(--launch-foreground);
+  --color-launch: var(--launch);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  ::selection {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 14%) transparent;
+  }
+}
+
+/*
+ * Nearest-neighbour upscaling for the 16x16 skin canvas. Setting
+ * imageSmoothingEnabled=false only governs drawing into the canvas; the CSS
+ * upscale from 16px to its rendered size is a separate interpolation and needs
+ * this. Without it the pixel avatars render blurred.
+ */
+@utility pixelated {
+  image-rendering: pixelated;
+}

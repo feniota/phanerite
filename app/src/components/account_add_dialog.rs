@@ -1,10 +1,9 @@
 //! Dialog for choosing and adding an account provider.
 
-use gpui::{App, AppContext as _, Entity, IntoElement, ParentElement as _, Styled as _, Window};
+use gpui::{App, AppContext as _, Entity, ParentElement as _, Styled as _, Window};
 use gpui_component::{
-    StyledExt, WindowExt,
+    WindowExt,
     button::{Button, ButtonVariants as _},
-    dialog::Dialog,
     input::{Input, InputState},
     v_flex,
 };

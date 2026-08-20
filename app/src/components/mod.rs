@@ -10,6 +10,7 @@ pub mod nav_sidebar;
 pub mod phanerite_app_icon;
 pub mod running_instances_popover;
 pub mod status_bar;
+pub mod titlebar;
 mod user_item;
 
 pub use user_item::*;

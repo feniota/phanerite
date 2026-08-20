@@ -1,13 +1,17 @@
 //! Home page containing launch controls and launcher overview content.
 
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
+use gpui_base::Button as BaseButton;
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _, StyledExt,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, button::ButtonVariants, h_flex,
+    v_flex,
 };
 
-use crate::{route::Route, state::AppState};
+use crate::{
+    assets::PhaIcon,
+    route::Route::{self},
+    state::AppState,
+};
 
 use super::{page_shell, route_button};
 
@@ -24,21 +28,22 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
         .children(recommended.map(|instance| {
             let reference = instance.reference();
             v_flex()
-                .gap_3()
-                .p_5()
-                .rounded(cx.theme().radius)
-                .border_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().accordion)
                 .child(
                     div()
                         .text_xs()
                         .font_semibold()
                         .text_color(cx.theme().muted_foreground)
+                        .mb_2()
                         .child("RECOMMENDED FOR YOU"),
                 )
                 .child(
                     h_flex()
+                        .border_1()
+                        .border_color(crate::palette::color_alpha(
+                            0xFFFFFF,
+                            crate::palette::token::BORDER_ALPHA as f32 / 255.0,
+                        ))
+                        .rounded_xl()
                         .items_center()
                         .gap_4()
                         .child(crate::components::instance_icon::render(instance, cx))
@@ -46,6 +51,7 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                             v_flex()
                                 .gap_1()
                                 .flex_1()
+                                .py_2()
                                 .child(
                                     h_flex()
                                         .items_center()
@@ -59,7 +65,6 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                                         .child(
                                             div()
                                                 .px_2()
-                                                .py_1()
                                                 .rounded_full()
                                                 .bg(cx.theme().secondary)
                                                 .text_xs()
@@ -68,7 +73,6 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                                         .child(
                                             div()
                                                 .px_2()
-                                                .py_1()
                                                 .rounded_full()
                                                 .bg(cx.theme().secondary)
                                                 .text_xs()
@@ -96,16 +100,24 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                         )
                         .child(
                             div()
-                                .w(gpui::px(176.))
-                                .h(gpui::px(160.))
+                                .self_stretch()
+                                .w(gpui::px(200.))
                                 .items_center()
                                 .justify_center()
-                                .bg(crate::palette::color(crate::palette::token::LAUNCH))
                                 .child(
-                                    Button::new("quick-play")
-                                        .ghost()
-                                        .icon(IconName::Play)
-                                        .label("Play")
+                                    BaseButton::new("quick-play")
+                                        .size_full()
+                                        .rounded_r_xl()
+                                        .bg(crate::palette::color(crate::palette::token::LAUNCH))
+                                        .child(
+                                            v_flex()
+                                                .justify_center()
+                                                .items_center()
+                                                .size_full()
+                                                .child(div().child(
+                                                    Icon::new(PhaIcon::PlayFilled).size_6(),
+                                                )),
+                                        )
                                         .on_click({
                                             let app = app.clone();
                                             move |_, _, cx| {

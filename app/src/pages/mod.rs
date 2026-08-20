@@ -69,7 +69,7 @@ pub(crate) fn page_shell(
     content: impl IntoElement,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt, v_flex};
+    use gpui_component::{ActiveTheme as _, StyledExt, scroll::ScrollableElement as _, v_flex};
     v_flex()
         .size_full()
         .min_h_0()
@@ -90,7 +90,14 @@ pub(crate) fn page_shell(
                         .child(description.into()),
                 ),
         )
-        .child(div().flex_1().min_h_0().p_6().child(content))
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .p_6()
+                .overflow_y_scrollbar()
+                .child(content),
+        )
 }
 
 pub(crate) fn route_button(
@@ -99,7 +106,7 @@ pub(crate) fn route_button(
     route: Route,
     app: Entity<AppState>,
 ) -> gpui_component::button::Button {
-    use gpui_component::button::{Button, ButtonVariants as _};
+    use gpui_component::button::Button;
     Button::new(id).label(label).on_click(move |_, _, cx| {
         app.update(cx, |state, cx| state.push(route.clone(), cx));
     })
@@ -107,7 +114,7 @@ pub(crate) fn route_button(
 
 pub(crate) fn back_button(app: Entity<AppState>) -> gpui_component::button::Button {
     use gpui_component::{
-        IconName, Sizable as _, StyledExt,
+        IconName, Sizable as _,
         button::{Button, ButtonVariants as _},
     };
     Button::new("page-back")
@@ -119,7 +126,7 @@ pub(crate) fn back_button(app: Entity<AppState>) -> gpui_component::button::Butt
 }
 
 pub(crate) fn missing_resource(label: &str, app: Entity<AppState>) -> impl IntoElement {
-    use gpui_component::{Sizable as _, StyledExt, button::Button, v_flex};
+    use gpui_component::{StyledExt, button::Button, v_flex};
     v_flex()
         .size_full()
         .items_center()

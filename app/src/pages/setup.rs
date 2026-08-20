@@ -2,7 +2,7 @@
 
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::button::ButtonVariants as _;
-use gpui_component::{ActiveTheme as _, IconName, Sizable as _, StyledExt, button::Button, v_flex};
+use gpui_component::{ActiveTheme as _, IconName, StyledExt, button::Button, v_flex};
 
 use crate::state::AppState;
 

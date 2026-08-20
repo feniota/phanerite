@@ -1,7 +1,6 @@
 //! Aphanite service page showing the connected server and its status.
 
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::button::ButtonVariants as _;
 use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt, h_flex, v_flex};
 
 use super::{page_shell, route_button};

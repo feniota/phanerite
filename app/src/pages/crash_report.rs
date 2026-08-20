@@ -4,7 +4,7 @@ use super::{back_button, crash_exists, missing_resource, page_shell};
 use crate::{route::CrashRef, state::AppState};
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, IconName, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };

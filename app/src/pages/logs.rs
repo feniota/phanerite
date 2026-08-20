@@ -3,8 +3,7 @@
 use super::{back_button, instance_exists, missing_resource, page_shell};
 use crate::{route::InstanceRef, state::AppState};
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::button::ButtonVariants as _;
-use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt, h_flex, v_flex};
+use gpui_component::{ActiveTheme as _, h_flex, v_flex};
 pub fn render(
     reference: &InstanceRef,
     app: Entity<AppState>,

@@ -1,6 +1,7 @@
 use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask};
 use crate::error::{Error, Result};
+use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
@@ -42,6 +43,9 @@ impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
     async fn download(&self, task: DownloadTask) -> Result<()> {
         self.monitor.push_async(task.process.clone()).await;
         self.downloader.download(task).await
+    }
+    fn context(&self) -> &Storage {
+        self.downloader.context()
     }
     fn concurrency(&self) -> usize {
         self.downloader.concurrency()

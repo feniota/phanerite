@@ -51,9 +51,11 @@ fn main() {
         // 构造 Downloader
         //
         // 基本下载器，可以全局创建一次（内部有并行限制）
-        let raw_downloader = download::downloader::RawDownloader::builder(&storage)
+        let base = download::downloader::BaseDownloader::builder()
             .build()
             .await?;
+        // 以当前 Storage 为上下文的下载器，基本下载器需要添加 Storage 为上下文才能使用
+        let raw_downloader = base.in_storage(&storage);
         // 下载缓存，建议保持尽可能长的生命周期
         let cached_downloader = raw_downloader.with_cache_default();
         // 任务组，应该一次性使用

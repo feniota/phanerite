@@ -11,6 +11,7 @@ pub use granodiorite::Granodiorite;
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
+use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::Stream;
 use http::{Request, Response};
@@ -80,6 +81,9 @@ impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
     async fn download(&self, mut task: DownloadTask) -> Result<()> {
         self.mirror.resolve_task(&mut task);
         self.downloader.download(task).await
+    }
+    fn context(&self) -> &Storage {
+        self.downloader.context()
     }
     fn concurrency(&self) -> usize {
         self.downloader.concurrency()

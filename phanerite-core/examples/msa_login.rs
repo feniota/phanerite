@@ -1,6 +1,6 @@
-use phanerite_core::auth::Authentication as _;
+use phanerite_core::auth::Authentication;
 use phanerite_core::auth::microsoft;
-use phanerite_core::download::downloader::RawDownloader;
+use phanerite_core::download;
 use phanerite_core::error::Error;
 use phanerite_core::storage::Storage;
 use secrecy::ExposeSecret;
@@ -18,7 +18,10 @@ fn main() {
     if let Err(e) = smol::block_on(async {
         // 登录只需要网络访问，不需要缓存与任务组
         let storage = Storage::new(".minecraft").await?;
-        let downloader = RawDownloader::builder(&storage).build().await?;
+        let base = download::downloader::BaseDownloader::builder()
+            .build()
+            .await?;
+        let downloader = base.in_storage(&storage);
 
         // 创建登录会话
         let login =

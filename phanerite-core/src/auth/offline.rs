@@ -1,9 +1,11 @@
 use crate::error::Result;
 use crate::instance::variables::Variables;
 use crate::utils::state::NotReady;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// 离线登录
+#[derive(Serialize, Deserialize)]
 pub struct Authentication {
     pub nickname: String,
     pub uuid: Uuid,

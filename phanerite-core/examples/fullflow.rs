@@ -1,6 +1,7 @@
 use async_executor::Executor;
+use phanerite_core::auth::Authentication;
 use phanerite_core::download::group::DownloadGroup;
-use phanerite_core::download::java::zulu::Zulu;
+use phanerite_core::download::java::Zulu;
 use phanerite_core::download::vanilla::version_index::VersionIndex;
 use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
@@ -49,7 +50,7 @@ fn main() {
 
         // 构造 Downloader
         //
-        // 基本下载器，可以全局创建一次（内部有并发限制）
+        // 基本下载器，可以全局创建一次（内部有并行限制）
         let raw_downloader = download::downloader::RawDownloader::builder(&storage)
             .build()
             .await?;
@@ -69,7 +70,7 @@ fn main() {
             .disable_system();
 
         // 创建登录凭据
-        let auth =
+        let mut auth =
             // 此处使用 Yggdrasil 登录
             auth::yggdrasil::Authentication::new_login(&downloader)
             // 注入 Authlib-Injector
@@ -156,6 +157,8 @@ fn main() {
 
         // 启动游戏
         //
+        // 启动前的准备，令牌接近过期时自动续期
+        auth.ready(&downloader).await?;
         // 声明游戏完整性（不提供检查），启动游戏需要此状态
         let instance = instance.ensure_ready();
         // 创建启动命令

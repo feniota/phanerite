@@ -57,15 +57,13 @@ pub trait DownloaderExt: Downloader + Sized {
 
     /// 默认 `Downloader::fetch()` 的最大缓存字节数
     const MAX_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024;
-    /// 默认 `Downloader::head()` 的最大缓存字节数
-    const MAX_HEAD_CACHE_BYTE: u64 = 1024 * 1024;
     /// 获得带有缓存的下载器
-    fn with_cache(&self, get_bytes: u64, head_bytes: u64) -> DownloaderWithCache<'_, Self> {
-        DownloaderWithCache::new(self, get_bytes, head_bytes)
+    fn with_cache(&self, get_bytes: u64) -> DownloaderWithCache<'_, Self> {
+        DownloaderWithCache::new(self, get_bytes)
     }
     /// 获得带有缓存的下载器（默认缓存大小）
     fn with_cache_default(&self) -> DownloaderWithCache<'_, Self> {
-        DownloaderWithCache::new(self, Self::MAX_GET_CACHE_BYTE, Self::MAX_HEAD_CACHE_BYTE)
+        DownloaderWithCache::new(self, Self::MAX_GET_CACHE_BYTE)
     }
 }
 

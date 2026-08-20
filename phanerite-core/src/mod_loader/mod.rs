@@ -70,9 +70,11 @@ pub trait LoaderInstall: Sized {
     /// 从 `InstanceManifest` 里面找出无法被正常构建的下载任务
     /// 例如 `FabricLibrary` 是 Fabric 的自定义格式
     async fn extra_downloads(
-        _manifest: &InstanceManifest,
-        _storage: &Storage,
+        manifest: &InstanceManifest,
+        storage: &Storage,
     ) -> Result<impl Iterator<Item = DownloadTask>> {
+        let _ = manifest;
+        let _ = storage;
         Ok(std::iter::empty())
     }
 }

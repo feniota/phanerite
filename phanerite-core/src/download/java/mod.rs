@@ -1,4 +1,6 @@
-pub mod zulu;
+// Zulu
+mod zulu;
+pub use zulu::Zulu;
 
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;

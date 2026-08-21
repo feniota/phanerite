@@ -87,7 +87,7 @@ fn main() {
             // 业务逻辑
 
             // 创建登录凭据，也可以通过 MultiAccount 在全局管理
-            let mut auth =
+            let auth =
                 // 此处使用 Yggdrasil 登录
                 auth::yggdrasil::Authentication::new_login(&downloader)
                     // 注入 Authlib-Injector

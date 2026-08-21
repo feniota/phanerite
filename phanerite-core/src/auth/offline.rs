@@ -36,6 +36,10 @@ impl super::Authentication for Authentication {
             .required(&self.nickname, self.uuid.to_string(), "0")
             .legacy("0", "legacy"))
     }
+    /// 没有会变化的状态，直接借用自身
+    async fn serialize(&self) -> impl Serialize {
+        self
+    }
 }
 
 /// 离线模式的 UUID 算法

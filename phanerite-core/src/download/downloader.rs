@@ -30,6 +30,8 @@ pub struct DownloaderBuilder {
     large_buffer: usize,
     /// 小文件缓冲大小
     small_buffer: usize,
+    /// UA
+    user_agent: &'static str,
 }
 
 impl Default for DownloaderBuilder {
@@ -42,6 +44,14 @@ impl Default for DownloaderBuilder {
             small_parallelism: 16,
             large_buffer: 512 * 1024,
             small_buffer: 128 * 1024,
+            // 符合 Modrinth 规范的 User Agent
+            user_agent: concat!(
+                "feniota/phanerite/",
+                env!("CARGO_PKG_VERSION"),
+                " (",
+                env!("CARGO_PKG_HOMEPAGE"),
+                ")"
+            ),
         }
     }
 }
@@ -82,6 +92,12 @@ impl DownloaderBuilder {
         self.small_buffer = buffer;
         self
     }
+    /// 设置 User-Agent
+    pub fn user_agent(mut self, ua: &'static str) -> Self {
+        self.user_agent = ua;
+        self
+    }
+
     pub async fn build(self) -> Result<RawDownloader> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
@@ -101,6 +117,7 @@ impl DownloaderBuilder {
             concurrency: self.concurrency,
             threshold: self.threshold,
             client: HttpClient::builder()
+                .default_header("User-Agent", self.user_agent)
                 .redirect_policy(RedirectPolicy::Limit(10))
                 .tcp_keepalive(Duration::from_secs(60))
                 .low_speed_timeout(1024, Duration::from_secs(30))

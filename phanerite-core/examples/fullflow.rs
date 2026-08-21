@@ -8,7 +8,7 @@ use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
-use phanerite_core::storage::multi::MultiStorage;
+use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
 use phanerite_core::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -31,22 +31,7 @@ fn main() {
 
     // 异步 Runtime
     if let Err(e) = smol::block_on(executor.run(async {
-        // 构造 Storage
-        //
-        // 由 MultiStorage 管理 Storage，MultiStorage 可用于全局配置
-        let storages = MultiStorage::new();
-        // 创建 Storage
-        let storage = storage::Storage::new(".minecraft")
-            .await?
-            .share_preference(Hardlink);
-        // 生成临时文件清理任务
-        let (cleaner, _shutdown) = storage.run_cleaner();
-        smol::spawn(cleaner).detach();
-        // Storage 移动至 MultiStorage 容器
-        storages.insert(storage).await.unwrap();
-        // 通过 ID 在局部获取 &Storage
-        let id = storages.iter(|mut iter| iter.next().map(|(id, _)| *id).unwrap());
-        let storage = storages.get(&id).unwrap();
+        // 全局的初始化阶段
 
         // 构造 Downloader
         //
@@ -56,116 +41,156 @@ fn main() {
             .await?;
         // 下载缓存，建议保持尽可能长的生命周期
         let cached_downloader = raw_downloader.with_cache_default();
-        // 任务组，应该一次性使用
-        let downloader = cached_downloader.with_group();
-        // （进度监视器）
-        let _g = monitor(&downloader).await;
+
+        // 构造 MultiStorage
+        //
+        // 由 MultiStorage 管理 Storage，MultiStorage 可用于全局配置
+        // MultiStorageWithPlugin 可以根据需要管理生命周期与 Storage 一致的对象
+        let storages = MultiStorageWithPlugin::new();
+
+        // 创建 Storage
+        let storage = storage::Storage::new(".minecraft")
+            .await?
+            .share_preference(Hardlink);
+        // 生成临时文件清理任务
+        let (cleaner, shutdown) = storage.run_cleaner();
+        smol::spawn(cleaner).detach();
+        // 假设此处希望将清理任务与 Storage 绑定，则插件为 ShutdownGuard
+        let storage_with_plugin = StorageWithPlugin {
+            storage,
+            plugin: shutdown,
+        };
+        // Storage 移动至 MultiStorage 容器
+        if storages.insert(storage_with_plugin).await.is_err() {
+            unreachable!("The first element cannot be failed.")
+        }
 
         // 构造 JavaManager
         let java_manager =
             // 可以使用任何实现 RuntimeScanPath 的类型，例如 Storage 和 MultiStorage
             JavaManager::new(&storages)
-            .await
-            // 默认启用系统的 Java 运行时检测，此处关闭用于测试
-            .disable_system();
+                .await
+                // 默认启用系统的 Java 运行时检测，此处关闭用于测试
+                .disable_system();
 
-        // 创建登录凭据
-        let mut auth =
-            // 此处使用 Yggdrasil 登录
-            auth::yggdrasil::Authentication::new_login(&downloader)
-            // 注入 Authlib-Injector
-            .inject(&storage)
-            .await?
-            // 自定义 Yggdrasil 地址
-            .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
-            .await?
-            // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
-            .username(
-                std::env::var("USERNAME")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            // 用户密码
-            .password(
-                std::env::var("PASSWORD")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            // 发送登录请求
-            .login()
-            .await?;
+        // 局部的操作阶段
+        {
+            // 获取全局资源
 
-        // （清理测试残留）
-        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
+            // 通过 ID 在局部获取 &Storage
+            let id = storages.iter(|mut iter|
+                // 此处取第一个作为示例
+                iter.next().map(|(id, _)| *id).unwrap());
+            // Guard 保证 Storage 在当前作用域不会被释放
+            let storage_with_plugin = storages.get(&id).unwrap();
+            // StorageWithPlugin 已实现 AsRef<Storage>
+            let storage = storage_with_plugin.as_ref();
 
-        // 创建实例
-        //
-        // 获取版本清单
-        let version =
-            // 下载版本索引
-            VersionIndex::sync(&downloader)
-            .await?
-            // 使用迭代器查找需要的版本
-            // .iter()
-            // .find(|x| x.id == "1.21.1")
-            // .expect("Version not found")
-            // 使用最新的稳定版
-            .latest_release()?
-            // 下载版本清单
-            .get_manifest(&downloader)
-            .await?;
-        // 创初始化实例
-        let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
+            // 下载任务组，应该一次性使用
+            let downloader = cached_downloader.with_group();
+            // （进度监视器）
+            let _g = monitor(&downloader).await;
 
-        // 安装 Java
-        let java = java_manager
-            // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
-            .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
-                x.get(&id).unwrap()
-            })
-            .await?;
-        // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
-        let instance = instance.bind_java(java.clone()).await?;
+            // 业务逻辑
 
-        // // 安装模组加载器
-        // instance
-        //      // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
-        //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
-        //         // （调试输出）
-        //         // let iter = iter
-        //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-        //         // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
-        //         let latest = iter
-        //             .collect::<BTreeSet<_>>()
-        //             .pop_last()
-        //             .expect("No available loader version");
-        //         // println!(
-        //         //     "{}:{} stable:{}",
-        //         //     latest.name(),
-        //         //     latest.version(),
-        //         //     latest.stable()
-        //         // );
-        //         Ok(latest)
-        //     })
-        //     .await?;
+            // 创建登录凭据，也可以通过 MultiAccount 在全局管理
+            let mut auth =
+                // 此处使用 Yggdrasil 登录
+                auth::yggdrasil::Authentication::new_login(&downloader)
+                    // 注入 Authlib-Injector
+                    .inject(storage)
+                    .await?
+                    // 自定义 Yggdrasil 地址
+                    .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
+                    .await?
+                    // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
+                    .username(
+                        std::env::var("USERNAME")
+                            .expect("Fill in the login credentials in the environment variable"),
+                    )
+                    // 用户密码
+                    .password(
+                        std::env::var("PASSWORD")
+                            .expect("Fill in the login credentials in the environment variable"),
+                    )
+                    // 发送登录请求
+                    .login()
+                    .await?;
 
-        // 安装实例
-        downloader
-            .join(instance.install_less(HashSet::new()).await?)
-            .await
-            .iter()
-            .for_each(|e| error!("{e}"));
+            // （清理测试残留）
+            let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
-        // 启动游戏
-        //
-        // 启动前的准备，令牌接近过期时自动续期
-        auth.ready(&downloader).await?;
-        // 声明游戏完整性（不提供检查），启动游戏需要此状态
-        let instance = instance.ensure_ready();
-        // 创建启动命令
-        let mut cmd = instance.launch(&auth).await?;
-        // 启动进程并等待退出
-        let exit = cmd.spawn()?.status().await?;
+            // 创建实例
+            //
+            // 获取版本清单
+            let version =
+                // 下载版本索引
+                VersionIndex::sync(&downloader)
+                    .await?
+                    // 使用迭代器查找需要的版本
+                    // .iter()
+                    // .find(|x| x.id == "1.21.1")
+                    // .expect("Version not found")
+                    // 使用最新的稳定版
+                    .latest_release()?
+                    // 下载版本清单
+                    .get_manifest(&downloader)
+                    .await?;
+            // 创初始化实例
+            let instance = Instance::create(version, Some("latest"), storage, &downloader).await?;
 
-        println!("Game exited: {exit}");
+            // 安装 Java
+            let java = java_manager
+                // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
+                .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
+                    x.get(&id).unwrap()
+                })
+                .await?;
+            // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
+            let instance = instance.bind_java(java.clone()).await?;
+
+            // // 安装模组加载器
+            // instance
+            //      // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
+            //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
+            //         // （调试输出）
+            //         // let iter = iter
+            //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+            //         // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
+            //         let latest = iter
+            //             .collect::<BTreeSet<_>>()
+            //             .pop_last()
+            //             .expect("No available loader version");
+            //         // println!(
+            //         //     "{}:{} stable:{}",
+            //         //     latest.name(),
+            //         //     latest.version(),
+            //         //     latest.stable()
+            //         // );
+            //         Ok(latest)
+            //     })
+            //     .await?;
+
+            // 安装实例
+            downloader
+                .join(instance.install_less(HashSet::new()).await?)
+                .await
+                .iter()
+                .for_each(|e| error!("{e}"));
+
+            // 启动游戏
+            //
+            // 启动前的准备，令牌接近过期时自动续期
+            auth.ready(&downloader).await?;
+            // 声明游戏完整性（不提供检查），启动游戏需要此状态
+            let instance = instance.ensure_ready();
+            // 创建启动命令
+            let mut cmd = instance.launch(&auth).await?;
+            // 启动进程并等待退出
+            let exit = cmd.spawn()?.status().await?;
+
+            println!("Game exited: {exit}");
+        }
 
         Ok::<(), Error>(())
     })) {

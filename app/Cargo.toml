@@ -43,6 +43,7 @@ gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", 
 anyhow = "1.0"
 rust-embed = "8.12.0"
 smallvec = "1.15.2"
+zstd = "0.13.3"
 
 [dev-dependencies]
 gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }

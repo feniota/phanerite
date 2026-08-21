@@ -1,200 +1,365 @@
 //! Home page containing launch controls and launcher overview content.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_base::Button as BaseButton;
+use crate::{
+    assets::PhaIcon,
+    route::Route,
+    state::{AppState, InstanceSummary},
+};
+use gpui::{
+    App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
+};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, button::ButtonVariants, h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    scroll::ScrollableElement as _,
     v_flex,
 };
 
-use crate::{
-    assets::PhaIcon,
-    route::Route::{self},
-    state::AppState,
-};
+use super::route_button;
 
-use super::{page_shell, route_button};
+fn instance_card(
+    instance: &InstanceSummary,
+    flame: bool,
+    app: Entity<AppState>,
+    cx: &App,
+) -> impl IntoElement {
+    let reference = instance.reference();
+    let sessions = app.read(cx).sessions.read(cx);
+    let running = sessions.is_running(&reference);
 
-pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoElement {
-    let state = app.read(cx);
-    let instances = state.instances.read(cx);
-    let all = instances.all();
-    let recommended = all
-        .iter()
-        .find(|instance| instance.name == "Old Faithful")
-        .or_else(|| all.first());
-    let content = v_flex()
-        .gap_6()
-        .children(recommended.map(|instance| {
-            let reference = instance.reference();
-            v_flex()
+    h_flex()
+        .w_full()
+        .items_center()
+        .rounded(cx.theme().radius)
+        .border_1()
+        .border_color(cx.theme().border)
+        .bg(cx.theme().accordion)
+        .child(
+            h_flex()
+                .min_w_0()
+                .flex_1()
+                .items_center()
+                .gap_3()
+                .p_3()
+                .child(crate::components::instance_icon::render(instance, cx))
                 .child(
-                    div()
-                        .text_xs()
-                        .font_semibold()
-                        .text_color(cx.theme().muted_foreground)
-                        .mb_2()
-                        .child("RECOMMENDED FOR YOU"),
-                )
-                .child(
-                    h_flex()
-                        .border_1()
-                        .border_color(crate::palette::color_alpha(
-                            0xFFFFFF,
-                            crate::palette::token::BORDER_ALPHA as f32 / 255.0,
-                        ))
-                        .rounded_xl()
-                        .items_center()
-                        .gap_4()
-                        .child(crate::components::instance_icon::render(instance, cx))
+                    v_flex()
+                        .min_w_0()
+                        .flex_1()
+                        .gap_1()
                         .child(
-                            v_flex()
-                                .gap_1()
-                                .flex_1()
-                                .py_2()
-                                .child(
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .text_lg()
-                                                .font_semibold()
-                                                .child(instance.name.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .px_2()
-                                                .rounded_full()
-                                                .bg(cx.theme().secondary)
-                                                .text_xs()
-                                                .child(format!("MC {}", instance.mc_version)),
-                                        )
-                                        .child(
-                                            div()
-                                                .px_2()
-                                                .rounded_full()
-                                                .bg(cx.theme().secondary)
-                                                .text_xs()
-                                                .child(instance.loader.label()),
-                                        ),
-                                )
+                            h_flex()
+                                .min_w_0()
+                                .items_center()
+                                .gap_2()
                                 .child(
                                     div()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(instance.description.clone()),
+                                        .min_w_0()
+                                        .truncate()
+                                        .text_xs()
+                                        .font_medium()
+                                        .child(instance.name.clone()),
                                 )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(format!(
-                                            "{} mods    {} packs    {} worlds    Java {}",
-                                            instance.enabled_mods(),
-                                            instance.resource_packs.len(),
-                                            instance.worlds.len(),
-                                            instance.java
-                                        )),
-                                ),
+                                .when(instance.aphanite && flame, |this| {
+                                    this.child(Icon::new(PhaIcon::Flame).size_3().text_color(
+                                        crate::palette::color(crate::palette::token::FLAME),
+                                    ))
+                                }),
                         )
                         .child(
                             div()
-                                .self_stretch()
-                                .w(gpui::px(200.))
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    BaseButton::new("quick-play")
-                                        .size_full()
-                                        .rounded_r_xl()
-                                        .bg(crate::palette::color(crate::palette::token::LAUNCH))
-                                        .child(
-                                            v_flex()
-                                                .justify_center()
-                                                .items_center()
-                                                .size_full()
-                                                .child(div().child(
-                                                    Icon::new(PhaIcon::PlayFilled).size_6(),
-                                                )),
-                                        )
-                                        .on_click({
-                                            let app = app.clone();
-                                            move |_, _, cx| {
-                                                app.update(cx, |state, cx| {
-                                                    state.push(
-                                                        Route::InstanceDetail(reference.clone()),
-                                                        cx,
-                                                    )
-                                                })
-                                            }
-                                        }),
-                                ),
+                                .truncate()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!(
+                                    "MC {} · {}{}",
+                                    instance.mc_version,
+                                    instance.loader.label(),
+                                    instance
+                                        .last_played
+                                        .as_deref()
+                                        .map(|last| format!(" · {last}"))
+                                        .unwrap_or_default()
+                                )),
                         ),
                 )
-        }))
-        .child(
-            div()
-                .text_xs()
-                .font_semibold()
-                .text_color(cx.theme().muted_foreground)
-                .child("ALL INSTANCES"),
+                .when(running, |this| {
+                    this.child(
+                        div()
+                            .size_2()
+                            .flex_shrink_0()
+                            .rounded_full()
+                            .bg(cx.theme().primary),
+                    )
+                }),
         )
-        .child(v_flex().gap_2().children(all.iter().map(|instance| {
-            let reference = instance.reference();
+        .child(
+            Button::new(format!("play-open-{}", instance.id))
+                .mr_3()
+                .ghost()
+                .icon(IconName::Play)
+                .on_click({
+                    let app = app.clone();
+                    move |_, _, cx| {
+                        app.update(cx, |state, cx| {
+                            state.push(Route::InstanceDetail(reference.clone()), cx)
+                        })
+                    }
+                }),
+        )
+}
+
+pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let state = app.read(cx);
+    let all = state.instances.read(cx).all().to_vec();
+    let recommended = all
+        .iter()
+        .find(|instance| instance.name == "Old Faithful")
+        .or_else(|| all.first())
+        .cloned();
+    let server_owner_recommendations: Vec<_> = all
+        .iter()
+        .filter(|instance| instance.aphanite)
+        .cloned()
+        .collect();
+    let account = state.accounts.read(cx).active().cloned();
+    let greeting = "Good afternoon.";
+
+    v_flex()
+        .h_full()
+        .gap_6()
+        .overflow_y_scrollbar()
+        .p_6()
+        .child(
             h_flex()
+                .flex_shrink_0()
                 .items_center()
                 .justify_between()
-                .p_3()
-                .rounded(cx.theme().radius)
-                .border_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().accordion)
                 .child(
                     v_flex()
                         .gap_1()
-                        .child(div().font_medium().child(instance.name.clone()))
+                        .child(div().text_lg().font_semibold().child(greeting))
                         .child(
                             div()
-                                .text_sm()
+                                .text_xs()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(format!(
-                                    "{} · MC {} · {}",
-                                    instance.loader.label(),
-                                    instance.mc_version,
-                                    instance.last_played.as_deref().unwrap_or("never played")
+                                    "{} instance{}",
+                                    all.len(),
+                                    if all.len() == 1 { "" } else { "s" }
                                 )),
                         ),
                 )
                 .child(
-                    route_button(
-                        format!("play-open-{}", instance.id),
-                        "View",
-                        Route::InstanceDetail(reference),
-                        app.clone(),
+                    Button::new("play-account")
+                        .outline()
+                        .small()
+                        .label(
+                            account
+                                .map(|item| item.username)
+                                .unwrap_or_else(|| "Offline".into()),
+                        )
+                        .icon(IconName::ChevronRight)
+                        .on_click({
+                            let app = app.clone();
+                            move |_, _, cx| {
+                                app.update(cx, |state, cx| state.push(Route::Accounts, cx))
+                            }
+                        }),
+                ),
+        )
+        .when_some(recommended, |this, instance| {
+            this.child(
+                v_flex()
+                    .flex_shrink_0()
+                    .child(
+                        div()
+                            .mb_2()
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(cx.theme().muted_foreground)
+                            .child("RECOMMENDED FOR YOU"),
                     )
-                    .ghost()
-                    .xsmall(),
-                )
-        })))
-        .child(
-            route_button(
-                "play-manage",
-                "Manage instances",
-                Route::Instances,
-                app.clone(),
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_4()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded_xl()
+                            .overflow_hidden()
+                            .pl_4()
+                            .child(crate::components::instance_icon::render(&instance, cx))
+                            .child(
+                                v_flex()
+                                    .min_w_0()
+                                    .flex_1()
+                                    .gap_1()
+                                    .py_4()
+                                    .child(
+                                        h_flex()
+                                            .min_w_0()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .truncate()
+                                                    .text_base()
+                                                    .font_semibold()
+                                                    .child(instance.name.clone()),
+                                            )
+                                            .child(
+                                                div()
+                                                    .px_2()
+                                                    .rounded_full()
+                                                    .bg(cx.theme().secondary)
+                                                    .text_xs()
+                                                    .child(format!("MC {}", instance.mc_version)),
+                                            )
+                                            .child(
+                                                div()
+                                                    .px_2()
+                                                    .rounded_full()
+                                                    .bg(cx.theme().secondary)
+                                                    .text_xs()
+                                                    .child(instance.loader.label()),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(instance.description.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(format!(
+                                                "{} mods    {} packs    {} worlds    Java {}",
+                                                instance.enabled_mods(),
+                                                instance.resource_packs.len(),
+                                                instance.worlds.len(),
+                                                instance.java
+                                            )),
+                                    ),
+                            )
+                            .child(
+                                crate::components::animated_button::render(
+                                    "recommended-play",
+                                    crate::palette::color(crate::palette::token::LAUNCH),
+                                    crate::palette::color_alpha(
+                                        crate::palette::token::LAUNCH,
+                                        0.85,
+                                    ),
+                                    v_flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .size_full()
+                                        .child(Icon::new(PhaIcon::PlayFilled).size_6()),
+                                    {
+                                        let app = app.clone();
+                                        let reference = instance.reference();
+                                        move |_, _, cx| {
+                                            app.update(cx, |state, cx| {
+                                                state.push(
+                                                    Route::InstanceDetail(reference.clone()),
+                                                    cx,
+                                                )
+                                            })
+                                        }
+                                    },
+                                    window,
+                                    cx,
+                                )
+                                .size(px(176.))
+                                .h_full()
+                                .rounded_none()
+                                .rounded_r_xl(),
+                            ),
+                    ),
             )
-            .icon(IconName::ArrowRight)
-            .ghost(),
-        );
-    page_shell(
-        "Good afternoon.",
-        format!(
-            "{} instance{}",
-            all.len(),
-            if all.len() == 1 { "" } else { "s" }
-        ),
-        content,
-        cx,
-    )
+        })
+        .when(!server_owner_recommendations.is_empty(), |this| {
+            this.child(
+                v_flex()
+                    .flex_shrink_0()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .mb_2()
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(Icon::new(PhaIcon::Flame).size_4().text_color(
+                                        crate::palette::color(crate::palette::token::FLAME),
+                                    ))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_semibold()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("RECOMMENDED BY YOUR SERVER OWNER"),
+                                    ),
+                            )
+                            .child(
+                                route_button(
+                                    "play-aphanite",
+                                    "Check out",
+                                    Route::Aphanite,
+                                    app.clone(),
+                                )
+                                .ghost()
+                                .xsmall()
+                                .icon(IconName::ArrowRight),
+                            ),
+                    )
+                    .child(
+                        v_flex().gap_2().children(
+                            server_owner_recommendations
+                                .iter()
+                                .map(|instance| instance_card(instance, false, app.clone(), cx)),
+                        ),
+                    ),
+            )
+        })
+        .child(
+            v_flex()
+                .flex_shrink_0()
+                .child(
+                    h_flex()
+                        .items_center()
+                        .justify_between()
+                        .mb_2()
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("ALL INSTANCES"),
+                        )
+                        .child(
+                            route_button("play-manage", "Manage", Route::Instances, app.clone())
+                                .ghost()
+                                .xsmall()
+                                .icon(IconName::ArrowRight),
+                        ),
+                )
+                .child(v_flex().gap_3().children(all.chunks(2).map(|row| {
+                    h_flex()
+                        .w_full()
+                        .gap_3()
+                        .children(row.iter().map(|instance| {
+                            h_flex()
+                                .flex_1()
+                                .child(instance_card(instance, true, app.clone(), cx))
+                        }))
+                        .when(row.len() == 1, |row| row.child(div().flex_1()))
+                }))),
+        )
 }

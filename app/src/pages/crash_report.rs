@@ -99,7 +99,7 @@ pub fn render(
                     crate::palette::token::TERMINAL,
                     0.4,
                 ))
-                .font_family("monospace")
+                .font_family(crate::theme::MONO_FONT_FAMILY)
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(report.source_text()),

@@ -1,15 +1,21 @@
 //! Primary navigation sidebar and its instance navigation entries.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
+use gpui::{
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
+};
 use gpui_component::{
-    ActiveTheme as _, IconName,
-    badge::Badge,
+    ActiveTheme as _, Collapsible, Icon, IconName, StyledExt,
     button::ButtonVariants as _,
-    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarFooter, SidebarItem},
     v_flex,
 };
 
-use crate::{route::Route, state::AppState};
+use crate::{
+    components::sidebar_instance_item::SidebarInstanceItem,
+    route::Route,
+    state::{AppState, InstanceSummary},
+};
 
 fn activate(
     app: Entity<AppState>,
@@ -18,39 +24,195 @@ fn activate(
     move |_, _, cx| app.update(cx, |state, cx| state.push(route.clone(), cx))
 }
 
+#[derive(Clone)]
+struct InstanceMenu {
+    app: Entity<AppState>,
+    current: Route,
+    favorites: Vec<InstanceSummary>,
+    local: Vec<InstanceSummary>,
+    aphanite: Vec<InstanceSummary>,
+    running: Vec<crate::route::InstanceRef>,
+}
+
+impl Collapsible for InstanceMenu {
+    fn is_collapsed(&self) -> bool {
+        false
+    }
+
+    fn collapsed(self, _: bool) -> Self {
+        self
+    }
+}
+
+fn instance_section(
+    id: &gpui::ElementId,
+    label: &str,
+    icon: IconName,
+    instances: &[InstanceSummary],
+    current: &Route,
+    running: &[crate::route::InstanceRef],
+    app: Entity<AppState>,
+    open: Entity<bool>,
+    route: Option<Route>,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    let is_open = *open.read(cx);
+    v_flex()
+        .gap_1()
+        .child(
+            div()
+                .id(format!("{id}-{label}"))
+                .h_7()
+                .px_2()
+                .flex()
+                .items_center()
+                .gap_2()
+                .rounded(cx.theme().radius)
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(Icon::new(icon))
+                .child(div().flex_1().child(label.to_string()))
+                .child(div().child(instances.len().to_string()))
+                .child(Icon::new(if is_open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                }))
+                .on_click({
+                    let app = app.clone();
+                    move |_, _, cx| {
+                        open.update(cx, |is_open, cx| {
+                            *is_open = !*is_open;
+                            cx.notify();
+                        });
+                        if let Some(route) = &route {
+                            app.update(cx, |state, cx| state.push(route.clone(), cx));
+                        }
+                    }
+                }),
+        )
+        .when(is_open, |section| {
+            section.child(
+                v_flex()
+                    .border_l_1()
+                    .border_color(cx.theme().sidebar_border)
+                    .ml_3p5()
+                    .pl_2p5()
+                    .py_0p5()
+                    .gap_1()
+                    .children(instances.iter().cloned().map(|instance| {
+                        let reference = instance.reference();
+                        SidebarInstanceItem::new(
+                            instance,
+                            current == &Route::InstanceDetail(reference.clone()),
+                            running.contains(&reference),
+                            app.clone(),
+                        )
+                        .render(window, cx)
+                        .into_any_element()
+                    })),
+            )
+        })
+}
+
+impl SidebarItem for InstanceMenu {
+    fn render(
+        self,
+        id: impl Into<gpui::ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let id = id.into();
+        let favorites_open =
+            window.use_keyed_state(format!("{id}-favorites-open"), cx, |_, _| true);
+        let instances_open =
+            window.use_keyed_state(format!("{id}-instances-open"), cx, |_, _| false);
+        let aphanite_open = window.use_keyed_state(format!("{id}-aphanite-open"), cx, |_, _| false);
+        v_flex()
+            .id(id.clone())
+            .gap_2()
+            .child(
+                div()
+                    .id("sidebar-play")
+                    .h_7()
+                    .px_2()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .rounded(cx.theme().radius)
+                    .text_sm()
+                    .when(matches!(self.current, Route::Play), |item| {
+                        item.bg(cx.theme().sidebar_accent)
+                            .text_color(cx.theme().sidebar_accent_foreground)
+                            .font_medium()
+                    })
+                    .child(Icon::new(IconName::Play))
+                    .child("Play")
+                    .on_click(activate(self.app.clone(), Route::Play)),
+            )
+            .child(instance_section(
+                &id,
+                "Favorites",
+                IconName::Star,
+                &self.favorites,
+                &self.current,
+                &self.running,
+                self.app.clone(),
+                favorites_open,
+                None,
+                window,
+                cx,
+            ))
+            .child(instance_section(
+                &id,
+                "Instances",
+                IconName::Folder,
+                &self.local,
+                &self.current,
+                &self.running,
+                self.app.clone(),
+                instances_open,
+                Some(Route::Instances),
+                window,
+                cx,
+            ))
+            .child(instance_section(
+                &id,
+                "Aphanite",
+                IconName::Folder,
+                &self.aphanite,
+                &self.current,
+                &self.running,
+                self.app.clone(),
+                aphanite_open,
+                Some(Route::Aphanite),
+                window,
+                cx,
+            ))
+    }
+}
+
 pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
     let state = app.read(cx);
     let instances = state.instances.read(cx);
     let sessions = state.sessions.read(cx);
-    let current = state.route().clone();
-    let favorites = instances.favorites().collect::<Vec<_>>();
-    let local = instances.local().collect::<Vec<_>>();
-    let aphanite = instances.aphanite_unfavorited().collect::<Vec<_>>();
     let account = state
         .accounts
         .read(cx)
         .active()
         .map(|item| item.username.clone());
-    let primary = cx.theme().primary;
-
-    let instance_item = |instance: &crate::state::InstanceSummary| {
-        let reference = instance.reference();
-        SidebarMenuItem::new(instance.name.clone())
-            .icon(crate::assets::PhaIcon::Layers)
-            .active(matches!(&current, Route::InstanceDetail(active) if active == &reference))
-            .suffix({
-                let running = sessions.is_running(&reference);
-                move |_, _| {
-                    if running {
-                        div().size_2().rounded_full().bg(primary)
-                    } else {
-                        div()
-                    }
-                }
-            })
-            .on_click(activate(app.clone(), Route::InstanceDetail(reference)))
+    let menu = InstanceMenu {
+        app: app.clone(),
+        current: state.route().clone(),
+        favorites: instances.favorites().cloned().collect(),
+        local: instances.local().cloned().collect(),
+        aphanite: instances.aphanite_unfavorited().cloned().collect(),
+        running: sessions
+            .running()
+            .map(|session| session.instance.clone())
+            .collect(),
     };
-    let favorites_len = favorites.len();
 
     v_flex()
         .h_full()
@@ -62,60 +224,7 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
             Sidebar::new("launcher-sidebar")
                 .border_0()
                 .w_full()
-                .child(
-                    SidebarMenu::new()
-                        .child(
-                            SidebarMenuItem::new("Quick Play")
-                                .icon(IconName::Play)
-                                .active(matches!(current, Route::Play))
-                                .suffix({
-                                    let count = sessions.running_count();
-                                    move |_, _| {
-                                        if count > 0 {
-                                            div()
-                                                .text_xs()
-                                                .text_color(primary)
-                                                .child(count.to_string())
-                                        } else {
-                                            div()
-                                        }
-                                    }
-                                })
-                                .on_click(activate(app.clone(), Route::Play)),
-                        )
-                        .child(
-                            SidebarMenuItem::new("Favorites")
-                                .suffix(move |_, _| div().child(format!("{}", favorites_len)))
-                                .icon(IconName::Star)
-                                .default_open(true)
-                                .click_to_toggle(true)
-                                .children(favorites.iter().map(|item| instance_item(item))),
-                        )
-                        .child(
-                            SidebarMenuItem::new("Instances")
-                                .suffix({
-                                    let count = local.len();
-                                    move |_, _| div().child(count.to_string())
-                                })
-                                .icon(IconName::Folder)
-                                .active(matches!(current, Route::Instances))
-                                .click_to_toggle(true)
-                                .children(local.iter().map(|item| instance_item(item)))
-                                .on_click(activate(app.clone(), Route::Instances)),
-                        )
-                        .child(
-                            SidebarMenuItem::new("Aphanite")
-                                .suffix({
-                                    let count = aphanite.len();
-                                    move |_, _| div().child(count.to_string())
-                                })
-                                .icon(crate::assets::PhaIcon::Layers)
-                                .active(matches!(current, Route::Aphanite))
-                                .click_to_toggle(true)
-                                .children(aphanite.iter().map(|item| instance_item(item)))
-                                .on_click(activate(app.clone(), Route::Aphanite)),
-                        ),
-                )
+                .child(menu)
                 .footer(
                     SidebarFooter::new().child(
                         v_flex()

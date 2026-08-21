@@ -7,7 +7,7 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use super::{back_button, instance_exists, missing_resource};
+use super::{back_button, instance_exists, missing_resource, page_shell};
 use crate::{
     route::{CrashRef, InstanceRef, Route},
     state::AppState,
@@ -41,22 +41,11 @@ pub fn render(
     };
     let mut cards = v_flex()
         .gap_4()
-        .child(back_button(app.clone()))
         .child(
             h_flex()
                 .items_center()
                 .justify_between()
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(div().text_lg().font_semibold().child(instance.name.clone()))
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(instance.description.clone()),
-                        ),
-                )
+                .child(back_button(app.clone()))
                 .child(
                     Button::new("detail-play")
                         .primary()
@@ -156,5 +145,5 @@ pub fn render(
                 app,
             )),
     );
-    cards.into_any_element()
+    page_shell(instance.name, instance.description, cards, cx).into_any_element()
 }

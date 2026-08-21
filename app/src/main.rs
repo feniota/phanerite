@@ -9,6 +9,19 @@ fn main() {
     let app = gpui_platform::application().with_assets(Assets);
 
     app.run(move |cx| {
+        let load_font = |path| {
+            cx.asset_source()
+                .load(path)
+                .expect("failed to load bundled font")
+                .expect("bundled font is missing")
+        };
+        cx.text_system()
+            .add_fonts(vec![
+                load_font("fonts/SarasaAdwaitaUiSC-Regular.ttf.zst"),
+                load_font("fonts/AdwaitaMono-Regular.ttf.zst"),
+            ])
+            .expect("failed to register bundled fonts");
+
         gpui_component::init(cx);
         phanerite::theme::install("emerald", None, cx);
         cx.refresh_windows();

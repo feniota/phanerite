@@ -5,6 +5,9 @@ use gpui_component::{Theme, ThemeMode};
 
 use crate::palette::{self, token};
 
+pub const FONT_FAMILY: &str = "Sarasa Adwaita UI SC";
+pub const MONO_FONT_FAMILY: &str = "Adwaita Mono";
+
 /// Type scale, in pixels.
 ///
 /// The prototype's ramp is 11 / 12 / 14 / 16 / 18 px, tuned for a browser at
@@ -248,6 +251,8 @@ pub fn install(accent_name: &str, window: Option<&mut Window>, cx: &mut App) {
     // cannot swap in the component library's light defaults underneath us.
     Theme::change(ThemeMode::Dark, None, cx);
     let theme = Theme::global_mut(cx);
+    theme.font_family = FONT_FAMILY.into();
+    theme.mono_font_family = MONO_FONT_FAMILY.into();
     apply_palette(theme);
     apply(theme, accent_name);
     sync_tokens(cx);

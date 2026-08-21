@@ -1,14 +1,20 @@
 //! Custom assets
 
+mod icons;
+
+pub use icons::PhaIcon;
+
 use anyhow::anyhow;
 use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
+use zstd::bulk::decompress as zstd_decompress;
 
 /// Application assets, with gpui-component's built-in assets as a fallback.
 #[derive(RustEmbed)]
 #[folder = "assets"]
 #[include = "icons/**/*.svg"]
+#[include = "fonts/**/*.zst"]
 pub struct Assets;
 
 impl AssetSource for Assets {
@@ -17,7 +23,7 @@ impl AssetSource for Assets {
             return Ok(None);
         }
 
-        Self::get(path)
+        let data = Self::get(path)
             .map(|file| Some(file.data))
             .or_else(|| {
                 gpui_component_assets::Assets
@@ -26,7 +32,25 @@ impl AssetSource for Assets {
                     .flatten()
                     .map(Some)
             })
-            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
+            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""));
+
+        if !path.ends_with(".zst") {
+            data
+        } else {
+            match data? {
+                None => Ok(None),
+                Some(compressed) => {
+                    let decompressed = zstd_decompress(
+                        &compressed,
+                        // capacity: "The decompressed data should be at most capacity bytes"
+                        // Likely designed to avoid attack. However the decompressed source file
+                        // is controlled by ourself. So this is not needed
+                        usize::MAX,
+                    )?;
+                    Ok(Some(Cow::from(decompressed)))
+                }
+            }
+        }
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
@@ -34,20 +58,5 @@ impl AssetSource for Assets {
         assets
             .extend(Self::iter().filter_map(|asset| asset.starts_with(path).then(|| asset.into())));
         Ok(assets)
-    }
-}
-
-/// Icon assets, most of which are from Lucide Icons (https://lucide.dev/).
-pub enum PhaIcon {
-    Layers,
-    PlayFilled,
-}
-
-impl Into<gpui_component::Icon> for PhaIcon {
-    fn into(self) -> gpui_component::Icon {
-        match self {
-            Self::Layers => gpui_component::Icon::default().path("icons/layers.svg"),
-            Self::PlayFilled => gpui_component::Icon::default().path("icons/play-filled.svg"),
-        }
     }
 }

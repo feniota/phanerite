@@ -90,11 +90,11 @@ impl Render for Phanerite {
                         .items_center()
                         .gap_2()
                         .child(components::phanerite_app_icon::render())
-                        .child(div().font_semibold().child("Phanerite"))
+                        .child(div().text_sm().child("Phanerite"))
                         .child(
                             div()
-                                .font_family("monospace")
-                                .text_sm()
+                                .font_family(crate::theme::MONO_FONT_FAMILY)
+                                .text_xs()
                                 .text_color(cx.theme().muted_foreground)
                                 .child("v0.1.0-pre"),
                         ),

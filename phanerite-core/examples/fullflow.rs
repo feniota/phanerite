@@ -1,193 +1,237 @@
-use async_executor::Executor;
-use phanerite_core::auth::Authentication;
+use phanerite_core::auth;
+use phanerite_core::auth::{Authentication, MultiAccount};
+use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::Zulu;
-use phanerite_core::download::vanilla::version_index::VersionIndex;
+use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
-use phanerite_core::storage::multi::MultiStorage;
-use phanerite_core::*;
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::time::{Duration, Instant};
-use tracing::{Level, error};
-use url::Url;
+use phanerite_core::storage::Storage;
+use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
+use std::ops::Deref;
 
 fn main() {
     // （登录信息）
     let _ = dotenvy::dotenv();
     // 日志输出
     tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
     // （用于测试阻塞时间）
-    let executor = Executor::new();
-    let _guard = BlockingGuard::new(&executor);
+    let executor = async_executor::Executor::new();
+    let _guard = blocking_monitor(&executor);
 
     // 异步 Runtime
     if let Err(e) = smol::block_on(executor.run(async {
-        // 构造 Storage
-        //
-        // 由 MultiStorage 管理 Storage，MultiStorage 可用于全局配置
-        let storages = MultiStorage::new();
-        // 创建 Storage
-        let storage = storage::Storage::new(".minecraft")
-            .await?
-            .share_preference(Hardlink);
-        // 生成临时文件清理任务
-        let (cleaner, _shutdown) = storage.run_cleaner();
-        smol::spawn(cleaner).detach();
-        // Storage 移动至 MultiStorage 容器
-        storages.insert(storage).await.unwrap();
-        // 通过 ID 在局部获取 &Storage
-        let id = storages.iter(|mut iter| iter.next().map(|(id, _)| *id).unwrap());
-        let storage = storages.get(&id).unwrap();
+        // ———————————————————— 全局的初始化阶段 ————————————————————
 
         // 构造 Downloader
         //
         // 基本下载器，可以全局创建一次（内部有并行限制）
-        let base = download::downloader::BaseDownloader::builder()
-            .build()
-            .await?;
-        // 以当前 Storage 为上下文的下载器，基本下载器需要添加 Storage 为上下文才能使用
-        let raw_downloader = base.in_storage(&storage);
+        let raw_downloader = RawDownloader::builder().build().await?;
         // 下载缓存，建议保持尽可能长的生命周期
+        // 不建议使用 default，因为内置的记录器无法持久化，可共享的文件需要再次下载
+        // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
         let cached_downloader = raw_downloader.with_cache_default();
-        // 任务组，应该一次性使用
-        let downloader = cached_downloader.with_group();
-        // （进度监视器）
-        let _g = monitor(&downloader).await;
+
+        // 创建 Storage
+        // 由于登录需要 Storage 提供存放 Authlib-Injector 的位置，将 Storage 移入 MultiStorage 的步骤往后推迟
+        // 正常流程建议创建后直接移入 MultiStorage，需要时通过 get 方法取用
+        let storage = Storage::new(".minecraft").await?.share_preference(Hardlink);
+        // 生成临时文件清理任务
+        let (cleaner, shutdown) = storage.run_cleaner();
+        smol::spawn(cleaner).detach();
+
+        // 创建登录凭据
+        let auth =
+            // 此处使用 Yggdrasil 登录
+            auth::yggdrasil::Authentication::new_login(&cached_downloader)
+                // 注入 Authlib-Injector
+                .inject(&storage)
+                .await?
+                // 自定义 Yggdrasil 地址
+                .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<url::Url>()?)
+                .await?
+                // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
+                .username(
+                    std::env::var("USERNAME")
+                        .expect("Fill in the login credentials in the environment variable"),
+                )
+                // 用户密码
+                .password(
+                    std::env::var("PASSWORD")
+                        .expect("Fill in the login credentials in the environment variable"),
+                )
+                // 发送登录请求
+                .login()
+                .await?;
+
+        // 构造 MultiStorage
+        //
+        // 由 MultiStorage 管理 Storage，MultiStorage 可用于全局配置
+        // MultiStorageWithPlugin 可以根据需要管理生命周期与 Storage 一致的对象
+        let storages = MultiStorageWithPlugin::new();
+        // 假设此处希望将清理任务与 Storage 绑定，则插件为 ShutdownGuard
+        let storage_with_plugin = StorageWithPlugin {
+            storage,
+            plugin: shutdown,
+        };
+        // Storage 移动至 MultiStorage 容器
+        if storages.insert(storage_with_plugin).await.is_err() {
+            unreachable!("The first item cannot be failed.")
+        }
+
+        // 构造 MultiAccount
+        let accounts = MultiAccount::new();
+        // 将登录凭据移入 MultiAccount
+        if accounts.insert(auth.into()).await.is_err() {
+            unreachable!("The first item cannot be failed.")
+        }
 
         // 构造 JavaManager
         let java_manager =
             // 可以使用任何实现 RuntimeScanPath 的类型，例如 Storage 和 MultiStorage
             JavaManager::new(&storages)
-            .await
-            // 默认启用系统的 Java 运行时检测，此处关闭用于测试
-            .disable_system();
+                .await
+                // 默认启用系统的 Java 运行时检测，此处关闭用于测试
+                .disable_system();
 
-        // 创建登录凭据
-        let mut auth =
-            // 此处使用 Yggdrasil 登录
-            auth::yggdrasil::Authentication::new_login(&downloader)
-            // 注入 Authlib-Injector
-            .inject(&storage)
-            .await?
-            // 自定义 Yggdrasil 地址
-            .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
-            .await?
-            // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
-            .username(
-                std::env::var("USERNAME")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            // 用户密码
-            .password(
-                std::env::var("PASSWORD")
-                    .expect("Fill in the login credentials in the environment variable"),
-            )
-            // 发送登录请求
-            .login()
-            .await?;
+        // ———————————————————— 局部的操作阶段 ————————————————————
+        {
+            // ———————————————————— 获取全局资源 ————————————————————
 
-        // （清理测试残留）
-        let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
+            // 通过 ID 在局部获取 &Storage
+            let id = storages.iter(|mut iter|
+                // 此处取第一个作为示例
+                iter.next().map(|(id, _)| *id).unwrap());
+            // Guard 保证 Storage 在当前作用域不会被释放
+            // 但是不保证不会被删除，再次使用 storages.get(&id) 不一定为 Some()
+            let storage_with_plugin = storages.get(&id).unwrap();
+            // StorageWithPlugin 已实现 AsRef<Storage>
+            let storage = storage_with_plugin.as_ref();
 
-        // 创建实例
-        //
-        // 获取版本清单
-        let version =
-            // 下载版本索引
-            VersionIndex::sync(&downloader)
-            .await?
-            // 使用迭代器查找需要的版本
-            // .iter()
-            // .find(|x| x.id == "1.21.1")
-            // .expect("Version not found")
-            // 使用最新的稳定版
-            .latest_release()?
-            // 下载版本清单
-            .get_manifest(&downloader)
-            .await?;
-        // 创初始化实例
-        let instance = Instance::create(version, Some("latest"), &storage, &downloader).await?;
+            // 下载任务组，应该一次性使用
+            let downloader = cached_downloader.with_group();
+            // （进度监视器）
+            let _guard = process_monitor(&downloader);
 
-        // 安装 Java
-        let java = java_manager
-            // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
-            .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
-                // 对于 x: Storage，必须为 x.runtime_dir()
-                x.get(&id).unwrap().runtime_dir().to_owned()
-            })
-            .await?;
-        // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
-        let instance = instance.bind_java(java.clone()).await?;
+            // ———————————————————— 业务逻辑 ————————————————————
 
-        // // 安装模组加载器
-        // instance
-        //      // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
-        //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
-        //         // （调试输出）
-        //         // let iter = iter
-        //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-        //         // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
-        //         let latest = iter
-        //             .collect::<BTreeSet<_>>()
-        //             .pop_last()
-        //             .expect("No available loader version");
-        //         // println!(
-        //         //     "{}:{} stable:{}",
-        //         //     latest.name(),
-        //         //     latest.version(),
-        //         //     latest.stable()
-        //         // );
-        //         Ok(latest)
-        //     })
-        //     .await?;
+            // （清理测试残留）
+            let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
 
-        // 安装实例
-        downloader
-            .join(instance.install_less(HashSet::new()).await?)
-            .await
-            .iter()
-            .for_each(|e| error!("{e}"));
+            // 创建实例
+            //
+            // 获取版本清单
+            let version =
+                // 下载版本索引
+                VersionIndex::sync(&downloader)
+                    .await?
+                    // 使用迭代器查找需要的版本
+                    // .iter()
+                    // .find(|x| x.id == "1.21.1")
+                    // .expect("Version not found")
+                    // 使用最新的稳定版
+                    .latest_release()?
+                    // 下载版本清单
+                    .get_manifest(&downloader)
+                    .await?;
+            // 初始化实例
+            let instance = Instance::create(version, Some("latest"), storage, &downloader).await?;
 
-        // 启动游戏
-        //
-        // 启动前的准备，令牌接近过期时自动续期
-        auth.ready(&downloader).await?;
-        // 声明游戏完整性（不提供检查），启动游戏需要此状态
-        let instance = instance.ensure_ready();
-        // 创建启动命令
-        let mut cmd = instance.launch(&auth).await?;
-        // 启动进程并等待退出
-        let exit = cmd.spawn()?.status().await?;
+            // 安装 Java
+            let java = java_manager
+                // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
+                .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
+                    // 此处的 unwrap() 在并发中并不安全
+                    // id 指向的 Storage 可能被删除
+                    x.get(&id)
+                        .expect("Please do not write like this in the production environment.")
+                })
+                .await?;
+            // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
+            let instance = instance.bind_java(java.clone()).await?;
 
-        println!("Game exited: {exit}");
+            // // 安装模组加载器
+            // instance
+            //      // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
+            //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
+            //         // （调试输出）
+            //         // let iter = iter
+            //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+            //         // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
+            //         let latest = iter
+            //             .collect::<BTreeSet<_>>()
+            //             .pop_last()
+            //             .expect("No available loader version");
+            //         // println!(
+            //         //     "{}:{} stable:{}",
+            //         //     latest.name(),
+            //         //     latest.version(),
+            //         //     latest.stable()
+            //         // );
+            //         Ok(latest)
+            //     })
+            //     .await?;
+
+            // 安装实例
+            downloader
+                .join(
+                    instance
+                        // 安装时跳过存在的文件
+                        .install_less(std::collections::HashSet::new())
+                        .await?,
+                )
+                .await
+                .iter()
+                .for_each(|e| tracing::error!("{e}"));
+
+            // 启动游戏
+            //
+            // 获取登录凭据
+            let auth = accounts.iter(|mut iter| {
+                // 取第一个作为示例
+                let (id, _) = iter.next().unwrap();
+                accounts.get(id).unwrap()
+            });
+            // 启动前的准备，令牌接近过期时自动续期
+            auth.ready(&downloader).await?;
+            // 声明游戏完整性（不提供检查），启动游戏需要此状态
+            let instance = instance.ensure_ready();
+            // 创建启动命令
+            let mut cmd = instance.launch(auth.deref()).await?;
+            // 启动进程并等待退出
+            let exit = cmd.spawn()?.status().await?;
+
+            println!("Game exited: {exit}");
+        }
 
         Ok::<(), Error>(())
     })) {
-        error!("{}", e)
-    }
-}
-
-struct ExitGuard {
-    exit: Arc<AtomicBool>,
-}
-
-impl Drop for ExitGuard {
-    fn drop(&mut self) {
-        self.exit.store(true, Relaxed)
+        tracing::error!("{}", e)
     }
 }
 
 /// 显示下载速度和进度
-async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
+fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering::Relaxed;
+    use std::time::Duration;
+
+    struct ExitGuard {
+        exit: Arc<AtomicBool>,
+    }
+
+    impl Drop for ExitGuard {
+        fn drop(&mut self) {
+            self.exit.store(true, Relaxed)
+        }
+    }
+
     let monitor = group.monitor();
     let g = ExitGuard {
         exit: Arc::new(AtomicBool::new(false)),
@@ -219,55 +263,57 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
 }
 
 /// 检测阻塞时间
-pub struct BlockingGuard {
-    stopped: Arc<AtomicBool>,
-    max_blocking_ns: Arc<AtomicU64>,
-}
+fn blocking_monitor(executor: &async_executor::Executor<'static>) -> impl Drop {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering::Relaxed;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::time::{Duration, Instant};
 
-impl BlockingGuard {
-    pub fn new(executor: &Executor<'static>) -> Self {
-        let stopped = Arc::new(AtomicBool::new(false));
-        let max_blocking_ns = Arc::new(AtomicU64::new(0));
+    pub struct BlockingGuard {
+        stopped: Arc<AtomicBool>,
+        max_blocking_ns: Arc<AtomicU64>,
+    }
+    impl Drop for BlockingGuard {
+        fn drop(&mut self) {
+            self.stopped.store(true, Relaxed);
 
-        let stopped2 = stopped.clone();
-        let max_blocking_ns2 = max_blocking_ns.clone();
+            let max = Duration::from_nanos(self.max_blocking_ns.load(Relaxed));
 
-        executor
-            .spawn(async move {
-                let mut last = Instant::now();
-
-                loop {
-                    smol::Timer::after(Duration::from_millis(1)).await;
-
-                    let now = Instant::now();
-                    let elapsed = now.duration_since(last);
-                    last = now;
-
-                    // Timer 本身也可能因为 worker 被 blocking 而延迟执行
-                    let ns = elapsed.as_nanos() as u64;
-
-                    max_blocking_ns2.fetch_max(ns, Relaxed);
-
-                    if stopped2.load(Relaxed) {
-                        break;
-                    }
-                }
-            })
-            .detach();
-
-        Self {
-            stopped,
-            max_blocking_ns,
+            eprintln!("max blocking: {:.3} ms", max.as_secs_f64() * 1000.0,);
         }
     }
-}
 
-impl Drop for BlockingGuard {
-    fn drop(&mut self) {
-        self.stopped.store(true, Relaxed);
+    let stopped = Arc::new(AtomicBool::new(false));
+    let max_blocking_ns = Arc::new(AtomicU64::new(0));
 
-        let max = Duration::from_nanos(self.max_blocking_ns.load(Relaxed));
+    let stopped2 = stopped.clone();
+    let max_blocking_ns2 = max_blocking_ns.clone();
 
-        eprintln!("max blocking: {:.3} ms", max.as_secs_f64() * 1000.0,);
+    executor
+        .spawn(async move {
+            let mut last = Instant::now();
+
+            loop {
+                smol::Timer::after(Duration::from_millis(1)).await;
+
+                let now = Instant::now();
+                let elapsed = now.duration_since(last);
+                last = now;
+
+                // Timer 本身也可能因为 worker 被 blocking 而延迟执行
+                let ns = elapsed.as_nanos() as u64;
+
+                max_blocking_ns2.fetch_max(ns, Relaxed);
+
+                if stopped2.load(Relaxed) {
+                    break;
+                }
+            }
+        })
+        .detach();
+
+    BlockingGuard {
+        stopped,
+        max_blocking_ns,
     }
 }

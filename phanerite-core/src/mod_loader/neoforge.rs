@@ -108,7 +108,7 @@ impl LoaderInstall for NeoForge {
         let installer = raw.storage.temp_file().await?;
         let task = DownloadTask::builder()
             .url(url)
-            .to_path(installer.to_owned())
+            .to_path(installer.to_owned(), raw.storage)
             .file_name(format!("NeoForge-{}", selected))
             .build();
         downloader.download(task).await?;

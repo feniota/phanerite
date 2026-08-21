@@ -2,8 +2,6 @@ use phanerite_core::auth::Authentication;
 use phanerite_core::auth::microsoft;
 use phanerite_core::download;
 use phanerite_core::error::Error;
-use phanerite_core::storage::Storage;
-use secrecy::ExposeSecret;
 use tracing::{Level, error};
 
 fn main() {
@@ -17,11 +15,9 @@ fn main() {
     // 异步 Runtime
     if let Err(e) = smol::block_on(async {
         // 登录只需要网络访问，不需要缓存与任务组
-        let storage = Storage::new(".minecraft").await?;
-        let base = download::downloader::BaseDownloader::builder()
+        let downloader = download::downloader::RawDownloader::builder()
             .build()
             .await?;
-        let downloader = base.in_storage(&storage);
 
         // 创建登录会话
         let login =
@@ -31,12 +27,12 @@ fn main() {
             .tenant(microsoft::Tenant::Consumers)
             // Azure 应用注册的客户端 ID，需要允许公共客户端流
             .client_id(
-                std::env::var("CLIENT_ID")
+                std::env::var("MICROSOFT_CLIENT_ID")
                     .expect("Fill in the Azure client ID in the environment variable"),
             );
 
         // 持久化的刷新令牌可以免交互登录
-        let mut auth = match std::env::var("REFRESH_TOKEN") {
+        let auth = match std::env::var("REFRESH_TOKEN") {
             Ok(refresh_token) => login.refresh(refresh_token).await?,
             Err(_) => {
                 // 申请设备码
@@ -60,21 +56,27 @@ fn main() {
         // 启动前的准备，令牌接近过期时自动续期
         auth.ready(&downloader).await?;
 
-        println!("Player: {} ({})", auth.profile.name, auth.profile.id);
+        // 会随续期变化的部分由内部的锁保护，取出来的都是副本
+        let profile = auth.profile().await;
+        println!("Player: {} ({})", profile.name, profile.id);
         println!("XUID: {}", auth.xuid);
-        println!("Expires at: {}", auth.expires_at());
-        if let Some(skin) = auth.profile.skin() {
+        println!("Expires at: {}", auth.expires_at().await);
+        if let Some(skin) = profile.skin() {
             println!("Skin: {} ({:?})", skin.url, skin.variant);
         }
-        if let Some(cape) = auth.profile.cape() {
+        if let Some(cape) = profile.cape() {
             println!("Cape: {}", cape.url);
         }
 
         // 刷新令牌需要持久化，下次登录即可免交互
         // （示例直接输出，实际应该加密保存且不要写入日志）
-        if let Some(refresh_token) = auth.refresh_token() {
-            println!("REFRESH_TOKEN={}", refresh_token.expose_secret());
-        }
+        // 明文令牌只在回调里出借，不会离开锁
+        auth.with_refresh_token(|refresh_token| {
+            if let Some(refresh_token) = refresh_token {
+                println!("REFRESH_TOKEN={refresh_token}");
+            }
+        })
+        .await;
 
         // 之后可以像 fullflow 一样用于启动游戏
         // let mut cmd = instance.launch(&auth).await?;

@@ -1,7 +1,6 @@
 use crate::download::Downloader;
 use crate::download::task::{DownloadTask, Target};
 use crate::error::Result;
-use crate::storage::Storage;
 use crate::utils::{Hash, hash_file};
 use http::{Request, Response};
 use std::ops::Deref;
@@ -73,7 +72,7 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
         // 自定义请求可能携带凭据，不缓存
         self.downloader.send(req).await
     }
-    async fn download(&self, task: DownloadTask) -> Result<()> {
+    async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         // 空 Hash 和压缩包无法缓存
         let (hash, dst) = match (&task.file_hash, &task.target) {
             (hash, Target::File(dst)) if !hash.is_empty() => (hash, dst),
@@ -87,7 +86,7 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
         if let Some(src) = self.bucket_cache.query(hash).await
             && hash_file(&src, hash).await.is_ok()
         {
-            self.context().linker()(src.deref(), dst).await?;
+            task.context.storage.linker()(src.deref(), dst).await?;
             return Ok(());
         }
 
@@ -101,10 +100,6 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
         };
 
         Ok(())
-    }
-
-    fn context(&self) -> &Storage {
-        self.downloader.context()
     }
 
     fn concurrency(&self) -> usize {

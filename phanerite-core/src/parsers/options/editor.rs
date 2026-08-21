@@ -57,7 +57,7 @@ impl OptionEditor {
         while let Some(line) = lines.next().await {
             let line = line?;
 
-            if let Some(key) = parse_config_key(&line)
+            if let Some(key) = parse_config_line(&line).map(|(key, _)| key)
                 && let Some(pos) = diff.iter().position(|(k, _)| k == key)
             {
                 {
@@ -122,9 +122,4 @@ pub(super) fn parse_config_line(line: &str) -> Option<(&str, &str)> {
     }
 
     Some((key, value.trim()))
-}
-
-/// 只解析 key。
-pub(super) fn parse_config_key(line: &str) -> Option<&str> {
-    parse_config_line(line).map(|(key, _)| key)
 }

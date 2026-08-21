@@ -4,6 +4,7 @@
 pub mod container;
 
 pub mod hash;
+pub mod lock;
 pub mod maven;
 pub mod secret;
 pub mod state;

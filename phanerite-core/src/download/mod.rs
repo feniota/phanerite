@@ -3,7 +3,6 @@ use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
@@ -33,16 +32,14 @@ pub trait Downloader {
     /// 优先使用 `fetch()`/`post_json()`/`head()`，仅在它们无法表达请求时使用
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>>;
     /// 下载文件到储存
-    async fn download(&self, task: DownloadTask) -> Result<()>;
+    async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()>;
 
-    /// Storage 上下文
-    fn context(&self) -> &Storage;
     /// 并发量
     fn concurrency(&self) -> usize;
     /// 并发下载文件到储存
-    fn download_concurrent(
+    fn download_concurrent<'cx>(
         &self,
-        tasks: impl IntoIterator<Item = DownloadTask>,
+        tasks: impl IntoIterator<Item = DownloadTask<'cx>>,
     ) -> impl Stream<Item = Result<()>> {
         futures::stream::iter(tasks)
             .map(async |task| self.download(task).await)
@@ -61,7 +58,7 @@ pub trait DownloaderExt: Downloader + Sized {
     }
 
     /// 默认 `Downloader::fetch()` 的最大缓存字节数
-    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024;
+    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024; // 5 MiB
     /// 获得带有缓存的下载器
     fn with_cache<R: BucketRecorder>(
         &self,

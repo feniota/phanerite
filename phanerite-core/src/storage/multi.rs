@@ -1,7 +1,6 @@
 use crate::runtime::RuntimeScanPath;
 use crate::storage::Storage;
-use crate::utils::container::Container;
-use std::path::PathBuf;
+use crate::utils::container::{Container, Guard};
 
 pub type MultiStorage = Container<Storage>;
 
@@ -17,12 +16,24 @@ impl<P> PartialEq for StorageWithPlugin<P> {
     }
 }
 impl<P> Eq for StorageWithPlugin<P> {}
+impl AsRef<Storage> for Guard<'_, Storage> {
+    fn as_ref(&self) -> &Storage {
+        self
+    }
+}
+impl<P> AsRef<Storage> for Guard<'_, StorageWithPlugin<P>> {
+    fn as_ref(&self) -> &Storage {
+        &self.storage
+    }
+}
 pub type MultiStorageWithPlugin<Plugin> = Container<StorageWithPlugin<Plugin>>;
 
 impl RuntimeScanPath for MultiStorage {
-    fn paths(&self) -> impl Iterator<Item = PathBuf> {
+    type Provider<'a> = Guard<'a, Storage>;
+
+    fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_ {
         self.iter(|iter| {
-            iter.map(|(_, s)| s.runtime_dir().to_owned())
+            iter.map(|(id, _)| self.get(id).unwrap())
                 .collect::<Vec<_>>()
         })
         .into_iter()
@@ -30,9 +41,14 @@ impl RuntimeScanPath for MultiStorage {
 }
 
 impl<P> RuntimeScanPath for MultiStorageWithPlugin<P> {
-    fn paths(&self) -> impl Iterator<Item = PathBuf> {
+    type Provider<'a>
+        = Guard<'a, StorageWithPlugin<P>>
+    where
+        P: 'a;
+
+    fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_ {
         self.iter(|iter| {
-            iter.map(|(_, s)| s.storage.runtime_dir().to_owned())
+            iter.map(|(id, _)| self.get(id).unwrap())
                 .collect::<Vec<_>>()
         })
         .into_iter()

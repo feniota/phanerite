@@ -14,6 +14,14 @@ pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SecretS
     Ok(SecretString::from(String::deserialize(deserializer)?))
 }
 
+/// 复制一份凭据
+///
+/// `SecretString` 没有 `Clone`，复制明文必须显式写出来，
+/// 以此保证凭据不会被无意地散播
+pub fn copy_secret(secret: &SecretString) -> SecretString {
+    SecretString::from(secret.expose_secret().to_owned())
+}
+
 /// 用于 `#[serde(with = "crate::utils::secret::option")]`
 pub mod option {
     use super::*;

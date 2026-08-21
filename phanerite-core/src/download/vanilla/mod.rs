@@ -1,4 +1,8 @@
 pub mod assets;
 pub mod libraries;
-pub mod version_index;
-pub mod version_info;
+
+mod version_index;
+pub use version_index::*;
+
+mod version_info;
+pub use version_info::*;

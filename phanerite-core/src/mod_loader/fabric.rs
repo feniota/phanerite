@@ -65,10 +65,10 @@ impl LoaderInstall for Fabric {
         raw.manifest.merge_overlay(json, 30000);
         Ok(())
     }
-    async fn extra_downloads(
+    async fn extra_downloads<'cx>(
         manifest: &InstanceManifest,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        storage: &'cx Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask<'cx>>> {
         Ok(fabric_libraries(manifest).filter_map(|x| x.into_download(storage).ok()))
     }
 }
@@ -165,7 +165,7 @@ struct FabricLibrary {
 }
 
 impl FabricLibrary {
-    fn into_download(self, storage: &Storage) -> Result<DownloadTask> {
+    fn into_download(self, storage: &Storage) -> Result<DownloadTask<'_>> {
         let mut builder = DownloadTask::builder()
             .url(self.name.url(&FABRIC_MAVEN)?)
             .to_library(self.name.path(), storage);

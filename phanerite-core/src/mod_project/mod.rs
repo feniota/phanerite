@@ -3,9 +3,9 @@ pub mod modrinth;
 
 use crate::download::task::DownloadTask;
 use crate::error::Result;
+use crate::instance::Instance;
 use futures::Stream;
 use std::fmt::Display;
-use std::path::Path;
 
 /// 具体的项目版本
 pub trait ModVersion {
@@ -13,7 +13,10 @@ pub trait ModVersion {
     fn change_log(&self) -> Option<impl Display + '_> {
         None::<&str>
     }
-    fn download(&self, dir: impl AsRef<Path>) -> Result<DownloadTask>;
+    fn download<'cx, R: Clone, C: Clone>(
+        &self,
+        instance: &Instance<'cx, R, C>,
+    ) -> Result<DownloadTask<'cx>>;
 }
 
 /// 模组项目

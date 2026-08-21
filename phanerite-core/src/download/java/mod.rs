@@ -5,14 +5,14 @@ pub use zulu::Zulu;
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use std::path::Path;
+use crate::storage::Storage;
 
 #[allow(async_fn_in_trait)]
 pub trait JavaDownload {
     /// 根据 Major 版本下载 Java
-    async fn get_major(
+    async fn get_major<'cx>(
         major: u32,
         downloader: &impl Downloader,
-        runtime_dir: &Path,
-    ) -> Result<DownloadTask>;
+        storage: &'cx Storage,
+    ) -> Result<DownloadTask<'cx>>;
 }

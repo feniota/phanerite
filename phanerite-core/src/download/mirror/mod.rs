@@ -11,7 +11,6 @@ pub use granodiorite::Granodiorite;
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::{Error, Result};
-use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::Stream;
 use http::{Request, Response};
@@ -25,19 +24,19 @@ pub trait Mirror {
     fn resolve_task(&self, task: &mut DownloadTask) {
         self.resolve(&mut task.url)
     }
-    fn resolve_all(
+    fn resolve_all<'cx>(
         &self,
-        tasks: impl Iterator<Item = DownloadTask>,
-    ) -> impl Iterator<Item = DownloadTask> {
+        tasks: impl Iterator<Item = DownloadTask<'cx>>,
+    ) -> impl Iterator<Item = DownloadTask<'cx>> {
         tasks.map(|mut x| {
             self.resolve_task(&mut x);
             x
         })
     }
-    fn resolve_stream(
+    fn resolve_stream<'cx>(
         &self,
-        tasks: impl Stream<Item = DownloadTask>,
-    ) -> impl Stream<Item = DownloadTask> {
+        tasks: impl Stream<Item = DownloadTask<'cx>>,
+    ) -> impl Stream<Item = DownloadTask<'cx>> {
         tasks.map(|mut x| {
             self.resolve_task(&mut x);
             x
@@ -78,12 +77,9 @@ impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
             .map_err(|e| Error::other(format!("mirror resolved to an invalid URI: {e}")))?;
         self.downloader.send(req).await
     }
-    async fn download(&self, mut task: DownloadTask) -> Result<()> {
+    async fn download<'cx>(&self, mut task: DownloadTask<'cx>) -> Result<()> {
         self.mirror.resolve_task(&mut task);
         self.downloader.download(task).await
-    }
-    fn context(&self) -> &Storage {
-        self.downloader.context()
     }
     fn concurrency(&self) -> usize {
         self.downloader.concurrency()

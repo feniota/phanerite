@@ -4,7 +4,7 @@ use serde::Deserialize;
 use url::Url;
 
 /// GET `/search` 得到的信息
-/// https://docs.modrinth.com/api/operations/searchprojects/
+/// <https://docs.modrinth.com/api/operations/searchprojects/>
 #[derive(Deserialize)]
 pub(super) struct SearchProject {
     pub(super) project_id: String,
@@ -67,8 +67,8 @@ impl From<ProjectType> for crate::mod_project::features::filter::ProjectType {
 }
 
 /// GET `/project/{id|slug}` 得到的信息
-/// https://docs.modrinth.com/api/operations/getproject/
-/// https://docs.modrinth.com/api/operations/getprojects/
+/// <https://docs.modrinth.com/api/operations/getproject/>
+/// <https://docs.modrinth.com/api/operations/getprojects/>
 #[derive(Deserialize)]
 pub(super) struct DetailProject {
     // pub(super) id: String,
@@ -211,7 +211,7 @@ pub(super) struct DetailProject {
 //     pub(super) body: Option<String>,
 // }
 
-/// https://docs.modrinth.com/api/operations/getprojectversions/
+/// <https://docs.modrinth.com/api/operations/getprojectversions/>
 #[derive(Deserialize)]
 pub struct Version {
     // pub(super) name: String,

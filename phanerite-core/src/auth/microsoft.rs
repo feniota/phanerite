@@ -1,8 +1,10 @@
 use crate::download::Downloader;
 use crate::error::{Error, Result};
 use crate::instance::variables::Variables;
+use crate::utils::secret::copy_secret;
 use crate::utils::state::NotReady;
 use crate::utils::uuid::UnhyphenatedUuid;
+use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use chrono::{DateTime, TimeDelta, Utc};
 use http::{Request, Response};
 use secrecy::{ExposeSecret, SecretString};
@@ -11,6 +13,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::LazyLock;
 use std::time::Duration;
 use strum::IntoStaticStr;
+use tracing::debug;
 use url::{Url, form_urlencoded};
 use uuid::Uuid;
 
@@ -186,19 +189,29 @@ impl<T> XboxResponse<T> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServiceError {
-    error: String,
+    /// 部分端点只返回 `errorMessage`，两者都不能作为必需字段
+    error: Option<String>,
     error_message: Option<String>,
 }
 
 /// 将 Minecraft 服务的失败响应转换为错误
-fn service_error(res: &Response<Vec<u8>>) -> Error {
-    match serde_json::from_slice::<ServiceError>(res.body()) {
-        Ok(e) => Error::other(e.error_message.unwrap_or(e.error)),
-        // 失败响应不一定带有响应体，此时只能依靠状态码
-        Err(_) => Error::other(format!(
-            "Minecraft services declined the request: {}",
-            res.status()
-        )),
+///
+/// 授权链有五个端点，失败时必须指出是哪一个，
+/// 否则只剩一个状态码无从排查
+fn service_error(endpoint: &str, res: &Response<Vec<u8>>) -> Error {
+    // 这些端点的失败响应不含凭据，可以整体记录
+    debug!(
+        "{endpoint} responded {}: {}",
+        res.status(),
+        String::from_utf8_lossy(res.body())
+    );
+    match serde_json::from_slice::<ServiceError>(res.body())
+        .ok()
+        .and_then(|e| e.error_message.or(e.error))
+    {
+        Some(message) => Error::other(format!("{endpoint}: {message}")),
+        // 失败响应不一定带有可解析的响应体，此时只能依靠状态码
+        None => Error::other(format!("{endpoint} declined the request: {}", res.status())),
     }
 }
 
@@ -347,18 +360,20 @@ impl<'a, D: Downloader> Login<'a, String, D> {
             &refresh_token,
         )
         .await?;
-        let session = authorize(self.downloader, &token.access_token).await?;
+        let authorized = authorize(self.downloader, &token.access_token).await?;
 
         Ok(Authentication {
-            access_token: session.access_token,
-            expires_at: session.expires_at,
-            // 微软可能签发新的刷新令牌，旧的仍然可用
-            refresh_token: Some(token.refresh_token.unwrap_or(refresh_token)),
             client_id: self.client_id,
             tenant: self.tenant,
             scope: self.scope,
-            xuid: session.xuid,
-            profile: session.profile,
+            xuid: authorized.xuid,
+            state: RwLock::new(State {
+                access_token: authorized.access_token,
+                expires_at: authorized.expires_at,
+                // 微软可能签发新的刷新令牌，旧的仍然可用
+                refresh_token: Some(token.refresh_token.unwrap_or(refresh_token)),
+                profile: authorized.profile,
+            }),
         })
     }
 }
@@ -449,17 +464,19 @@ impl<D: Downloader> Pending<'_, D> {
             OAuthResponse::Error(e) => return self.keep_waiting(e).map(|_| None),
         };
 
-        let session = authorize(self.downloader, &token.access_token).await?;
+        let authorized = authorize(self.downloader, &token.access_token).await?;
 
         Ok(Some(Authentication {
-            access_token: session.access_token,
-            expires_at: session.expires_at,
-            refresh_token: token.refresh_token,
             client_id: self.client_id.clone(),
             tenant: self.tenant,
             scope: self.scope.clone(),
-            xuid: session.xuid,
-            profile: session.profile,
+            xuid: authorized.xuid,
+            state: RwLock::new(State {
+                access_token: authorized.access_token,
+                expires_at: authorized.expires_at,
+                refresh_token: token.refresh_token,
+                profile: authorized.profile,
+            }),
         }))
     }
     /// 按建议的间隔轮询直到授权完成，计时器由调用方提供
@@ -517,20 +534,27 @@ struct Xui {
 }
 
 /// 解析 Xbox 端点的响应
-fn xbox_result(res: Response<Vec<u8>>) -> Result<ResponseXbox> {
+fn xbox_result(endpoint: &str, res: Response<Vec<u8>>) -> Result<ResponseXbox> {
     let status = res.status();
+    // Xbox 的失败响应只有错误码与跳转地址，可以整体记录
+    if !status.is_success() {
+        debug!(
+            "{endpoint} responded {status}: {}",
+            String::from_utf8_lossy(res.body())
+        );
+    }
     match serde_json::from_slice::<XboxResponse<ResponseXbox>>(res.body()) {
         Ok(v) => v.into_result(),
         // 拒绝授权时不一定带有响应体，此时只能依靠状态码
         Err(e) if status.is_success() => Err(e.into()),
         Err(_) => Err(Error::other(format!(
-            "Xbox declined the authorization: {status}"
+            "{endpoint} declined the authorization: {status}"
         ))),
     }
 }
 
 /// Xbox 授权链换取的 Minecraft 会话
-struct Session {
+struct Authorized {
     access_token: SecretString,
     expires_at: DateTime<Utc>,
     xuid: String,
@@ -538,7 +562,7 @@ struct Session {
 }
 
 /// 用微软令牌走完 Xbox 与 Minecraft 的授权链
-async fn authorize(downloader: &impl Downloader, microsoft: &SecretString) -> Result<Session> {
+async fn authorize(downloader: &impl Downloader, microsoft: &SecretString) -> Result<Authorized> {
     let xbl = xbl_authenticate(downloader, microsoft).await?;
     let xsts = xsts_authorize(downloader, &xbl).await?;
     // 没有用户哈希就无法构造 Minecraft 的身份令牌
@@ -550,7 +574,7 @@ async fn authorize(downloader: &impl Downloader, microsoft: &SecretString) -> Re
     check_entitlements(downloader, &access_token).await?;
     let profile = fetch_profile(downloader, &access_token).await?;
 
-    Ok(Session {
+    Ok(Authorized {
         access_token,
         expires_at,
         xuid: xui.xid.unwrap_or_default(),
@@ -593,7 +617,7 @@ async fn xbl_authenticate(
 
     let res = downloader.post_json(XBL_AUTHENTICATE.clone(), req).await?;
 
-    Ok(xbox_result(res)?.token)
+    Ok(xbox_result("Xbox Live authenticate", res)?.token)
 }
 
 /// XSTS 授权，用用户令牌换取 Minecraft 信赖方的令牌
@@ -624,7 +648,7 @@ async fn xsts_authorize(downloader: &impl Downloader, xbl: &SecretString) -> Res
 
     let res = downloader.post_json(XSTS_AUTHORIZE.clone(), req).await?;
 
-    xbox_result(res)
+    xbox_result("XSTS authorize", res)
 }
 
 /// 用 Xbox 身份换取 Minecraft 令牌
@@ -651,7 +675,7 @@ async fn minecraft_login(
 
     let res = downloader.post_json(MINECRAFT_LOGIN.clone(), req).await?;
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft login_with_xbox", &res));
     }
     let res = serde_json::from_slice::<ResponseLogin>(res.body())?;
 
@@ -672,7 +696,7 @@ async fn check_entitlements(downloader: &impl Downloader, token: &SecretString) 
     let req = get_bearer(&MINECRAFT_ENTITLEMENTS, token.expose_secret());
     let res = downloader.send(req).await?;
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft entitlements", &res));
     }
     let res = serde_json::from_slice::<ResponseEntitlements>(res.body())?;
 
@@ -695,7 +719,7 @@ async fn fetch_profile(downloader: &impl Downloader, token: &SecretString) -> Re
         return Err(MicrosoftError::NoProfile.into());
     }
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft profile", &res));
     }
 
     Ok(serde_json::from_slice(res.body())?)
@@ -768,8 +792,38 @@ pub enum SkinVariant {
 }
 
 /// 微软账户的登录凭据
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct Authentication {
+    /// Azure 应用注册的客户端 ID
+    client_id: String,
+    /// 可登录的账户类型
+    tenant: Tenant,
+    /// 授权范围
+    scope: String,
+
+    /// Xbox 用户 ID，账户的身份，登录后不再变化
+    pub xuid: String,
+
+    /// 会随续期变化的部分
+    #[serde(with = "crate::utils::lock")]
+    state: RwLock<State>,
+}
+
+/// [`Authentication`] 的快照，与 [`Authentication`] 的序列化格式一致
+///
+/// 不变的部分借用自 [`Authentication`]，只复制锁内的状态
+#[derive(Serialize)]
+pub struct Data<'a> {
+    client_id: &'a str,
+    tenant: Tenant,
+    scope: &'a str,
+    xuid: &'a str,
+    state: State,
+}
+
+/// 会随续期变化的会话状态
+#[derive(Serialize, Deserialize)]
+struct State {
     /// Minecraft 访问令牌
     #[serde(with = "crate::utils::secret")]
     access_token: SecretString,
@@ -778,46 +832,93 @@ pub struct Authentication {
     /// 微软刷新令牌，持久化后可用于免交互登录
     #[serde(with = "crate::utils::secret::option")]
     refresh_token: Option<SecretString>,
-
-    /// Azure 应用注册的客户端 ID
-    client_id: String,
-    /// 可登录的账户类型
-    tenant: Tenant,
-    /// 授权范围
-    scope: String,
-
-    /// Xbox 用户 ID
-    pub xuid: String,
     /// 玩家档案
-    pub profile: Profile,
+    profile: Profile,
+}
+
+impl State {
+    /// 访问令牌是否即将过期
+    fn is_stale(&self) -> bool {
+        Utc::now() + seconds(REFRESH_MARGIN) >= self.expires_at
+    }
+    /// 复制一份用于序列化
+    ///
+    /// `SecretString` 没有 `Clone`，这里明确地复制明文；
+    /// 序列化本身就要写出明文，多这一份短暂的副本不会额外暴露什么
+    fn snapshot(&self) -> Self {
+        Self {
+            access_token: copy_secret(&self.access_token),
+            expires_at: self.expires_at,
+            refresh_token: self.refresh_token.as_ref().map(copy_secret),
+            profile: self.profile.clone(),
+        }
+    }
 }
 
 impl Authentication {
-    /// Minecraft 访问令牌，有效期约一天
-    pub fn access_token(&self) -> &SecretString {
-        &self.access_token
+    /// 取一份可以持久化的快照
+    pub async fn snapshot(&self) -> Data<'_> {
+        Data {
+            client_id: &self.client_id,
+            tenant: self.tenant,
+            scope: &self.scope,
+            xuid: &self.xuid,
+            state: self.state.read().await.snapshot(),
+        }
     }
-    /// 微软刷新令牌，持久化后可用于免交互登录
+    /// 在回调中读取 Minecraft 访问令牌，有效期约一天
+    pub async fn with_access_token<R>(&self, f: impl FnOnce(&str) -> R) -> R {
+        f(self.state.read().await.access_token.expose_secret())
+    }
+    /// 在回调中读取微软刷新令牌，持久化后可用于免交互登录
     ///
-    /// 授权范围不包含 `offline_access` 时不存在
-    pub fn refresh_token(&self) -> Option<&SecretString> {
-        self.refresh_token.as_ref()
+    /// 授权范围不包含 `offline_access` 时为 `None`
+    pub async fn with_refresh_token<R>(&self, f: impl FnOnce(Option<&str>) -> R) -> R {
+        f(self
+            .state
+            .read()
+            .await
+            .refresh_token
+            .as_ref()
+            .map(ExposeSecret::expose_secret))
+    }
+    /// 玩家档案的副本
+    pub async fn profile(&self) -> Profile {
+        self.state.read().await.profile.clone()
+    }
+    /// 在回调中读取玩家档案，避免复制
+    pub async fn with_profile<R>(&self, f: impl FnOnce(&Profile) -> R) -> R {
+        f(&self.state.read().await.profile)
     }
     /// 访问令牌的过期时刻
-    pub fn expires_at(&self) -> DateTime<Utc> {
-        self.expires_at
+    pub async fn expires_at(&self) -> DateTime<Utc> {
+        self.state.read().await.expires_at
     }
     /// 访问令牌是否已经过期
-    pub fn is_expired(&self) -> bool {
-        Utc::now() >= self.expires_at
+    pub async fn is_expired(&self) -> bool {
+        Utc::now() >= self.state.read().await.expires_at
     }
     /// 访问令牌是否即将过期，`ready()` 会提前刷新
-    pub fn is_stale(&self) -> bool {
-        Utc::now() + seconds(REFRESH_MARGIN) >= self.expires_at
+    pub async fn is_stale(&self) -> bool {
+        self.state.read().await.is_stale()
     }
-    /// 刷新令牌，同时更新玩家档案
-    pub async fn refresh(&mut self, downloader: &impl Downloader) -> Result<()> {
-        let Some(refresh_token) = &self.refresh_token else {
+    /// 立即刷新令牌，同时更新玩家档案
+    ///
+    /// 通常不需要手动调用，`ready()` 会在令牌即将过期时自行续期
+    pub async fn refresh(&self, downloader: &impl Downloader) -> Result<()> {
+        self.renew(self.state.upgradable_read().await, downloader)
+            .await
+    }
+    /// 在续期临界区内完成刷新并提交
+    ///
+    /// 网络交互期间只持有可升级读锁，不阻塞读者；
+    /// 中途返回错误时本地状态原封不动
+    async fn renew(
+        &self,
+        guard: RwLockUpgradableReadGuard<'_, State>,
+        downloader: &impl Downloader,
+    ) -> Result<()> {
+        let Some(refresh_token) = &guard.refresh_token else {
             return Err(Error::other(
                 "Refreshing requires the `offline_access` scope",
             ));
@@ -830,16 +931,21 @@ impl Authentication {
             refresh_token,
         )
         .await?;
-        let session = authorize(downloader, &token.access_token).await?;
+        let authorized = authorize(downloader, &token.access_token).await?;
+        // `xuid` 是账户的身份，续期不应该把它换成另一个账户
+        if authorized.xuid != self.xuid {
+            return Err(Error::other("Refreshed into a different account"));
+        }
 
-        self.access_token = session.access_token;
-        self.expires_at = session.expires_at;
+        // 网络交互已经结束，提交期间不再 await
+        let mut state = RwLockUpgradableReadGuard::upgrade(guard).await;
+        state.access_token = authorized.access_token;
+        state.expires_at = authorized.expires_at;
         // 微软可能签发新的刷新令牌，旧的仍然可用
         if let Some(refresh_token) = token.refresh_token {
-            self.refresh_token = Some(refresh_token)
+            state.refresh_token = Some(refresh_token)
         }
-        self.xuid = session.xuid;
-        self.profile = session.profile;
+        state.profile = authorized.profile;
 
         Ok(())
     }
@@ -856,21 +962,32 @@ impl Eq for Authentication {}
 
 impl super::Authentication for Authentication {
     async fn vars(&self) -> Result<Variables<NotReady>> {
+        let state = self.state.read().await;
         let variables = Variables::new()
             .required(
-                &self.profile.name,
-                self.profile.id.to_string(),
-                self.access_token.expose_secret(),
+                &state.profile.name,
+                state.profile.id.to_string(),
+                state.access_token.expose_secret(),
             )
-            .legacy(self.access_token.expose_secret(), "msa")
+            .legacy(state.access_token.expose_secret(), "msa")
             .modern(&self.client_id, &self.xuid);
         Ok(variables)
     }
-    async fn ready(&mut self, downloader: &impl Downloader) -> Result<()> {
+    async fn serialize(&self) -> impl Serialize {
+        self.snapshot().await
+    }
+    async fn ready(&self, downloader: &impl Downloader) -> Result<()> {
         // 微软的访问令牌只有一天，启动前刷新即可
-        if self.is_stale() {
-            self.refresh(downloader).await?
+        //
+        // 快路径：令牌还新鲜时不必进入续期临界区
+        if !self.is_stale().await {
+            return Ok(());
         }
-        Ok(())
+        let guard = self.state.upgradable_read().await;
+        // 双检：排队等待期间可能已经有人续期过
+        if !guard.is_stale() {
+            return Ok(());
+        }
+        self.renew(guard, downloader).await
     }
 }

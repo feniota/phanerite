@@ -13,6 +13,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::LazyLock;
 use std::time::Duration;
 use strum::IntoStaticStr;
+use tracing::debug;
 use url::{Url, form_urlencoded};
 use uuid::Uuid;
 
@@ -188,19 +189,29 @@ impl<T> XboxResponse<T> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServiceError {
-    error: String,
+    /// 部分端点只返回 `errorMessage`，两者都不能作为必需字段
+    error: Option<String>,
     error_message: Option<String>,
 }
 
 /// 将 Minecraft 服务的失败响应转换为错误
-fn service_error(res: &Response<Vec<u8>>) -> Error {
-    match serde_json::from_slice::<ServiceError>(res.body()) {
-        Ok(e) => Error::other(e.error_message.unwrap_or(e.error)),
-        // 失败响应不一定带有响应体，此时只能依靠状态码
-        Err(_) => Error::other(format!(
-            "Minecraft services declined the request: {}",
-            res.status()
-        )),
+///
+/// 授权链有五个端点，失败时必须指出是哪一个，
+/// 否则只剩一个状态码无从排查
+fn service_error(endpoint: &str, res: &Response<Vec<u8>>) -> Error {
+    // 这些端点的失败响应不含凭据，可以整体记录
+    debug!(
+        "{endpoint} responded {}: {}",
+        res.status(),
+        String::from_utf8_lossy(res.body())
+    );
+    match serde_json::from_slice::<ServiceError>(res.body())
+        .ok()
+        .and_then(|e| e.error_message.or(e.error))
+    {
+        Some(message) => Error::other(format!("{endpoint}: {message}")),
+        // 失败响应不一定带有可解析的响应体，此时只能依靠状态码
+        None => Error::other(format!("{endpoint} declined the request: {}", res.status())),
     }
 }
 
@@ -523,14 +534,21 @@ struct Xui {
 }
 
 /// 解析 Xbox 端点的响应
-fn xbox_result(res: Response<Vec<u8>>) -> Result<ResponseXbox> {
+fn xbox_result(endpoint: &str, res: Response<Vec<u8>>) -> Result<ResponseXbox> {
     let status = res.status();
+    // Xbox 的失败响应只有错误码与跳转地址，可以整体记录
+    if !status.is_success() {
+        debug!(
+            "{endpoint} responded {status}: {}",
+            String::from_utf8_lossy(res.body())
+        );
+    }
     match serde_json::from_slice::<XboxResponse<ResponseXbox>>(res.body()) {
         Ok(v) => v.into_result(),
         // 拒绝授权时不一定带有响应体，此时只能依靠状态码
         Err(e) if status.is_success() => Err(e.into()),
         Err(_) => Err(Error::other(format!(
-            "Xbox declined the authorization: {status}"
+            "{endpoint} declined the authorization: {status}"
         ))),
     }
 }
@@ -599,7 +617,7 @@ async fn xbl_authenticate(
 
     let res = downloader.post_json(XBL_AUTHENTICATE.clone(), req).await?;
 
-    Ok(xbox_result(res)?.token)
+    Ok(xbox_result("Xbox Live authenticate", res)?.token)
 }
 
 /// XSTS 授权，用用户令牌换取 Minecraft 信赖方的令牌
@@ -630,7 +648,7 @@ async fn xsts_authorize(downloader: &impl Downloader, xbl: &SecretString) -> Res
 
     let res = downloader.post_json(XSTS_AUTHORIZE.clone(), req).await?;
 
-    xbox_result(res)
+    xbox_result("XSTS authorize", res)
 }
 
 /// 用 Xbox 身份换取 Minecraft 令牌
@@ -657,7 +675,7 @@ async fn minecraft_login(
 
     let res = downloader.post_json(MINECRAFT_LOGIN.clone(), req).await?;
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft login_with_xbox", &res));
     }
     let res = serde_json::from_slice::<ResponseLogin>(res.body())?;
 
@@ -678,7 +696,7 @@ async fn check_entitlements(downloader: &impl Downloader, token: &SecretString) 
     let req = get_bearer(&MINECRAFT_ENTITLEMENTS, token.expose_secret());
     let res = downloader.send(req).await?;
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft entitlements", &res));
     }
     let res = serde_json::from_slice::<ResponseEntitlements>(res.body())?;
 
@@ -701,7 +719,7 @@ async fn fetch_profile(downloader: &impl Downloader, token: &SecretString) -> Re
         return Err(MicrosoftError::NoProfile.into());
     }
     if !res.status().is_success() {
-        return Err(service_error(&res));
+        return Err(service_error("Minecraft profile", &res));
     }
 
     Ok(serde_json::from_slice(res.body())?)

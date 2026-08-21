@@ -8,7 +8,9 @@ fn main() {
     // （客户端 ID 与刷新令牌）
     let _ = dotenvy::dotenv();
     // 日志输出
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::DEBUG)
+        .init();
 
     // 异步 Runtime
     if let Err(e) = smol::block_on(async {

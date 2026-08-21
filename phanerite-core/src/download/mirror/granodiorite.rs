@@ -5,7 +5,7 @@ use url::Url;
 ///
 /// Granodiorite is part of the Phenocryst system, running on
 /// Cloudflare Workers, caching Minecraft resources in R2.
-/// https://github.com/feniota/granodiorite
+/// <https://github.com/feniota/granodiorite>
 pub struct Granodiorite;
 
 impl Mirror for Granodiorite {

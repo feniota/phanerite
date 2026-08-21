@@ -24,7 +24,7 @@ impl AssetIndex {
 }
 
 impl AssetIndexList {
-    pub fn build_assets_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask> {
+    pub fn build_assets_task(self, storage: &Storage) -> impl Iterator<Item = DownloadTask<'_>> {
         self.objects.into_iter().map(|(name, object)| {
             let hash = &object.hash.to_string();
             let url = RESOURCES_URL

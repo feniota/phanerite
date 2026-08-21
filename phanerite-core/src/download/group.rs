@@ -1,7 +1,6 @@
 use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask};
 use crate::error::{Error, Result};
-use crate::storage::Storage;
 use crate::utils::Hash;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
@@ -12,7 +11,6 @@ use url::Url;
 
 pub struct DownloadGroup<'a, D: Downloader> {
     downloader: &'a D,
-    stage: Vec<DownloadTask>,
     monitor: Monitor,
 }
 
@@ -40,24 +38,21 @@ impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
         self.downloader.send(req).await
     }
-    async fn download(&self, task: DownloadTask) -> Result<()> {
+    async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         self.monitor.push_async(task.process.clone()).await;
         self.downloader.download(task).await
-    }
-    fn context(&self) -> &Storage {
-        self.downloader.context()
     }
     fn concurrency(&self) -> usize {
         self.downloader.concurrency()
     }
-    fn download_concurrent(
+    fn download_concurrent<'cx>(
         &self,
-        tasks: impl IntoIterator<Item = DownloadTask>,
+        tasks: impl IntoIterator<Item = DownloadTask<'cx>>,
     ) -> impl Stream<Item = Result<()>> {
-        enum CollectState<C, R>
+        enum CollectState<'a, C, R>
         where
-            C: IntoIterator<Item = DownloadTask>,
-            R: Iterator<Item = DownloadTask>,
+            C: IntoIterator<Item = DownloadTask<'a>>,
+            R: Iterator<Item = DownloadTask<'a>>,
         {
             Collect(C),
             Ready(R),
@@ -84,18 +79,10 @@ impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
     }
 }
 
-/// 批量添加任务到暂存区
-impl<D: Downloader> Extend<DownloadTask> for DownloadGroup<'_, D> {
-    fn extend<T: IntoIterator<Item = DownloadTask>>(&mut self, iter: T) {
-        self.stage.extend(iter)
-    }
-}
-
 impl<'a, D: Downloader> DownloadGroup<'a, D> {
     pub(crate) fn new(downloader: &'a D) -> Self {
         Self {
             downloader,
-            stage: vec![],
             monitor: Default::default(),
         }
     }
@@ -104,20 +91,14 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
         self.monitor.clone()
     }
     /// 立即执行任务
-    pub async fn join(&self, tasks: impl IntoIterator<Item = DownloadTask>) -> Vec<Error> {
+    pub async fn join<'cx>(
+        &self,
+        tasks: impl IntoIterator<Item = DownloadTask<'cx>>,
+    ) -> Vec<Error> {
         self.download_concurrent(tasks)
             .filter_map(async |x| x.err())
             .collect()
             .await
-    }
-    /// 添加任务到暂存区
-    pub fn push(&mut self, task: DownloadTask) {
-        self.stage.push(task)
-    }
-    /// 执行暂存区的任务
-    pub async fn exec(&mut self) -> Vec<Error> {
-        let tasks = std::mem::take(&mut self.stage);
-        self.join(tasks).await
     }
 }
 

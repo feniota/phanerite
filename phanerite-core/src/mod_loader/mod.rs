@@ -15,10 +15,10 @@ pub mod neoforge;
 impl<R: Clone, C: Clone> Instance<'_, R, C> {
     /// 由于模组加载器而存在的额外下载任务
     /// 需要手动注册
-    pub(crate) async fn extra_downloads(
+    pub(crate) async fn extra_downloads<'cx>(
         &self,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        storage: &'cx Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask<'cx>>> {
         Fabric::extra_downloads(&self.manifest, storage).await
     }
 }
@@ -69,10 +69,10 @@ pub trait LoaderInstall: Sized {
         S: AsyncFnOnce(Self::MetaList) -> Result<Self::MetaInfo>;
     /// 从 `InstanceManifest` 里面找出无法被正常构建的下载任务
     /// 例如 `FabricLibrary` 是 Fabric 的自定义格式
-    async fn extra_downloads(
+    async fn extra_downloads<'cx>(
         manifest: &InstanceManifest,
-        storage: &Storage,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+        storage: &'cx Storage,
+    ) -> Result<impl Iterator<Item = DownloadTask<'cx>>> {
         let _ = manifest;
         let _ = storage;
         Ok(std::iter::empty())

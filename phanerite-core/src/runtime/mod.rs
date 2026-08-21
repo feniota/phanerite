@@ -39,12 +39,21 @@ impl RuntimePath {
 
 /// 提供 `RuntimePath` 根目录的类型，例如 `Storage`
 pub trait RuntimeScanPath {
-    fn paths(&self) -> impl Iterator<Item = PathBuf>;
+    type Provider<'a>: AsRef<Storage> + 'a
+    where
+        Self: 'a;
+    fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_;
+}
+impl AsRef<Storage> for Storage {
+    fn as_ref(&self) -> &Storage {
+        self
+    }
 }
 
 impl RuntimeScanPath for Storage {
-    fn paths(&self) -> impl Iterator<Item = PathBuf> {
-        std::iter::once(self.runtime_dir().to_owned())
+    type Provider<'a> = &'a Storage;
+    fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_ {
+        std::iter::once(self)
     }
 }
 

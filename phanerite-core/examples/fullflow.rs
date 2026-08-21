@@ -51,11 +51,9 @@ fn main() {
         // 构造 Downloader
         //
         // 基本下载器，可以全局创建一次（内部有并行限制）
-        let base = download::downloader::BaseDownloader::builder()
+        let raw_downloader = download::downloader::RawDownloader::builder()
             .build()
             .await?;
-        // 以当前 Storage 为上下文的下载器，基本下载器需要添加 Storage 为上下文才能使用
-        let raw_downloader = base.in_storage(&storage);
         // 下载缓存，建议保持尽可能长的生命周期
         let cached_downloader = raw_downloader.with_cache_default();
         // 任务组，应该一次性使用
@@ -121,8 +119,7 @@ fn main() {
         let java = java_manager
             // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
             .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
-                // 对于 x: Storage，必须为 x.runtime_dir()
-                x.get(&id).unwrap().runtime_dir().to_owned()
+                x.get(&id).unwrap()
             })
             .await?;
         // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态

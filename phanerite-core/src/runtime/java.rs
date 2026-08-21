@@ -2,11 +2,12 @@ use crate::download::Downloader;
 use crate::download::java::JavaDownload;
 use crate::error::{Error, Result};
 use crate::runtime::{RuntimePath, RuntimeScanPath};
+use crate::storage::Storage;
 use futures::{Stream, StreamExt};
 use std::env;
 use std::ffi::OsStr;
 use std::hash::Hasher;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::trace;
 
 #[cfg(target_os = "windows")]
@@ -80,7 +81,7 @@ impl JavaRuntime {
 }
 
 /// 列出内建 Java
-pub fn list_build_in(runtime_dir: impl AsRef<Path>) -> impl Stream<Item = PathBuf> {
+pub fn list_build_in(storage: impl AsRef<Storage>) -> impl Stream<Item = PathBuf> {
     #[allow(clippy::large_enum_variant)]
     enum State<F>
     where
@@ -90,7 +91,10 @@ pub fn list_build_in(runtime_dir: impl AsRef<Path>) -> impl Stream<Item = PathBu
         Read(async_fs::ReadDir),
     }
     futures::stream::unfold(
-        State::Init(async_fs::read_dir(runtime_dir)),
+        State::Init(async move {
+            let runtime_dir = storage.as_ref().runtime_dir();
+            async_fs::read_dir(runtime_dir).await
+        }),
         async |state| match state {
             State::Init(f) => {
                 let mut dir = f.await.unwrap();
@@ -160,7 +164,7 @@ impl<'scan, S: RuntimeScanPath> JavaManager<'scan, S> {
             }
         };
 
-        let build_in = self.scan_paths.paths().map(list_build_in);
+        let build_in = self.scan_paths.storages().map(list_build_in);
 
         self.javas.clear_async().await;
         if self.system {
@@ -183,13 +187,13 @@ impl<'scan, S: RuntimeScanPath> JavaManager<'scan, S> {
         &self,
         major: u32,
         downloader: &impl Downloader,
-        install_to: impl AsyncFnOnce(&S) -> PathBuf,
+        install_to: impl AsyncFnOnce(&S) -> S::Provider<'_>,
     ) -> Result<JavaRuntime> {
         if let Some(v) = self.find(major).await {
             return Ok(v);
         }
-        let runtime_dir = install_to(self.scan_paths).await;
-        let task = J::get_major(major, downloader, &runtime_dir).await?;
+        let storage = install_to(self.scan_paths).await;
+        let task = J::get_major(major, downloader, storage.as_ref()).await?;
         downloader.download(task).await?;
         self.refresh().await;
         self.find(major)

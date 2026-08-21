@@ -14,10 +14,9 @@ fn main() -> error::Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     smol::block_on(async {
         let storage = storage::Storage::new(".minecraft").await?;
-        let base = download::downloader::BaseDownloader::builder()
+        let downloader = download::downloader::RawDownloader::builder()
             .build()
             .await?;
-        let downloader = base.in_storage(&storage);
 
         // 下载最新正式版
         let version_id = std::env::args()
@@ -34,17 +33,16 @@ fn main() -> error::Result<()> {
         let manifest = version.get_manifest(&downloader).await?;
 
         let mirror = downloader.with_mirror(Granodiorite);
-        let mut group = mirror.with_group();
+        let group = mirror.with_group();
         let _g = monitor(&group).await;
-        group.extend(
-            Instance::create(manifest, Some(&version.id), &storage, &downloader)
-                .await?
-                .install(HashSet::new())
-                .await?,
-        );
-
-        // 使用 Granodiorite 镜像下载
-        let errs = group.exec().await;
+        let errs = group
+            .join(
+                Instance::create(manifest, Some(&version.id), &storage, &downloader)
+                    .await?
+                    .install(HashSet::new())
+                    .await?,
+            )
+            .await;
 
         println!("Errors: {}", errs.len());
         for e in &errs {

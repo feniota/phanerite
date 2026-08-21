@@ -15,11 +15,9 @@ const CONCURRENCY: usize = 64;
 fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     if let Err(e) = smol::block_on(async {
-        let storage = storage::Storage::new(".minecraft").await?;
-        let base = download::downloader::BaseDownloader::builder()
+        let downloader = download::downloader::RawDownloader::builder()
             .build()
             .await?;
-        let downloader = base.in_storage(&storage);
 
         let index = VersionIndex::sync(&downloader).await?;
         let versions = index

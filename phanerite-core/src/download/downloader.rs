@@ -1,7 +1,6 @@
 use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
-use crate::storage::Storage;
 use crate::storage::temp::TempGuard;
 use crate::utils::Hash;
 use async_channel::{Receiver, Sender};
@@ -15,36 +14,6 @@ use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use tracing::{debug, error, warn};
 use url::Url;
-
-pub struct BaseDownloader {
-    retries: usize,
-    concurrency: usize,
-    threshold: u64,
-
-    /// HTTP 客户端
-    client: HttpClient,
-    /// 获取大缓冲
-    large_rx: Receiver<Vec<u8>>,
-    /// 归还大缓冲
-    large_tx: Sender<Vec<u8>>,
-    /// 获取小缓冲
-    small_rx: Receiver<Vec<u8>>,
-    /// 归还小缓冲
-    small_tx: Sender<Vec<u8>>,
-}
-
-impl BaseDownloader {
-    pub fn builder() -> DownloaderBuilder {
-        DownloaderBuilder::new()
-    }
-    /// Downloader 需要当前 Storage 作为上下文才能使用
-    pub fn in_storage<'a>(&'a self, context: &'a Storage) -> RawDownloader<'a> {
-        RawDownloader {
-            base: self,
-            context,
-        }
-    }
-}
 
 pub struct DownloaderBuilder {
     /// 重试次数
@@ -111,7 +80,7 @@ impl DownloaderBuilder {
         self.small_buffer = buffer;
         self
     }
-    pub async fn build(self) -> Result<BaseDownloader> {
+    pub async fn build(self) -> Result<RawDownloader> {
         let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
         for _ in 0..self.large_parallelism {
             large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
@@ -125,7 +94,7 @@ impl DownloaderBuilder {
                 "The parallelism is greater than the concurrency, and thus the buffer cannot be fully utilized."
             )
         }
-        Ok(BaseDownloader {
+        Ok(RawDownloader {
             retries: self.retries,
             concurrency: self.concurrency,
             threshold: self.threshold,
@@ -145,21 +114,27 @@ impl DownloaderBuilder {
     }
 }
 
-pub struct RawDownloader<'a> {
-    base: &'a BaseDownloader,
-    context: &'a Storage,
+pub struct RawDownloader {
+    retries: usize,
+    concurrency: usize,
+    threshold: u64,
+
+    /// HTTP 客户端
+    client: HttpClient,
+    /// 获取大缓冲
+    large_rx: Receiver<Vec<u8>>,
+    /// 归还大缓冲
+    large_tx: Sender<Vec<u8>>,
+    /// 获取小缓冲
+    small_rx: Receiver<Vec<u8>>,
+    /// 归还小缓冲
+    small_tx: Sender<Vec<u8>>,
 }
 
-impl Downloader for RawDownloader<'_> {
+impl Downloader for RawDownloader {
     async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
-        for _ in 0..self.base.retries {
-            let res = self
-                .base
-                .client
-                .get_async(url.as_str())
-                .await?
-                .bytes()
-                .await?;
+        for _ in 0..self.retries {
+            let res = self.client.get_async(url.as_str()).await?.bytes().await?;
             if let Some(h) = &hash {
                 let mut hasher = h.hasher();
                 hasher.update(&res);
@@ -188,12 +163,12 @@ impl Downloader for RawDownloader<'_> {
         Ok(Response::from_parts(parts, ()))
     }
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
-        let mut res = self.base.client.send_async(req).await?;
+        let mut res = self.client.send_async(req).await?;
         let body = res.bytes().await?;
         let (parts, _) = res.into_parts();
         Ok(Response::from_parts(parts, body))
     }
-    async fn download(&self, task: DownloadTask) -> Result<()> {
+    async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         /// 用于发送失败信号
         struct FailGuard<'a> {
             process: &'a DownloadProcess,
@@ -216,7 +191,7 @@ impl Downloader for RawDownloader<'_> {
 
         // 下载文件
         let mut last_res = Err(Error::other("Unreachable"));
-        for _ in 0..=self.base.retries {
+        for _ in 0..=self.retries {
             match self.retry_body(&task).await {
                 Ok(v) => {
                     last_res = Ok(v);
@@ -238,23 +213,23 @@ impl Downloader for RawDownloader<'_> {
         Ok(())
     }
 
-    fn context(&self) -> &Storage {
-        self.context
-    }
-
     fn concurrency(&self) -> usize {
-        self.base.concurrency
+        self.concurrency
     }
 }
 
-impl RawDownloader<'_> {
+impl RawDownloader {
+    pub fn builder() -> DownloaderBuilder {
+        DownloaderBuilder::new()
+    }
+
     /// 重试体
-    async fn retry_body(
+    async fn retry_body<'cx>(
         &self,
-        task: &DownloadTask,
-    ) -> Result<(TempGuard<'_>, Option<blake3::Hash>)> {
+        task: &DownloadTask<'cx>,
+    ) -> Result<(TempGuard<'cx>, Option<blake3::Hash>)> {
         // 创建临时文件
-        let cache = self.context.temp_file().await?;
+        let cache = task.context.storage.temp_file().await?;
 
         // 共享储存桶 Hasher
         let mut bucket_hasher = match task.target {
@@ -265,7 +240,7 @@ impl RawDownloader<'_> {
 
         // 构造和发送请求
         let uri = task.url.as_str();
-        let mut res = self.base.client.get_async(uri).await?;
+        let mut res = self.client.get_async(uri).await?;
 
         // 补充文件大小（如果不存在）
         if let Ok(len) = res
@@ -319,10 +294,10 @@ impl RawDownloader<'_> {
         }
     }
     /// 下载后的保存和解压
-    async fn post_download(
+    async fn post_download<'cx>(
         &self,
-        task: &DownloadTask,
-        (cache, bucket_hash): (TempGuard<'_>, Option<blake3::Hash>),
+        task: &DownloadTask<'cx>,
+        (cache, bucket_hash): (TempGuard<'cx>, Option<blake3::Hash>),
     ) -> Result<()> {
         match &task.target {
             // 直接保存
@@ -330,7 +305,8 @@ impl RawDownloader<'_> {
                 // 若 task.share.is_some() 此值可以 unwrap()
                 let bucket_path = bucket_hash.map(|hash| {
                     let file_name = hash.to_string();
-                    self.context
+                    task.context
+                        .storage
                         .share_dir()
                         .join(&file_name[..2])
                         .join(file_name)
@@ -356,7 +332,7 @@ impl RawDownloader<'_> {
 
                 // 如果有 bucket，将共享文件链接到 task.target
                 if let Some(record) = &task.share {
-                    self.context.linker()(save_path, path).await?;
+                    task.context.storage.linker()(save_path, path).await?;
 
                     // 初始化 Task 的共享位置（用于外部记录）
                     let _ = record.set(bucket_path.unwrap()).await;
@@ -366,7 +342,7 @@ impl RawDownloader<'_> {
             Target::Extract(extract) => {
                 task.process.extracting();
                 extract
-                    .exec(&cache, task.share.is_some(), self.context)
+                    .exec(&cache, task.share.is_some(), task.context.storage)
                     .await?
             }
         }
@@ -409,35 +385,17 @@ impl RawDownloader<'_> {
         }
 
         match size {
-            Some(size) if size > self.base.threshold => BufferGuard {
-                buf: Some(
-                    self.base
-                        .large_rx
-                        .recv()
-                        .await
-                        .expect("Failed to alloc buffer"),
-                ),
-                pool: self.base.large_tx.clone(),
+            Some(size) if size > self.threshold => BufferGuard {
+                buf: Some(self.large_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.large_tx.clone(),
             }, // >=阈值
-            Some(size) if size <= self.base.threshold => BufferGuard {
-                buf: Some(
-                    self.base
-                        .small_rx
-                        .recv()
-                        .await
-                        .expect("Failed to alloc buffer"),
-                ),
-                pool: self.base.small_tx.clone(),
+            Some(size) if size <= self.threshold => BufferGuard {
+                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.small_tx.clone(),
             }, // <=阈值
             _ => BufferGuard {
-                buf: Some(
-                    self.base
-                        .small_rx
-                        .recv()
-                        .await
-                        .expect("Failed to alloc buffer"),
-                ),
-                pool: self.base.small_tx.clone(),
+                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
+                pool: self.small_tx.clone(),
             }, // 默认小文件
         }
     }

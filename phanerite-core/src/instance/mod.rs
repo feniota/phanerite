@@ -188,7 +188,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     pub async fn check_exist(
         &self,
         features: HashSet<&'static str>,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+    ) -> Result<impl Iterator<Item = DownloadTask<'_>>> {
         let tasks = self.install(features).await?;
         let tasks = filter_existed(tasks, false);
         Ok(tasks)
@@ -199,7 +199,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         &self,
         features: HashSet<&'static str>,
         downloader: &impl Downloader,
-    ) -> Result<Vec<DownloadTask>> {
+    ) -> Result<Vec<DownloadTask<'_>>> {
         self.fix_assets_index(downloader).await?;
         let tasks = futures::stream::iter(self.install(features).await?);
         let tasks = filter_hash(tasks, true).collect().await;
@@ -210,7 +210,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     pub async fn install_less(
         &self,
         features: HashSet<&'static str>,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+    ) -> Result<impl Iterator<Item = DownloadTask<'_>>> {
         let full = self.install(features).await?;
         Ok(filter_existed(full, true))
     }
@@ -218,7 +218,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     pub async fn install(
         &self,
         features: HashSet<&'static str>,
-    ) -> Result<impl Iterator<Item = DownloadTask>> {
+    ) -> Result<impl Iterator<Item = DownloadTask<'_>>> {
         // Assets
         let assets_index = self
             .storage
@@ -239,7 +239,10 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
             .libraries
             .iter()
             .scan((features, native_dir), |(f, n), x| {
-                Some([x.to_task(self.storage, f), x.to_native_task(f, n)])
+                Some([
+                    x.to_task(self.storage, f),
+                    x.to_native_task(self.storage, f, n),
+                ])
             })
             .flatten()
             .flatten();
@@ -252,7 +255,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         let client_task = self.manifest.downloads.client.as_ref().map(|c| {
             DownloadTask::builder()
                 .url(c.url.clone())
-                .to_path(self.instance_dir.join(&file_name))
+                .to_path(self.instance_dir.join(&file_name), self.storage)
                 .share()
                 .file_name(file_name)
                 .file_size(c.size)

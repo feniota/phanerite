@@ -18,6 +18,10 @@ pub enum Target {
     Extract(ExtractTask),
 }
 
+pub struct Context<'cx> {
+    pub storage: &'cx Storage,
+}
+
 impl From<PathBuf> for Target {
     fn from(value: PathBuf) -> Self {
         File(value)
@@ -29,7 +33,8 @@ impl From<ExtractTask> for Target {
     }
 }
 
-pub struct DownloadTaskBuilder<U, T> {
+pub struct DownloadTaskBuilder<U, T, C> {
+    context: C,
     url: U,
     target: T,
     file_name: Option<String>,
@@ -38,7 +43,8 @@ pub struct DownloadTaskBuilder<U, T> {
     share: Option<Arc<OnceCell<PathBuf>>>,
 }
 
-pub struct DownloadTask {
+pub struct DownloadTask<'cx> {
+    pub(crate) context: Context<'cx>,
     pub(crate) url: Url,
     pub(crate) target: Target,
     pub(crate) file_hash: Hash,
@@ -69,9 +75,10 @@ const STATE_FINISHED: u8 = 3;
 const STATE_FAILED: u8 = 4;
 const STATE_CANCELLED: u8 = 5;
 
-impl DownloadTask {
-    pub fn builder() -> DownloadTaskBuilder<NotReady, NotReady> {
+impl DownloadTask<'_> {
+    pub fn builder() -> DownloadTaskBuilder<NotReady, NotReady, NotReady> {
         DownloadTaskBuilder {
+            context: NotReady,
             url: NotReady,
             target: NotReady,
             share: None,
@@ -82,9 +89,10 @@ impl DownloadTask {
     }
 }
 
-impl<T> DownloadTaskBuilder<NotReady, T> {
-    pub fn url(self, url: impl Into<Url>) -> DownloadTaskBuilder<Url, T> {
+impl<T, C> DownloadTaskBuilder<NotReady, T, C> {
+    pub fn url(self, url: impl Into<Url>) -> DownloadTaskBuilder<Url, T, C> {
         DownloadTaskBuilder {
+            context: self.context,
             url: url.into(),
             target: self.target,
             share: self.share,
@@ -95,13 +103,14 @@ impl<T> DownloadTaskBuilder<NotReady, T> {
     }
 }
 
-impl<U> DownloadTaskBuilder<U, NotReady> {
+impl<U> DownloadTaskBuilder<U, NotReady, NotReady> {
     pub fn to_asset(
         self,
         path: impl AsRef<Path>,
         storage: &Storage,
-    ) -> DownloadTaskBuilder<U, PathBuf> {
+    ) -> DownloadTaskBuilder<U, PathBuf, Context<'_>> {
         DownloadTaskBuilder {
+            context: Context { storage },
             url: self.url,
             target: storage.assets_objects().join(path),
             share: self.share,
@@ -114,8 +123,9 @@ impl<U> DownloadTaskBuilder<U, NotReady> {
         self,
         path: impl AsRef<Path>,
         storage: &Storage,
-    ) -> DownloadTaskBuilder<U, PathBuf> {
+    ) -> DownloadTaskBuilder<U, PathBuf, Context<'_>> {
         DownloadTaskBuilder {
+            context: Context { storage },
             url: self.url,
             target: storage.libraries_dir().join(path),
             share: self.share,
@@ -124,8 +134,13 @@ impl<U> DownloadTaskBuilder<U, NotReady> {
             file_hash: self.file_hash,
         }
     }
-    pub fn to_path(self, path: PathBuf) -> DownloadTaskBuilder<U, PathBuf> {
+    pub fn to_path(
+        self,
+        path: PathBuf,
+        storage: &Storage,
+    ) -> DownloadTaskBuilder<U, PathBuf, Context<'_>> {
         DownloadTaskBuilder {
+            context: Context { storage },
             url: self.url,
             target: path,
             share: self.share,
@@ -134,8 +149,13 @@ impl<U> DownloadTaskBuilder<U, NotReady> {
             file_hash: self.file_hash,
         }
     }
-    pub fn extract_to(self, extract_task: ExtractTask) -> DownloadTaskBuilder<U, ExtractTask> {
+    pub fn extract_to(
+        self,
+        extract_task: ExtractTask,
+        storage: &Storage,
+    ) -> DownloadTaskBuilder<U, ExtractTask, Context<'_>> {
         DownloadTaskBuilder {
+            context: Context { storage },
             url: self.url,
             target: extract_task,
             share: self.share,
@@ -146,7 +166,7 @@ impl<U> DownloadTaskBuilder<U, NotReady> {
     }
 }
 
-impl<U, P> DownloadTaskBuilder<U, P> {
+impl<U, P, C> DownloadTaskBuilder<U, P, C> {
     pub fn file_name(mut self, name: impl Into<String>) -> Self {
         self.file_name = Some(name.into());
         self
@@ -165,9 +185,10 @@ impl<U, P> DownloadTaskBuilder<U, P> {
     }
 }
 
-impl<P: Into<Target>> DownloadTaskBuilder<Url, P> {
-    pub fn build(self) -> DownloadTask {
+impl<'cx, P: Into<Target>> DownloadTaskBuilder<Url, P, Context<'cx>> {
+    pub fn build(self) -> DownloadTask<'cx> {
         DownloadTask {
+            context: self.context,
             url: self.url,
             target: self.target.into(),
             share: self.share,
@@ -265,10 +286,10 @@ impl DownloadProcess {
 }
 
 /// 检验文件存在
-pub fn filter_existed(
-    tasks: impl Iterator<Item = DownloadTask>,
+pub fn filter_existed<'cx>(
+    tasks: impl Iterator<Item = DownloadTask<'cx>>,
     default: bool,
-) -> impl Iterator<Item = DownloadTask> {
+) -> impl Iterator<Item = DownloadTask<'cx>> {
     tasks.filter(move |x| {
         if let File(p) = &x.target {
             !p.exists()
@@ -279,10 +300,10 @@ pub fn filter_existed(
 }
 
 /// 检验文件 Hash
-pub fn filter_hash(
-    tasks: impl Stream<Item = DownloadTask>,
+pub fn filter_hash<'cx>(
+    tasks: impl Stream<Item = DownloadTask<'cx>>,
     default: bool,
-) -> impl Stream<Item = DownloadTask> {
+) -> impl Stream<Item = DownloadTask<'cx>> {
     tasks
         .map(move |x| async move {
             let invalid = match &x.target {

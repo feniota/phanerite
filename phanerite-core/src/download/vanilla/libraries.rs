@@ -6,11 +6,11 @@ use std::collections::HashSet;
 use std::path::Path;
 
 impl Library {
-    pub fn to_task(
+    pub fn to_task<'cx>(
         &self,
-        storage: &Storage,
+        storage: &'cx Storage,
         features: &HashSet<&'static str>,
-    ) -> Option<DownloadTask> {
+    ) -> Option<DownloadTask<'cx>> {
         if !self.allowed_env(features) {
             return None;
         }
@@ -26,11 +26,12 @@ impl Library {
         )
     }
 
-    pub fn to_native_task(
+    pub fn to_native_task<'cx>(
         &self,
+        storage: &'cx Storage,
         features: &HashSet<&'static str>,
         native_dir: impl AsRef<Path>,
-    ) -> Option<DownloadTask> {
+    ) -> Option<DownloadTask<'cx>> {
         if !self.allowed_env(features) {
             return None;
         }
@@ -46,6 +47,7 @@ impl Library {
             let classifier_key = natives_map.get(os_key)?;
             let artifact = classifiers.get(classifier_key)?;
             return Some(native_download(
+                storage,
                 artifact,
                 native_dir.as_ref(),
                 &format!("{}-{}", self.name, classifier_key),
@@ -72,6 +74,7 @@ impl Library {
             }
             let a = self.downloads.as_ref()?.artifact.clone()?;
             return Some(native_download(
+                storage,
                 &a,
                 native_dir.as_ref(),
                 &self.name.to_string(),
@@ -91,12 +94,13 @@ impl Library {
     }
 }
 
-fn native_download(
+fn native_download<'cx>(
+    storage: &'cx Storage,
     artifact: &Artifact,
     native_dir: &Path,
     file_name: &str,
     extract: Option<&Extract>,
-) -> DownloadTask {
+) -> DownloadTask<'cx> {
     let mut builder = ExtractTask::builder().target(native_dir).flatten();
     if let Some(ex) = extract
         && let Some(ref patterns) = ex.exclude
@@ -105,7 +109,7 @@ fn native_download(
     }
     DownloadTask::builder()
         .url(artifact.url.clone())
-        .extract_to(builder.build())
+        .extract_to(builder.build(), storage)
         .file_name(file_name)
         .file_size(artifact.size)
         .hash(artifact.sha1.clone())

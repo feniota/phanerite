@@ -115,7 +115,7 @@ impl<'a> AuthlibInjector<'a> {
         }
     }
 
-    async fn install_latest(&self, downloader: &impl Downloader) -> Result<DownloadTask> {
+    async fn install_latest(&self, downloader: &impl Downloader) -> Result<DownloadTask<'_>> {
         let res = downloader
             .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
             .await?;
@@ -131,7 +131,10 @@ impl<'a> AuthlibInjector<'a> {
 
         let task = DownloadTask::builder()
             .url(download)
-            .to_path(self.storage.authlib_injector().join(&file_name))
+            .to_path(
+                self.storage.authlib_injector().join(&file_name),
+                self.storage,
+            )
             .file_name(&file_name)
             .hash(hash)
             .build();

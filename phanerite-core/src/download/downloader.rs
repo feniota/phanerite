@@ -32,9 +32,8 @@ pub struct DownloaderBuilder {
     small_buffer: usize,
 }
 
-impl DownloaderBuilder {
-    /// 构建默认下载器
-    fn new() -> Self {
+impl Default for DownloaderBuilder {
+    fn default() -> Self {
         Self {
             retries: 3,
             concurrency: 32,
@@ -45,6 +44,9 @@ impl DownloaderBuilder {
             small_buffer: 128 * 1024,
         }
     }
+}
+
+impl DownloaderBuilder {
     /// 设置重试次数
     pub fn retries(mut self, retries: usize) -> Self {
         self.retries = retries;
@@ -220,7 +222,7 @@ impl Downloader for RawDownloader {
 
 impl RawDownloader {
     pub fn builder() -> DownloaderBuilder {
-        DownloaderBuilder::new()
+        DownloaderBuilder::default()
     }
 
     /// 重试体

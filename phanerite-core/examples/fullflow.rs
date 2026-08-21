@@ -11,10 +11,6 @@ use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
 use phanerite_core::*;
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::time::{Duration, Instant};
 use tracing::{Level, error};
 use url::Url;
 
@@ -200,6 +196,11 @@ fn main() {
 
 /// 显示下载速度和进度
 fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering::Relaxed;
+    use std::time::Duration;
+
     struct ExitGuard {
         exit: Arc<AtomicBool>,
     }
@@ -242,6 +243,11 @@ fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
 
 /// 检测阻塞时间
 fn blocking_monitor(executor: &Executor<'static>) -> impl Drop {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering::Relaxed;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::time::{Duration, Instant};
+
     pub struct BlockingGuard {
         stopped: Arc<AtomicBool>,
         max_blocking_ns: Arc<AtomicU64>,

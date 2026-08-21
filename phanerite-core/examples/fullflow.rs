@@ -72,6 +72,7 @@ fn main() {
                 // 此处取第一个作为示例
                 iter.next().map(|(id, _)| *id).unwrap());
             // Guard 保证 Storage 在当前作用域不会被释放
+            // 但是不保证不会被删除，再次使用 storages.get(&id) 不一定为 Some()
             let storage_with_plugin = storages.get(&id).unwrap();
             // StorageWithPlugin 已实现 AsRef<Storage>
             let storage = storage_with_plugin.as_ref();
@@ -126,14 +127,17 @@ fn main() {
                     // 下载版本清单
                     .get_manifest(&downloader)
                     .await?;
-            // 创初始化实例
+            // 初始化实例
             let instance = Instance::create(version, Some("latest"), storage, &downloader).await?;
 
             // 安装 Java
             let java = java_manager
                 // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
                 .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
-                    x.get(&id).unwrap()
+                    // 此处的 unwrap() 在并发中并不安全
+                    // id 指向的 Storage 可能被删除
+                    x.get(&id)
+                        .expect("Please do not write like this in the production environment.")
                 })
                 .await?;
             // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态

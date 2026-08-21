@@ -1,5 +1,5 @@
 use futures::{StreamExt, TryStreamExt};
-use phanerite_core::download::vanilla::version_index::VersionIndex;
+use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::*;
 use std::collections::HashSet;

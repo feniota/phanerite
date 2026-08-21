@@ -1,28 +1,26 @@
-use async_executor::Executor;
+use phanerite_core::auth;
 use phanerite_core::auth::Authentication;
+use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::Zulu;
-use phanerite_core::download::vanilla::version_index::VersionIndex;
+use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
+use phanerite_core::storage::Storage;
 use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
-use phanerite_core::*;
-use std::collections::HashSet;
-use tracing::{Level, error};
-use url::Url;
 
 fn main() {
     // （登录信息）
     let _ = dotenvy::dotenv();
     // 日志输出
     tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
     // （用于测试阻塞时间）
-    let executor = Executor::new();
+    let executor = async_executor::Executor::new();
     let _guard = blocking_monitor(&executor);
 
     // 异步 Runtime
@@ -32,9 +30,7 @@ fn main() {
         // 构造 Downloader
         //
         // 基本下载器，可以全局创建一次（内部有并行限制）
-        let raw_downloader = download::downloader::RawDownloader::builder()
-            .build()
-            .await?;
+        let raw_downloader = RawDownloader::builder().build().await?;
         // 下载缓存，建议保持尽可能长的生命周期
         let cached_downloader = raw_downloader.with_cache_default();
 
@@ -45,9 +41,7 @@ fn main() {
         let storages = MultiStorageWithPlugin::new();
 
         // 创建 Storage
-        let storage = storage::Storage::new(".minecraft")
-            .await?
-            .share_preference(Hardlink);
+        let storage = Storage::new(".minecraft").await?.share_preference(Hardlink);
         // 生成临时文件清理任务
         let (cleaner, shutdown) = storage.run_cleaner();
         smol::spawn(cleaner).detach();
@@ -97,7 +91,7 @@ fn main() {
                     .inject(storage)
                     .await?
                     // 自定义 Yggdrasil 地址
-                    .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<Url>()?)
+                    .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<url::Url>()?)
                     .await?
                     // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
                     .username(
@@ -169,10 +163,15 @@ fn main() {
 
             // 安装实例
             downloader
-                .join(instance.install_less(HashSet::new()).await?)
+                .join(
+                    instance
+                        // 安装时跳过存在的文件
+                        .install_less(std::collections::HashSet::new())
+                        .await?,
+                )
                 .await
                 .iter()
-                .for_each(|e| error!("{e}"));
+                .for_each(|e| tracing::error!("{e}"));
 
             // 启动游戏
             //
@@ -190,7 +189,7 @@ fn main() {
 
         Ok::<(), Error>(())
     })) {
-        error!("{}", e)
+        tracing::error!("{}", e)
     }
 }
 
@@ -242,7 +241,7 @@ fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
 }
 
 /// 检测阻塞时间
-fn blocking_monitor(executor: &Executor<'static>) -> impl Drop {
+fn blocking_monitor(executor: &async_executor::Executor<'static>) -> impl Drop {
     use std::sync::Arc;
     use std::sync::atomic::Ordering::Relaxed;
     use std::sync::atomic::{AtomicBool, AtomicU64};

@@ -58,7 +58,7 @@ pub trait DownloaderExt: Downloader + Sized {
     }
 
     /// 默认 `Downloader::fetch()` 的最大缓存字节数
-    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024;
+    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024; // 5 MiB
     /// 获得带有缓存的下载器
     fn with_cache<R: BucketRecorder>(
         &self,

@@ -32,6 +32,8 @@ fn main() {
         // 基本下载器，可以全局创建一次（内部有并行限制）
         let raw_downloader = RawDownloader::builder().build().await?;
         // 下载缓存，建议保持尽可能长的生命周期
+        // 不建议使用 default，因为内置的记录器无法持久化，可共享的文件需要再次下载
+        // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
         let cached_downloader = raw_downloader.with_cache_default();
 
         // 构造 MultiStorage

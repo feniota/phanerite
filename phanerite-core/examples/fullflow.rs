@@ -1,5 +1,5 @@
 use phanerite_core::auth;
-use phanerite_core::auth::Authentication;
+use phanerite_core::auth::{Authentication, MultiAccount};
 use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::Zulu;
@@ -11,6 +11,7 @@ use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::Storage;
 use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
+use std::ops::Deref;
 
 fn main() {
     // （登录信息）
@@ -25,7 +26,7 @@ fn main() {
 
     // 异步 Runtime
     if let Err(e) = smol::block_on(executor.run(async {
-        // 全局的初始化阶段
+        // ———————————————————— 全局的初始化阶段 ————————————————————
 
         // 构造 Downloader
         //
@@ -36,17 +37,43 @@ fn main() {
         // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
         let cached_downloader = raw_downloader.with_cache_default();
 
+        // 创建 Storage
+        // 由于登录需要 Storage 提供存放 Authlib-Injector 的位置，将 Storage 移入 MultiStorage 的步骤往后推迟
+        // 正常流程建议创建后直接移入 MultiStorage，需要时通过 get 方法取用
+        let storage = Storage::new(".minecraft").await?.share_preference(Hardlink);
+        // 生成临时文件清理任务
+        let (cleaner, shutdown) = storage.run_cleaner();
+        smol::spawn(cleaner).detach();
+
+        // 创建登录凭据
+        let auth =
+            // 此处使用 Yggdrasil 登录
+            auth::yggdrasil::Authentication::new_login(&cached_downloader)
+                // 注入 Authlib-Injector
+                .inject(&storage)
+                .await?
+                // 自定义 Yggdrasil 地址
+                .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<url::Url>()?)
+                .await?
+                // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
+                .username(
+                    std::env::var("USERNAME")
+                        .expect("Fill in the login credentials in the environment variable"),
+                )
+                // 用户密码
+                .password(
+                    std::env::var("PASSWORD")
+                        .expect("Fill in the login credentials in the environment variable"),
+                )
+                // 发送登录请求
+                .login()
+                .await?;
+
         // 构造 MultiStorage
         //
         // 由 MultiStorage 管理 Storage，MultiStorage 可用于全局配置
         // MultiStorageWithPlugin 可以根据需要管理生命周期与 Storage 一致的对象
         let storages = MultiStorageWithPlugin::new();
-
-        // 创建 Storage
-        let storage = Storage::new(".minecraft").await?.share_preference(Hardlink);
-        // 生成临时文件清理任务
-        let (cleaner, shutdown) = storage.run_cleaner();
-        smol::spawn(cleaner).detach();
         // 假设此处希望将清理任务与 Storage 绑定，则插件为 ShutdownGuard
         let storage_with_plugin = StorageWithPlugin {
             storage,
@@ -54,7 +81,14 @@ fn main() {
         };
         // Storage 移动至 MultiStorage 容器
         if storages.insert(storage_with_plugin).await.is_err() {
-            unreachable!("The first element cannot be failed.")
+            unreachable!("The first item cannot be failed.")
+        }
+
+        // 构造 MultiAccount
+        let accounts = MultiAccount::new();
+        // 将登录凭据移入 MultiAccount
+        if accounts.insert(auth.into()).await.is_err() {
+            unreachable!("The first item cannot be failed.")
         }
 
         // 构造 JavaManager
@@ -65,9 +99,9 @@ fn main() {
                 // 默认启用系统的 Java 运行时检测，此处关闭用于测试
                 .disable_system();
 
-        // 局部的操作阶段
+        // ———————————————————— 局部的操作阶段 ————————————————————
         {
-            // 获取全局资源
+            // ———————————————————— 获取全局资源 ————————————————————
 
             // 通过 ID 在局部获取 &Storage
             let id = storages.iter(|mut iter|
@@ -84,31 +118,7 @@ fn main() {
             // （进度监视器）
             let _guard = process_monitor(&downloader);
 
-            // 业务逻辑
-
-            // 创建登录凭据，也可以通过 MultiAccount 在全局管理
-            let auth =
-                // 此处使用 Yggdrasil 登录
-                auth::yggdrasil::Authentication::new_login(&downloader)
-                    // 注入 Authlib-Injector
-                    .inject(storage)
-                    .await?
-                    // 自定义 Yggdrasil 地址
-                    .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<url::Url>()?)
-                    .await?
-                    // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
-                    .username(
-                        std::env::var("USERNAME")
-                            .expect("Fill in the login credentials in the environment variable"),
-                    )
-                    // 用户密码
-                    .password(
-                        std::env::var("PASSWORD")
-                            .expect("Fill in the login credentials in the environment variable"),
-                    )
-                    // 发送登录请求
-                    .login()
-                    .await?;
+            // ———————————————————— 业务逻辑 ————————————————————
 
             // （清理测试残留）
             let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
@@ -181,12 +191,18 @@ fn main() {
 
             // 启动游戏
             //
+            // 获取登录凭据
+            let auth = accounts.iter(|mut iter| {
+                // 取第一个作为示例
+                let (id, _) = iter.next().unwrap();
+                accounts.get(id).unwrap()
+            });
             // 启动前的准备，令牌接近过期时自动续期
             auth.ready(&downloader).await?;
             // 声明游戏完整性（不提供检查），启动游戏需要此状态
             let instance = instance.ensure_ready();
             // 创建启动命令
-            let mut cmd = instance.launch(&auth).await?;
+            let mut cmd = instance.launch(auth.deref()).await?;
             // 启动进程并等待退出
             let exit = cmd.spawn()?.status().await?;
 

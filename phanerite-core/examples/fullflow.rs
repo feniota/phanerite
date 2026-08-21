@@ -27,7 +27,7 @@ fn main() {
         .init();
     // （用于测试阻塞时间）
     let executor = Executor::new();
-    let _guard = BlockingGuard::new(&executor);
+    let _guard = blocking_monitor(&executor);
 
     // 异步 Runtime
     if let Err(e) = smol::block_on(executor.run(async {
@@ -89,7 +89,7 @@ fn main() {
             // 下载任务组，应该一次性使用
             let downloader = cached_downloader.with_group();
             // （进度监视器）
-            let _g = monitor(&downloader).await;
+            let _guard = process_monitor(&downloader);
 
             // 业务逻辑
 
@@ -198,18 +198,18 @@ fn main() {
     }
 }
 
-struct ExitGuard {
-    exit: Arc<AtomicBool>,
-}
-
-impl Drop for ExitGuard {
-    fn drop(&mut self) {
-        self.exit.store(true, Relaxed)
-    }
-}
-
 /// 显示下载速度和进度
-async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
+fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
+    struct ExitGuard {
+        exit: Arc<AtomicBool>,
+    }
+
+    impl Drop for ExitGuard {
+        fn drop(&mut self) {
+            self.exit.store(true, Relaxed)
+        }
+    }
+
     let monitor = group.monitor();
     let g = ExitGuard {
         exit: Arc::new(AtomicBool::new(false)),
@@ -241,55 +241,52 @@ async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
 }
 
 /// 检测阻塞时间
-pub struct BlockingGuard {
-    stopped: Arc<AtomicBool>,
-    max_blocking_ns: Arc<AtomicU64>,
-}
+fn blocking_monitor(executor: &Executor<'static>) -> impl Drop {
+    pub struct BlockingGuard {
+        stopped: Arc<AtomicBool>,
+        max_blocking_ns: Arc<AtomicU64>,
+    }
+    impl Drop for BlockingGuard {
+        fn drop(&mut self) {
+            self.stopped.store(true, Relaxed);
 
-impl BlockingGuard {
-    pub fn new(executor: &Executor<'static>) -> Self {
-        let stopped = Arc::new(AtomicBool::new(false));
-        let max_blocking_ns = Arc::new(AtomicU64::new(0));
+            let max = Duration::from_nanos(self.max_blocking_ns.load(Relaxed));
 
-        let stopped2 = stopped.clone();
-        let max_blocking_ns2 = max_blocking_ns.clone();
-
-        executor
-            .spawn(async move {
-                let mut last = Instant::now();
-
-                loop {
-                    smol::Timer::after(Duration::from_millis(1)).await;
-
-                    let now = Instant::now();
-                    let elapsed = now.duration_since(last);
-                    last = now;
-
-                    // Timer 本身也可能因为 worker 被 blocking 而延迟执行
-                    let ns = elapsed.as_nanos() as u64;
-
-                    max_blocking_ns2.fetch_max(ns, Relaxed);
-
-                    if stopped2.load(Relaxed) {
-                        break;
-                    }
-                }
-            })
-            .detach();
-
-        Self {
-            stopped,
-            max_blocking_ns,
+            eprintln!("max blocking: {:.3} ms", max.as_secs_f64() * 1000.0,);
         }
     }
-}
 
-impl Drop for BlockingGuard {
-    fn drop(&mut self) {
-        self.stopped.store(true, Relaxed);
+    let stopped = Arc::new(AtomicBool::new(false));
+    let max_blocking_ns = Arc::new(AtomicU64::new(0));
 
-        let max = Duration::from_nanos(self.max_blocking_ns.load(Relaxed));
+    let stopped2 = stopped.clone();
+    let max_blocking_ns2 = max_blocking_ns.clone();
 
-        eprintln!("max blocking: {:.3} ms", max.as_secs_f64() * 1000.0,);
+    executor
+        .spawn(async move {
+            let mut last = Instant::now();
+
+            loop {
+                smol::Timer::after(Duration::from_millis(1)).await;
+
+                let now = Instant::now();
+                let elapsed = now.duration_since(last);
+                last = now;
+
+                // Timer 本身也可能因为 worker 被 blocking 而延迟执行
+                let ns = elapsed.as_nanos() as u64;
+
+                max_blocking_ns2.fetch_max(ns, Relaxed);
+
+                if stopped2.load(Relaxed) {
+                    break;
+                }
+            }
+        })
+        .detach();
+
+    BlockingGuard {
+        stopped,
+        max_blocking_ns,
     }
 }

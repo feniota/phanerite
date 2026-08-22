@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use gpui::prelude::*;
 use gpui::*;
 
 pub fn render() -> Img {

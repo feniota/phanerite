@@ -1,5 +1,9 @@
 # Phanerite Core
 
+[![Crates.io](https://img.shields.io/crates/v/phanerite-core.svg)](https://crates.io/crates/your-crate)
+[![Documentation](https://docs.rs/phanerite-core/badge.svg)](https://docs.rs/phanerite-core)
+[![License](https://img.shields.io/crates/l/phanerite-core.svg)](../LICENSE)
+
 A Minecraft launcher core library written in Rust.
 
 [简体中文](README.zh-CN.md)

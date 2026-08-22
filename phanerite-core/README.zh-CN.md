@@ -1,5 +1,9 @@
 # Phanerite Core
 
+[![Crates.io](https://img.shields.io/crates/v/phanerite-core.svg)](https://crates.io/crates/your-crate)
+[![Documentation](https://docs.rs/phanerite-core/badge.svg)](https://docs.rs/phanerite-core)
+[![License](https://img.shields.io/crates/l/phanerite-core.svg)](../LICENSE)
+
 一个使用 Rust 编写的 Minecraft 启动器核心库。
 
 [English](README.md)

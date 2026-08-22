@@ -20,17 +20,21 @@ pub enum Error {
     #[error("Url parse error: {0}")]
     UrlParseErr(#[from] url::ParseError),
 
-    /// 用于 Moka 的缓存错误
+    // 用于 Moka 的缓存错误
+    /// Cache error, used by Moka
     #[error(transparent)]
     CacheErrors(#[from] Arc<Self>),
-    /// Yggdrasil 错误，迁移自 Aphanite
+    // Yggdrasil 错误，迁移自 Aphanite
+    /// Yggdrasil error, ported from Aphanite
     #[error(transparent)]
     Yggdrasil(#[from] YggdrasilError),
-    /// 微软登录链路中的错误
+    // 微软登录链路中的错误
+    /// Error somewhere in the Microsoft login chain
     #[error(transparent)]
     Microsoft(#[from] MicrosoftError),
 
-    /// 用户取消操作
+    // 用户取消操作
+    /// The user cancelled the operation
     #[error("Operation cancelled")]
     Cancelled,
     #[error("{0}")]

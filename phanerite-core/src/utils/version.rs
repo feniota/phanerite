@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
-/// 比较两个版本号字符串大小，不严格保证正确，仅用于人类可读信息
+// 比较两个版本号字符串大小，不严格保证正确，仅用于人类可读信息
+/// Compares two version strings; not strictly guaranteed to be correct, for
+/// human-readable information only
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
     let a = tokenize(a);
     let b = tokenize(b);
@@ -28,7 +30,9 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
     Ordering::Equal
 }
 
-/// 判断版本号字符串是否为稳定版，不严格保证正确，仅用于人类可读信息
+// 判断版本号字符串是否为稳定版，不严格保证正确，仅用于人类可读信息
+/// Returns whether a version string denotes a stable release; not strictly
+/// guaranteed to be correct, for human-readable information only
 pub fn is_stable(version: &str) -> bool {
     let lower = version.to_ascii_lowercase();
 

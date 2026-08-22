@@ -4,8 +4,11 @@ use crate::utils::container::{Container, Guard};
 
 pub type MultiStorage = Container<Storage>;
 
-/// 带插件的 Storage
-/// 可以存 DownloaderWithCache，清理线程的 Shutdown 等需要与 Storage 相同生命周期的内容
+// 带插件的 Storage
+// 可以存 DownloaderWithCache，清理线程的 Shutdown 等需要与 Storage 相同生命周期的内容
+/// `Storage` with a plugin
+/// Can hold things that need the same lifetime as `Storage`, such as
+/// `DownloaderWithCache` or the cleaner thread's shutdown guard
 pub struct StorageWithPlugin<P> {
     pub storage: Storage,
     pub plugin: P,

@@ -4,7 +4,8 @@ use crate::utils::state::NotReady;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// 离线登录
+// 离线登录
+/// Offline login
 #[derive(Serialize, Deserialize)]
 pub struct Authentication {
     pub nickname: String,
@@ -21,7 +22,8 @@ impl Authentication {
     }
 }
 
-/// 离线登录由 UUID 确定
+// 离线登录由 UUID 确定
+/// An offline login is identified by its UUID
 impl PartialEq for Authentication {
     fn eq(&self, other: &Self) -> bool {
         self.uuid == other.uuid
@@ -36,13 +38,15 @@ impl super::Authentication for Authentication {
             .required(&self.nickname, self.uuid.to_string(), "0")
             .legacy("0", "legacy"))
     }
-    /// 没有会变化的状态，直接借用自身
+    // 没有会变化的状态，直接借用自身
+    /// No mutable state, so it just borrows itself
     async fn serialize(&self) -> impl Serialize {
         self
     }
 }
 
-/// 离线模式的 UUID 算法
+// 离线模式的 UUID 算法
+/// The UUID algorithm used in offline mode
 pub fn offline_uuid(username: &str) -> Uuid {
     let input = format!("OfflinePlayer:{username}");
 

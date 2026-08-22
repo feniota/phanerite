@@ -5,9 +5,12 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// 解压缓冲（新线程栈上）
+// 解压缓冲（新线程栈上）
+/// Extraction buffer (on the new thread's stack)
 const CHUNK_SIZE: usize = 64 * 1024;
-/// 线程栈 = 4× 缓冲，给解压库内部留足空间
+// 线程栈 = 4× 缓冲，给解压库内部留足空间
+/// Thread stack = 4x the buffer, leaving enough room for the extraction
+/// library's internals
 const STACK_SIZE: usize = CHUNK_SIZE * 4; // 256 KiB
 
 pub struct ExtractTask {

@@ -24,7 +24,8 @@ static FORGE_META: LazyLock<Url> = LazyLock::new(|| {
         .unwrap()
 });
 
-/// Forge 可能不想让你从 Maven 下载 client
+// Forge 可能不想让你从 Maven 下载 client
+/// Forge probably does not want you to download the client from Maven
 pub static UNAVAILABLE_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://unavailable.invalid").unwrap());
 

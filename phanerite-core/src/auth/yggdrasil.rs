@@ -49,38 +49,57 @@ impl<T> Response<T> {
     }
 }
 
-/// Yggdrasil 登录
+// Yggdrasil 登录
+/// Yggdrasil login
 #[derive(Deserialize)]
 pub struct Authentication {
-    /// 服务器 base URL
+    // 服务器 base URL
+    /// Base URL of the server
     pub server: Url,
-    /// 邮箱
+    // 邮箱
+    /// Email address
     pub username: String,
-    /// 当前角色的 UUID，账户的身份，登录后不再变化
+    // 当前角色的 UUID，账户的身份，登录后不再变化
+    //
+    // 与 `State::selected_profile` 的 `id` 一致，
+    // 后者的名称与属性会随续期更新
+    /// UUID of the current profile, the identity of the account, which does not
+    /// change after login
     ///
-    /// 与 `State::selected_profile` 的 `id` 一致，
-    /// 后者的名称与属性会随续期更新
+    /// It matches the `id` of `State::selected_profile`, whose name and
+    /// properties are updated on renewal
     selected: Option<Uuid>,
 
-    /// 材质域名白名单
+    // 材质域名白名单
+    /// Allowlist of texture domains
     pub skin_domains: Vec<String>,
-    /// 验证角色属性的数字签名公钥
+    // 验证角色属性的数字签名公钥
+    /// Public key used to verify the digital signature of profile properties
     pub signature_publickey: String,
-    /// 服务器元信息
+    // 服务器元信息
+    /// Server metadata
     pub meta_info: MetaInfo,
 
-    /// 会随续期变化的部分
+    // 会随续期变化的部分
+    /// The part that changes on renewal
     #[serde(with = "crate::utils::lock")]
     state: RwLock<State>,
 
-    /// Storage 局部的路径，反序列化后需要 `set_injector()` 重新解析
+    // Storage 局部的路径，反序列化后需要 `set_injector()` 重新解析
+    /// Path local to the `Storage`; after deserialization it has to be resolved
+    /// again with `set_injector()`
     #[serde(skip)]
     authlib_injector: OnceCell<PathBuf>,
 }
 
-/// [`Authentication`] 的快照，与 [`Authentication`] 的序列化格式一致
+// [`Authentication`] 的快照，与 [`Authentication`] 的序列化格式一致
+//
+// 不变的部分借用自 [`Authentication`]，只复制锁内的状态
+/// Snapshot of an [`Authentication`], matching [`Authentication`]'s
+/// serialization format
 ///
-/// 不变的部分借用自 [`Authentication`]，只复制锁内的状态
+/// The immutable parts are borrowed from the [`Authentication`]; only the state
+/// inside the lock is copied
 #[derive(Serialize)]
 pub struct Data<'a> {
     server: &'a Url,
@@ -92,7 +111,8 @@ pub struct Data<'a> {
     state: State,
 }
 
-/// 会随续期变化的会话状态
+// 会随续期变化的会话状态
+/// Session state that changes on renewal
 #[derive(Serialize, Deserialize)]
 struct State {
     #[serde(with = "crate::utils::secret")]
@@ -100,19 +120,27 @@ struct State {
     #[serde(with = "crate::utils::secret")]
     client_token: SecretString,
 
-    /// 可用的玩家档案
+    // 可用的玩家档案
+    /// Available player profiles
     available_profiles: Vec<GameProfile>,
-    /// 当前选择的玩家档案
+    // 当前选择的玩家档案
+    /// Currently selected player profile
     selected_profile: Option<GameProfile>,
-    /// 用户档案
+    // 用户档案
+    /// User profile
     user: GameProfile,
 }
 
 impl State {
-    /// 复制一份用于序列化
+    // 复制一份用于序列化
+    //
+    // `SecretString` 没有 `Clone`，这里明确地复制明文；
+    // 序列化本身就要写出明文，多这一份短暂的副本不会额外暴露什么
+    /// Makes a copy for serialization
     ///
-    /// `SecretString` 没有 `Clone`，这里明确地复制明文；
-    /// 序列化本身就要写出明文，多这一份短暂的副本不会额外暴露什么
+    /// `SecretString` is not `Clone`, so the plaintext is copied explicitly
+    /// here; serialization has to write out the plaintext anyway, so this one
+    /// short-lived copy exposes nothing extra
     fn snapshot(&self) -> Self {
         Self {
             access_token: copy_secret(&self.access_token),
@@ -140,7 +168,8 @@ pub struct Login<'a, S, U, P, D: Downloader> {
 }
 
 impl<'a> Authentication {
-    /// 创建登录会话
+    // 创建登录会话
+    /// Creates a login session
     pub fn new_login<D: Downloader>(
         downloader: &'a D,
     ) -> Login<'a, NotReady, NotReady, NotReady, D> {
@@ -161,7 +190,8 @@ impl<'a> Authentication {
         }
     }
 
-    /// 取一份可以持久化的快照
+    // 取一份可以持久化的快照
+    /// Takes a snapshot that can be persisted
     pub async fn snapshot(&self) -> Data<'_> {
         Data {
             server: &self.server,
@@ -173,39 +203,53 @@ impl<'a> Authentication {
             state: self.state.read().await.snapshot(),
         }
     }
-    /// 当前角色的 UUID，账户的身份
+    // 当前角色的 UUID，账户的身份
+    /// UUID of the current profile, the identity of the account
     pub fn selected(&self) -> Option<Uuid> {
         self.selected
     }
-    /// 当前选择的玩家档案的副本
+    // 当前选择的玩家档案的副本
+    /// A copy of the currently selected player profile
     pub async fn selected_profile(&self) -> Option<GameProfile> {
         self.state.read().await.selected_profile.clone()
     }
-    /// 可用玩家档案的副本
+    // 可用玩家档案的副本
+    /// A copy of the available player profiles
     pub async fn available_profiles(&self) -> Vec<GameProfile> {
         self.state.read().await.available_profiles.clone()
     }
-    /// 用户档案的副本
+    // 用户档案的副本
+    /// A copy of the user profile
     pub async fn user(&self) -> GameProfile {
         self.state.read().await.user.clone()
     }
-    /// 在回调中读取访问令牌
+    // 在回调中读取访问令牌
+    /// Reads the access token inside a callback
     pub async fn with_access_token<R>(&self, f: impl FnOnce(&str) -> R) -> R {
         f(self.state.read().await.access_token.expose_secret())
     }
 
-    /// 刷新令牌
+    // 刷新令牌
+    //
+    // 令牌已经绑定角色，续期时不能再指定，
+    // 换角色参见 [`Authentication::select()`]
+    /// Refreshes the token
     ///
-    /// 令牌已经绑定角色，续期时不能再指定，
-    /// 换角色参见 [`Authentication::select()`]
+    /// The token is already bound to a profile, so no profile can be specified
+    /// on renewal; to switch profiles see [`Authentication::select()`]
     pub async fn refresh(&self, update_user: bool, downloader: &impl Downloader) -> Result<()> {
         self.renew(self.state.upgradable_read().await, update_user, downloader)
             .await
     }
-    /// 在续期临界区内完成刷新并提交
+    // 在续期临界区内完成刷新并提交
+    //
+    // 网络交互期间只持有可升级读锁，不阻塞读者；
+    // 中途返回错误时本地状态原封不动
+    /// Performs the refresh and commits it inside the renewal critical section
     ///
-    /// 网络交互期间只持有可升级读锁，不阻塞读者；
-    /// 中途返回错误时本地状态原封不动
+    /// Only an upgradable read lock is held during the network exchange, so
+    /// readers are not blocked; if an error is returned partway through, the
+    /// local state is left untouched
     async fn renew(
         &self,
         guard: RwLockUpgradableReadGuard<'_, State>,
@@ -237,13 +281,23 @@ impl<'a> Authentication {
 
         Ok(())
     }
-    /// 为尚未绑定角色的令牌选择角色
+    // 为尚未绑定角色的令牌选择角色
+    //
+    // Yggdrasil 的令牌一旦绑定角色就不能改选，因此这里返回一个绑定了
+    // 该角色的新账户；原账户的令牌已经被服务端作废，调用方应当把它
+    // 从容器中移除，再放入返回的账户。
+    //
+    // 已经绑定角色时返回错误，换角色需要重新登录
+    /// Selects a profile for a token that is not bound to one yet
     ///
-    /// Yggdrasil 的令牌一旦绑定角色就不能改选，因此这里返回一个绑定了
-    /// 该角色的新账户；原账户的令牌已经被服务端作废，调用方应当把它
-    /// 从容器中移除，再放入返回的账户。
+    /// Once a Yggdrasil token is bound to a profile the choice cannot be
+    /// changed, so this returns a new account bound to that profile; the
+    /// original account's token has already been invalidated by the server, so
+    /// the caller should remove it from the container and insert the returned
+    /// account instead.
     ///
-    /// 已经绑定角色时返回错误，换角色需要重新登录
+    /// Returns an error when a profile is already bound; switching profiles
+    /// requires logging in again
     pub async fn select(&self, profile: Uuid, downloader: &impl Downloader) -> Result<Self> {
         if self.selected.is_some() {
             return Err(Error::other("The token is already bound to a profile"));
@@ -288,7 +342,8 @@ impl<'a> Authentication {
                 .unwrap_or_default(),
         })
     }
-    /// 检验令牌
+    // 检验令牌
+    /// Validates the token
     pub async fn validate(&self, downloader: &impl Downloader) -> Result<bool> {
         // 查询的是服务端的令牌状态，不与续期并发
         let guard = self.state.upgradable_read().await;
@@ -300,9 +355,13 @@ impl<'a> Authentication {
         )
         .await
     }
-    /// 吊销令牌
+    // 吊销令牌
+    //
+    // 调用后本账户的令牌即失效，应当立即把它从容器中移除
+    /// Revokes the token
     ///
-    /// 调用后本账户的令牌即失效，应当立即把它从容器中移除
+    /// This account's token becomes invalid right after the call, so it should
+    /// be removed from the container immediately
     pub async fn invalidate(&self, downloader: &impl Downloader) -> Result<()> {
         // 会作废令牌，不能与续期并发
         let guard = self.state.upgradable_read().await;
@@ -314,10 +373,14 @@ impl<'a> Authentication {
         )
         .await
     }
-    /// 退出登录
+    // 退出登录
+    //
+    // 会作废该账户在服务器上的所有令牌，
+    // 应当立即把相关账户从容器中移除
+    /// Signs out
     ///
-    /// 会作废该账户在服务器上的所有令牌，
-    /// 应当立即把相关账户从容器中移除
+    /// This invalidates every token this account holds on the server, so the
+    /// affected accounts should be removed from the container immediately
     pub async fn signout(
         &self,
         password: &SecretString,
@@ -326,10 +389,15 @@ impl<'a> Authentication {
         let _guard = self.state.upgradable_read().await;
         signout(self.server.clone(), &self.username, password, downloader).await
     }
-    /// 重新登录，用于 `ready()` 无法续期时
+    // 重新登录，用于 `ready()` 无法续期时
+    //
+    // 需要用户重新输入密码，登录后会保持原有的角色，
+    // 原角色已不可用时返回错误
+    /// Logs in again, for when `ready()` cannot renew
     ///
-    /// 需要用户重新输入密码，登录后会保持原有的角色，
-    /// 原角色已不可用时返回错误
+    /// The user has to enter the password again; the original profile is kept
+    /// after logging in, and an error is returned when that profile is no
+    /// longer available
     pub async fn relogin(
         &self,
         password: &SecretString,
@@ -358,7 +426,9 @@ impl<'a> Authentication {
 
         outcome
     }
-    /// 重新登录后恢复原有的角色绑定，就地更新 `res`
+    // 重新登录后恢复原有的角色绑定，就地更新 `res`
+    /// Restores the original profile binding after logging in again, updating
+    /// `res` in place
     async fn rebind(&self, res: &mut ResponseLogin, downloader: &impl Downloader) -> Result<()> {
         let selected = res.selected_profile.as_ref().map(GameProfile::uuid);
 
@@ -404,7 +474,9 @@ impl<'a> Authentication {
         Ok(())
     }
 
-    /// 重新解析 Authlib-Injector 的路径，反序列化后需要
+    // 重新解析 Authlib-Injector 的路径，反序列化后需要
+    /// Resolves the Authlib-Injector path again, which is needed after
+    /// deserialization
     pub async fn set_injector(
         &self,
         storage: &Storage,
@@ -421,7 +493,8 @@ impl<'a> Authentication {
         Ok(())
     }
 
-    /// 配置预获取
+    // 配置预获取
+    /// Prefetched configuration
     pub fn meta_base64(&self) -> String {
         let meta = FullMeta {
             meta: self.meta_info.clone(),
@@ -433,7 +506,9 @@ impl<'a> Authentication {
     }
 }
 
-/// 续期请求，`select` 只在令牌尚未绑定角色时可以指定
+// 续期请求，`select` 只在令牌尚未绑定角色时可以指定
+/// Renewal request; `select` can only be specified while the token is not bound
+/// to a profile yet
 async fn refresh_request(
     server: &Url,
     access_token: &SecretString,
@@ -477,7 +552,8 @@ struct ResponseRefresh {
     user: Option<GameProfile>,
 }
 
-/// 检验令牌，仍然有效时返回 `true`
+// 检验令牌，仍然有效时返回 `true`
+/// Validates the token; returns `true` while it is still valid
 async fn validate_request(
     server: &Url,
     access_token: &SecretString,
@@ -497,7 +573,8 @@ async fn validate_request(
     Ok(status == 204)
 }
 
-/// 吊销令牌
+// 吊销令牌
+/// Revokes the token
 async fn invalidate_request(
     server: &Url,
     access_token: &SecretString,
@@ -522,7 +599,8 @@ struct RequestToken<'a> {
     client_token: &'a str,
 }
 
-/// 拼接 `authserver` 下的端点地址
+// 拼接 `authserver` 下的端点地址
+/// Assembles the address of an endpoint under `authserver`
 fn endpoint(server: &Url, path: &str) -> Result<Url> {
     let mut url = server.clone();
     url.path_segments_mut()
@@ -532,9 +610,12 @@ fn endpoint(server: &Url, path: &str) -> Result<Url> {
     Ok(url)
 }
 
-/// Yggdrasil 登录由服务器、用户名与角色确定
+// Yggdrasil 登录由服务器、用户名与角色确定
+//
+// 同一账户下的不同角色是相互独立的
+/// A Yggdrasil login is identified by its server, username and profile
 ///
-/// 同一账户下的不同角色是相互独立的
+/// Different profiles under the same account are independent of each other
 impl PartialEq for Authentication {
     fn eq(&self, other: &Self) -> bool {
         self.server == other.server
@@ -557,7 +638,8 @@ impl<'a, S, U, P, D: Downloader> Login<'a, S, U, P, D> {
 }
 
 impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
-    /// 自定义的验证服务器地址
+    // 自定义的验证服务器地址
+    /// Address of a custom authentication server
     pub async fn custom(mut self, url: impl Into<Url>) -> Result<Login<'a, Url, U, P, D>> {
         let url = self.get_ali(url.into()).await;
         self.update_meta(&url).await?;
@@ -585,7 +667,8 @@ impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
             .and_then(|t| t.parse().ok())
             .unwrap_or(url)
     }
-    /// 必须执行的操作，否则会 `unwrap()`
+    // 必须执行的操作，否则会 `unwrap()`
+    /// This has to be run, otherwise there will be an `unwrap()`
     async fn update_meta(&mut self, url: &Url) -> Result<()> {
         let res = self.downloader.fetch(url.clone(), None).await?;
         let res = serde_json::from_slice::<Response<FullMeta>>(&res)?.into_result()?;
@@ -664,7 +747,8 @@ pub struct GameProfile {
 }
 
 impl GameProfile {
-    /// 角色的 UUID
+    // 角色的 UUID
+    /// UUID of the profile
     pub fn uuid(&self) -> Uuid {
         self.id.clone().into()
     }
@@ -681,7 +765,8 @@ pub struct ProfileProperty {
 }
 
 impl<'a, D: Downloader> Login<'a, Url, String, SecretString, D> {
-    /// 完成登录
+    // 完成登录
+    /// Completes the login
     pub async fn login(self) -> Result<Authentication> {
         let client_token = SecretString::from(Uuid::now_v7().simple().to_string());
         let res = authenticate(
@@ -844,9 +929,14 @@ impl super::Authentication for Authentication {
             }
         }
     }
-    /// Yggdrasil 的令牌没有明确的有效期，只能先校验再续期
+    // Yggdrasil 的令牌没有明确的有效期，只能先校验再续期
+    //
+    // 返回错误时需要用户重新输入密码，并调用 [`Authentication::relogin()`]
+    /// Yggdrasil tokens have no explicit lifetime, so they can only be
+    /// validated first and renewed afterwards
     ///
-    /// 返回错误时需要用户重新输入密码，并调用 [`Authentication::relogin()`]
+    /// When an error is returned, the user has to enter the password again and
+    /// [`Authentication::relogin()`] has to be called
     async fn ready(&self, downloader: &impl Downloader) -> Result<()> {
         // 校验和续期是一个整体，中途被其他续期插入会让校验结果失效，
         // 因此在同一个临界区里完成，期间不再调用其他 `&self` 方法

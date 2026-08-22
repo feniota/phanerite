@@ -102,9 +102,12 @@ impl OptionEditor {
     }
 }
 
-/// 解析一行配置，返回 `(key, value)`。
+// 解析一行配置，返回 `(key, value)`。
+//
+// 无法确定是配置的行会被忽略。
+/// Parses one configuration line and returns `(key, value)`.
 ///
-/// 无法确定是配置的行会被忽略。
+/// Lines that cannot be identified as configuration are ignored.
 pub(super) fn parse_config_line(line: &str) -> Option<(&str, &str)> {
     let line = line.trim();
 

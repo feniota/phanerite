@@ -86,11 +86,13 @@ impl<'a, D: Downloader> DownloadGroup<'a, D> {
             monitor: Default::default(),
         }
     }
-    /// 获取监视器
+    // 获取监视器
+    /// Gets the monitor
     pub fn monitor(&self) -> Monitor {
         self.monitor.clone()
     }
-    /// 立即执行任务
+    // 立即执行任务
+    /// Runs the tasks immediately
     pub async fn join<'cx>(
         &self,
         tasks: impl IntoIterator<Item = DownloadTask<'cx>>,

@@ -3,7 +3,8 @@ use crate::mod_project::{ModProject, ModsRepository};
 use futures::{Stream, StreamExt};
 use strum::{AsRefStr, Display, EnumString};
 
-/// 项目类型
+// 项目类型
+/// Project type
 #[derive(Copy, Clone, PartialEq, Eq, AsRefStr, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ProjectType {
@@ -14,7 +15,8 @@ pub enum ProjectType {
     Other,
 }
 
-/// 模组加载器
+// 模组加载器
+/// Mod loader
 #[derive(Clone, PartialEq, Eq, AsRefStr, EnumString, Display)]
 pub enum ModsLoader {
     #[strum(serialize = "neoforge")]
@@ -25,7 +27,8 @@ pub enum ModsLoader {
     Other(String),
 }
 
-/// 筛选条件
+// 筛选条件
+/// Filter criteria
 #[derive(Eq)]
 pub struct FilterCriteria {
     pub project_type: Option<ProjectType>,

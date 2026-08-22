@@ -3,7 +3,8 @@ use std::fmt;
 use std::str::FromStr;
 use url::Url;
 
-/// 用于解析 Maven 坐标，并根据 Maven 坐标生成路径和 URL
+// 用于解析 Maven 坐标，并根据 Maven 坐标生成路径和 URL
+/// Parses Maven coordinates and builds paths and URLs from them
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MavenArtifact {
     pub group: String,
@@ -14,7 +15,8 @@ pub struct MavenArtifact {
 }
 
 impl MavenArtifact {
-    /// 生成路径字符串
+    // 生成路径字符串
+    /// Builds the path string
     pub fn path(&self) -> String {
         let mut filename = format!("{}-{}", self.artifact, self.version);
 
@@ -34,7 +36,8 @@ impl MavenArtifact {
             filename
         )
     }
-    /// 生成路径 URL
+    // 生成路径 URL
+    /// Builds the path URL
     pub fn url(&self, base: &Url) -> crate::error::Result<Url> {
         base.join(&self.path())
             .map_err(|e| crate::error::Error::other(e.to_string()))

@@ -63,7 +63,8 @@ impl Drop for ExitGuard {
     }
 }
 
-/// 显示下载速度和进度
+// 显示下载速度和进度
+/// Shows the download speed and progress
 async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
     let monitor = group.monitor();
     let g = ExitGuard {

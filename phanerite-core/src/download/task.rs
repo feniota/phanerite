@@ -231,27 +231,33 @@ impl DownloadProcess {
         self.inner.state.store(STATE_CANCELLED, Release);
         self.inner.event.notify(usize::MAX);
     }
-    /// 下载任务未开始
+    // 下载任务未开始
+    /// The download task has not started
     pub fn is_pending(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_PENDING
     }
-    /// 下载任务开始，以及开始后的状态
+    // 下载任务开始，以及开始后的状态
+    /// The download task has started, plus every state after that
     pub fn is_started(&self) -> bool {
         self.inner.state.load(Acquire) >= STATE_STARTED
     }
-    /// 下载任务正在解压
+    // 下载任务正在解压
+    /// The download task is extracting
     pub fn is_extracting(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_EXTRACTING
     }
-    /// 下载任务正常完成
+    // 下载任务正常完成
+    /// The download task finished normally
     pub fn is_finished(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_FINISHED
     }
-    /// 下载任务失败
+    // 下载任务失败
+    /// The download task failed
     pub fn is_failed(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_FAILED
     }
-    /// 下载任务取消
+    // 下载任务取消
+    /// The download task was cancelled
     pub fn is_canceled(&self) -> bool {
         self.inner.state.load(Acquire) == STATE_CANCELLED
     }
@@ -285,7 +291,8 @@ impl DownloadProcess {
     }
 }
 
-/// 检验文件存在
+// 检验文件存在
+/// Checks that the files exist
 pub fn filter_existed<'cx>(
     tasks: impl Iterator<Item = DownloadTask<'cx>>,
     default: bool,
@@ -299,7 +306,8 @@ pub fn filter_existed<'cx>(
     })
 }
 
-/// 检验文件 Hash
+// 检验文件 Hash
+/// Checks the files' hashes
 pub fn filter_hash<'cx>(
     tasks: impl Stream<Item = DownloadTask<'cx>>,
     default: bool,

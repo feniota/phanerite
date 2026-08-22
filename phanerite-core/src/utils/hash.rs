@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::Path;
 
-/// 校验文件 Hash
+// 校验文件 Hash
+/// Verifies a file's hash
 pub(crate) async fn hash_file(path: &Path, hash: &Hash) -> Result<()> {
     // 空哈希表示不要求校验，直接通过
     if hash.is_empty() {

@@ -80,7 +80,8 @@ impl JavaRuntime {
     }
 }
 
-/// 列出内建 Java
+// 列出内建 Java
+/// Lists the bundled Java installations
 pub fn list_build_in(storage: impl AsRef<Storage>) -> impl Stream<Item = PathBuf> {
     #[allow(clippy::large_enum_variant)]
     enum State<F>
@@ -114,7 +115,8 @@ pub fn list_build_in(storage: impl AsRef<Storage>) -> impl Stream<Item = PathBuf
     .map(|x| std::path::absolute(&x).unwrap_or(x))
 }
 
-/// 探测系统的 Java
+// 探测系统的 Java
+/// Detects the system's Java installations
 pub fn detect_system() -> impl Stream<Item = PathBuf> {
     let java_home = env::var_os("JAVA_HOME")
         .map(PathBuf::from)
@@ -133,9 +135,11 @@ pub fn detect_system() -> impl Stream<Item = PathBuf> {
 pub struct JavaManager<'scan, S: RuntimeScanPath> {
     javas: scc::HashSet<JavaRuntime>,
 
-    /// 是否扫描系统 Java
+    // 是否扫描系统 Java
+    /// Whether to scan the system's Java installations
     system: bool,
-    /// 内建 Runtime 扫描路径
+    // 内建 Runtime 扫描路径
+    /// Scan paths for the bundled runtimes
     scan_paths: &'scan S,
 }
 

@@ -1,22 +1,111 @@
-MIT License
+Phanerite
+Copyright (c) 2026 The Feniota Team
 
-Copyright (c) 2026 feniota
+This repository contains two separately licensed software components:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. The `phanerite-core` component, including the files contained in
+   `phanerite-core/` unless a file states otherwise, is dual-licensed,
+   at the licensee's option, under either:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+   (a) the Apache License, Version 2.0; or
+   (b) the MIT License.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   The complete texts of these licenses are provided in
+   `phanerite-core/LICENSE-APACHE` and `phanerite-core/LICENSE-MIT`,
+   respectively. A licensee may elect either license for each
+   applicable copy or derivative work, subject to the terms and
+   conditions of the selected license.
 
+2. The `phanerite-app` component, including the files contained in
+   `phanerite-app/` unless a file states otherwise, is licensed under
+   the GNU General Public License, Version 3, as published by the Free
+   Software Foundation, or, at the licensee's option, any later version
+   (the "GPL").
+
+   The complete text of the GPL is provided in `phanerite-app/LICENSE`.
+   The `phanerite-app` component may be copied, modified, and
+   distributed only in accordance with the GPL.
+
+The foregoing component-specific licenses are independent. No license
+is granted to any component under a different license merely because
+that component is distributed in this repository. In particular, the
+Apache-2.0/MIT dual license for `phanerite-core` does not relicense
+`phanerite-app`, and the GPL applicable to `phanerite-app` does not
+relicense `phanerite-core`.
+
+Where the components are linked, combined, or distributed together,
+the resulting distribution must comply with all applicable license
+terms, including the GPL requirements applicable to the
+`phanerite-app` component and the combined work. Nothing in this
+notice limits any permission or imposes any condition beyond the
+applicable license texts.
+
+Files not included in either component, including documentation,
+artwork, configuration, and other repository materials, are licensed
+only to the extent expressly stated in those files or in the
+corresponding directory-level notice. If no such statement exists,
+those materials are not, by this notice alone, granted permission for
+use, reproduction, modification, or distribution beyond the rights
+provided by applicable law.
+
+Third-party dependencies and other third-party materials remain subject
+to their respective licenses. This notice does not grant permission to
+use any name, trademark, logo, or other indication of origin belonging
+to the copyright holders or third parties, except as necessary for
+reasonable attribution and license compliance.
+
+Unless required by applicable law or agreed to in writing, all
+components and materials in this repository are provided on an "AS IS"
+BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or
+implied, including, without limitation, warranties of
+merchantability, fitness for a particular purpose, title, and
+non-infringement. To the maximum extent permitted by applicable law,
+no copyright holder or contributor shall be liable for any direct,
+indirect, incidental, special, exemplary, or consequential damages
+arising from or relating to the use of, or inability to use, the
+repository or its contents.
+
+----------------------------------------------------------------------
+
+Phanerite
+
+版权所有 (c) 2026 Feniota 团队
+
+本代码仓库包含两个分别授权的软件组件：
+
+1. phanerite-core 组件‌，包括 phanerite-core/ 目录中包含的文件（除非该文件另有声
+   明），采用双重许可方式，被许可方可自行选择适用以下任一许可：
+
+   (a) Apache 许可证，第 2.0 版；或
+   (b) MIT 许可证。
+
+   上述许可证的完整文本分别载于 phanerite-core/LICENSE-APACHE 和
+   phanerite-core/LICENSE-MIT。被许可方可就每一适用的副本或改编作品选择适用任一许可证，
+   但须遵守所选许可证的条款和条件。
+
+2. phanerite-app 组件‌，包括 phanerite-app/ 目录中包含的文件（除非该文件另有声明），
+   适用由自由软件基金会发布的 GNU 通用公共许可证第 3 版，或由被许可方自行选择的任何后续版
+   本（以下简称"GPL"）。
+
+   GPL 的完整文本载于 phanerite-app/LICENSE。phanerite-app 组件仅得依据 GPL 的规定
+   进行复制、修改和分发。
+
+上述各组件的许可相互独立。仅因某一组件与本代码仓库一并分发，并不意味该组件在不同于其自身许可
+的条件下获得授权。特别是，phanerite-core 的 Apache-2.0/MIT 双重许可并不对 phanerite-app
+构成再许可，而适用于 phanerite-app 的 GPL 亦不对 phanerite-core 构成再许可。
+
+在各组件被链接、合并或一并分发的情况下，由此产生的整体分发必须符合所有适用的许可条款，包括适
+用于 phanerite-app 组件的 GPL 要求以及适用于整体作品的要求。本声明中的任何内容均不超出适
+用许可文本所载之权限范围或施加任何额外条件。
+
+不属于上述任一组件的文件，包括文档、美术作品、配置文件及其他代码仓库材料，仅在该等文件或相应
+目录级声明中明确载明的范围内获得许可。如无此类声明，仅凭本声明，该等材料不被授予使用、复制、
+修改或分发的权限，但适用法律所赋予的权利不在此限。
+
+第三方依赖项及其他第三方材料仍受其各自许可的约束。本声明并不授予使用属于版权持有人或第三方的
+任何名称、商标、标识或其他来源指示的权限，但为合理署名和许可合规所必要者除外。
+
+除非适用法律要求或经书面协议另行约定，本代码仓库中的所有组件和材料均按"现状"提供，不附带任何
+明示或暗示的保证或条件，包括但不限于适销性、特定用途适用性、所有权及不侵权的保证。在适用法律
+允许的最大范围内，任何版权持有人或贡献者均不对因使用或无法使用本代码仓库或其内容而产生或与之
+相关的任何直接、间接、附带、特殊、惩罚性或后果性损害承担责任。

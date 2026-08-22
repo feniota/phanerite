@@ -11,7 +11,6 @@ use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::Storage;
 use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
-use std::ops::Deref;
 
 fn main() {
     // （登录信息）
@@ -80,16 +79,12 @@ fn main() {
             plugin: shutdown,
         };
         // Storage 移动至 MultiStorage 容器
-        if storages.insert(storage_with_plugin).await.is_err() {
-            unreachable!("The first item cannot be failed.")
-        }
+        storages.insert(storage_with_plugin).await;
 
         // 构造 MultiAccount
         let accounts = MultiAccount::new();
         // 将登录凭据移入 MultiAccount
-        if accounts.insert(auth.into()).await.is_err() {
-            unreachable!("The first item cannot be failed.")
-        }
+        accounts.insert(auth.into()).await;
 
         // 构造 JavaManager
         let java_manager =
@@ -103,13 +98,11 @@ fn main() {
         {
             // ———————————————————— 获取全局资源 ————————————————————
 
-            // 通过 ID 在局部获取 &Storage
-            let id = storages.iter(|mut iter|
-                // 此处取第一个作为示例
-                iter.next().map(|(id, _)| *id).unwrap());
-            // Guard 保证 Storage 在当前作用域不会被释放
-            // 但是不保证不会被删除，再次使用 storages.get(&id) 不一定为 Some()
-            let storage_with_plugin = storages.get(&id).unwrap();
+            // 获取 Storage，取第一个为例
+            // Guard 保证 Storage 在当前作用域不会被释放，但是不保证不会被删除
+            // 因此任何时候使用 storages.try_get(&id) 都可能为 None
+            // 如果希望避免复杂的 id 维护和手动 CAS，请使用 .snapshot()
+            let storage_with_plugin = storages.snapshot().into_iter().next().unwrap();
             // StorageWithPlugin 已实现 AsRef<Storage>
             let storage = storage_with_plugin.as_ref();
 
@@ -146,10 +139,8 @@ fn main() {
             let java = java_manager
                 // 获取符合 major 版本的 JavaRuntime，若不存在则安装，需要传入闭包选择安装位置（需要保证选择的位置在扫描范围内）
                 .get_or_install::<Zulu>(instance.java_major(), &downloader, async |x| {
-                    // 此处的 unwrap() 在并发中并不安全
-                    // id 指向的 Storage 可能被删除
-                    x.get(&id)
-                        .expect("Please do not write like this in the production environment.")
+                    // 取第一个为例
+                    x.snapshot().into_iter().next().unwrap()
                 })
                 .await?;
             // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
@@ -191,18 +182,14 @@ fn main() {
 
             // 启动游戏
             //
-            // 获取登录凭据
-            let auth = accounts.iter(|mut iter| {
-                // 取第一个作为示例
-                let (id, _) = iter.next().unwrap();
-                accounts.get(id).unwrap()
-            });
+            // 获取登录凭据，取第一个为例
+            let auth = accounts.snapshot().into_iter().next().unwrap();
             // 启动前的准备，令牌接近过期时自动续期
             auth.ready(&downloader).await?;
             // 声明游戏完整性（不提供检查），启动游戏需要此状态
             let instance = instance.ensure_ready();
             // 创建启动命令
-            let mut cmd = instance.launch(auth.deref()).await?;
+            let mut cmd = instance.launch(&auth).await?;
             // 启动进程并等待退出
             let exit = cmd.spawn()?.status().await?;
 

@@ -32,15 +32,14 @@ use crate::error::Result;
 use crate::instance::Instance;
 use crate::instance::arguments::LaunchArguments;
 use crate::instance::variables::Variables;
-use crate::utils::container::Container;
+use crate::utils::container::{Container, Guard};
 use crate::utils::state::NotReady;
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 
 pub mod microsoft;
 pub mod offline;
 pub mod yggdrasil;
-
-pub type MultiAccount = Container<Account>;
 
 // 临时的 trait，可能需要改进
 #[allow(async_fn_in_trait)]
@@ -148,5 +147,37 @@ impl Authentication for Account {
             Account::Microsoft(a) => a.ready(downloader).await,
             Account::Yggdrasil(a) => a.ready(downloader).await,
         }
+    }
+}
+
+pub type MultiAccount = Container<Account>;
+impl PartialEq for Guard<'_, Account> {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref() == other.deref()
+    }
+}
+impl Eq for Guard<'_, Account> {}
+impl Authentication for Guard<'_, Account> {
+    async fn vars(&self) -> Result<Variables<NotReady>> {
+        self.deref().vars().await
+    }
+
+    async fn serialize(&self) -> impl Serialize {
+        self.deref().serialize().await
+    }
+
+    fn inject(&self) -> impl AsyncFnOnce(&mut LaunchArguments) {
+        self.deref().inject()
+    }
+
+    async fn ready(&self, downloader: &impl Downloader) -> Result<()> {
+        self.deref().ready(downloader).await
+    }
+
+    async fn args<R: Clone, C: Clone>(
+        &self,
+        instance: &Instance<'_, R, C>,
+    ) -> Result<LaunchArguments> {
+        self.deref().args(instance).await
     }
 }

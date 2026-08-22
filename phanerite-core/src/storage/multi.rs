@@ -32,11 +32,7 @@ impl RuntimeScanPath for MultiStorage {
     type Provider<'a> = Guard<'a, Storage>;
 
     fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_ {
-        self.iter(|iter| {
-            iter.map(|(id, _)| self.get(id).unwrap())
-                .collect::<Vec<_>>()
-        })
-        .into_iter()
+        self.snapshot().into_iter()
     }
 }
 
@@ -47,10 +43,6 @@ impl<P> RuntimeScanPath for MultiStorageWithPlugin<P> {
         P: 'a;
 
     fn storages(&self) -> impl Iterator<Item = Self::Provider<'_>> + '_ {
-        self.iter(|iter| {
-            iter.map(|(id, _)| self.get(id).unwrap())
-                .collect::<Vec<_>>()
-        })
-        .into_iter()
+        self.snapshot().into_iter()
     }
 }

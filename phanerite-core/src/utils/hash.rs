@@ -3,6 +3,7 @@ use futures::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::Path;
+use std::str::FromStr;
 
 // 校验文件 Hash
 /// Verifies a file's hash
@@ -42,6 +43,7 @@ pub trait HashValue:
     + fmt::Display
     + Serialize
     + for<'de> Deserialize<'de>
+    + FromStr<Err = Error>
     + Into<Hash>
 {
     const NAME: &'static str;
@@ -222,6 +224,29 @@ macro_rules! impl_hash_value {
             }
         }
 
+        impl FromStr for $name {
+            type Err = Error;
+
+            // 接受十六进制字符串，允许可选的 "算法:" 前缀
+            /// Accepts a hex string, with an optional `algorithm:` prefix
+            fn from_str(s: &str) -> Result<Self> {
+                let value = s.strip_prefix(concat!($algo, ":")).unwrap_or(s);
+
+                let bytes = hex::decode(value).map_err(|e| {
+                    Error::other(format!("invalid {} hash: {e}", <Self as HashValue>::NAME))
+                })?;
+
+                Self::from_bytes(&bytes).ok_or_else(|| {
+                    Error::other(format!(
+                        "invalid {} hash length: expected {} bytes, got {}",
+                        <Self as HashValue>::NAME,
+                        $size,
+                        bytes.len()
+                    ))
+                })
+            }
+        }
+
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
             where
@@ -229,10 +254,7 @@ macro_rules! impl_hash_value {
             {
                 let value = String::deserialize(deserializer)?;
 
-                let bytes = hex::decode(value).map_err(serde::de::Error::custom)?;
-
-                Self::from_bytes(&bytes)
-                    .ok_or_else(|| serde::de::Error::custom("invalid hash length"))
+                value.parse().map_err(serde::de::Error::custom)
             }
         }
 
@@ -297,6 +319,20 @@ impl<'de> Deserialize<'de> for EmptyHash {
     {
         <()>::deserialize(deserializer)?;
         Ok(Self)
+    }
+}
+
+impl FromStr for EmptyHash {
+    type Err = Error;
+
+    // 空哈希只接受 "empty" 或空字符串
+    /// The empty hash only accepts `empty` or an empty string
+    fn from_str(s: &str) -> Result<Self> {
+        if s.is_empty() || s.eq_ignore_ascii_case(Self::NAME) {
+            Ok(Self)
+        } else {
+            Err(Error::other(format!("invalid empty hash: {s}")))
+        }
     }
 }
 

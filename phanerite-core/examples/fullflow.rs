@@ -7,6 +7,7 @@ use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
+use phanerite_core::mod_loader::neoforge::NeoForge;
 use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::Storage;
@@ -17,7 +18,7 @@ fn main() {
     let _ = dotenvy::dotenv();
     // 日志输出
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .init();
     // （用于测试阻塞时间）
     let executor = async_executor::Executor::new();
@@ -113,8 +114,11 @@ fn main() {
 
             // ———————————————————— 业务逻辑 ————————————————————
 
+            // 示例选择的版本名
+            const NAME: &str = "1.21.1";
+
             // （清理测试残留）
-            let _ = async_fs::remove_dir_all(storage.versions_dir().join("latest")).await;
+            let _ = async_fs::remove_dir_all(storage.versions_dir().join(NAME)).await;
 
             // 创建实例
             //
@@ -124,16 +128,16 @@ fn main() {
                 VersionIndex::sync(&downloader)
                     .await?
                     // 使用迭代器查找需要的版本
-                    // .iter()
-                    // .find(|x| x.id == "1.21.1")
-                    // .expect("Version not found")
-                    // 使用最新的稳定版
-                    .latest_release()?
+                    .iter()
+                    .find(|x| x.id == NAME)
+                    .expect("Version not found")
+                    // // 使用最新的稳定版
+                    // .latest_release()?
                     // 下载版本清单
                     .get_manifest(&downloader)
                     .await?;
             // 初始化实例
-            let instance = Instance::create(version, Some("latest"), storage, &downloader).await?;
+            let instance = Instance::create(version, Some(NAME), storage, &downloader).await?;
 
             // 安装 Java
             let java = java_manager
@@ -144,29 +148,30 @@ fn main() {
                 })
                 .await?;
             // 为实例绑定 JavaRuntime，安装模组加载器或启动游戏需要此状态
-            let instance = instance.bind_java(java.clone()).await?;
+            let mut instance = instance.bind_java(java.clone()).await?;
 
-            // // 安装模组加载器
-            // instance
-            //      // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
-            //     .install_loader::<NeoForge>("1.21.1", &downloader, async |iter| {
-            //         // （调试输出）
-            //         // let iter = iter
-            //         //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
-            //         // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
-            //         let latest = iter
-            //             .collect::<BTreeSet<_>>()
-            //             .pop_last()
-            //             .expect("No available loader version");
-            //         // println!(
-            //         //     "{}:{} stable:{}",
-            //         //     latest.name(),
-            //         //     latest.version(),
-            //         //     latest.stable()
-            //         // );
-            //         Ok(latest)
-            //     })
-            //     .await?;
+            // 安装模组加载器
+            instance
+                // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
+                .install_loader::<NeoForge>(NAME, &downloader, async |into_iter| {
+                    // （调试输出）
+                    // let iter = iter
+                    //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
+                    // 排序和版本选择，元素对版本号实现全序，但是仅人类可读，不一定为正确的版本顺序
+                    let latest = into_iter
+                        .into_iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .pop_last()
+                        .expect("No available loader version");
+                    // println!(
+                    //     "{}:{} stable:{}",
+                    //     latest.name(),
+                    //     latest.version(),
+                    //     latest.stable()
+                    // );
+                    Ok(latest)
+                })
+                .await?;
 
             // 安装实例
             downloader

@@ -13,6 +13,7 @@ const CHUNK_SIZE: usize = 64 * 1024;
 /// library's internals
 const STACK_SIZE: usize = CHUNK_SIZE * 4; // 256 KiB
 
+#[derive(Debug)]
 pub struct ExtractTask {
     path: PathBuf,
     auto_flattens: bool,
@@ -21,7 +22,7 @@ pub struct ExtractTask {
 
 /// A simple exclusion pattern for archive entries.
 /// Mojang convention: `META-INF/` = prefix, `*.SF` = suffix.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ExcludePattern {
     Prefix(String),
     Suffix(String),

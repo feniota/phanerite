@@ -48,7 +48,7 @@
 //! Game instances
 //!
 //! An instance is `{root}/versions/{id}/` together with the version manifest
-//! it contains, [`manifest::InstanceManifest`]. [`Instance`] only describes
+//! it contains, [`InstanceManifest`]. [`Instance`] only describes
 //! the instance and produces tasks; it neither runs the downloads nor spawns
 //! the process on the caller's behalf.
 //!
@@ -87,7 +87,7 @@
 //! A mod loader does not rewrite the version manifest. It appends an
 //! [`overlay::Patch`] to
 //! [`InstanceManifest::patches`](manifest::InstanceManifest::patches), and
-//! [`InstanceManifest::resolve`](manifest::InstanceManifest::resolve) then
+//! [`InstanceManifest::resolve`](InstanceManifest::resolve) then
 //! replays every patch. The accumulating fields (`libraries`, `arguments`)
 //! are cleared before the replay, so `resolve()` can be called repeatedly
 //! without piling up duplicates.
@@ -323,10 +323,10 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         &self,
         features: HashSet<&'static str>,
         downloader: &impl Downloader,
-    ) -> Result<Vec<DownloadTask<'_>>> {
+    ) -> Result<impl Stream<Item = DownloadTask<'_>>> {
         self.fix_assets_index(downloader).await?;
         let tasks = futures::stream::iter(self.install(features).await?);
-        let tasks = filter_hash(tasks, true).collect().await;
+        let tasks = filter_hash(tasks, true);
         Ok(tasks)
     }
 

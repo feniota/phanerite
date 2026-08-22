@@ -3,37 +3,44 @@ use crate::instance::Instance;
 use crate::instance::manifest::{Action, Argument};
 use crate::instance::variables::Variables;
 use crate::utils::state::{NotReady, Ready};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
+use tracing::warn;
 
 // jvm 参数 + main_class + game 参数
 /// JVM arguments + main class + game arguments
 pub struct LaunchArguments {
     pub(crate) main_class: String,
-    pub(crate) jvm: HashMap<String, Option<String>>,
-    pub(crate) game: HashMap<String, Option<String>>,
+    pub(crate) jvm: Vec<(String, Option<String>)>,
+    pub(crate) game: Vec<(String, Option<String>)>,
 }
 
 impl LaunchArguments {
+    pub(crate) fn insert_jvm(&mut self, k: String, v: Option<String>) {
+        match self.jvm.iter_mut().find(|(key, _)| &k == key) {
+            None => self.jvm.push((k, v)),
+            Some((_, val)) => *val = v,
+        }
+    }
     // 设置 JVM 内存，单位 MiB
     /// Sets the JVM memory, in MiB
     pub fn set_memory(mut self, min: Option<u64>, max: Option<u64>) -> Self {
         match min {
             Some(size) => {
-                self.jvm.insert("-Xms".into(), Some(format!("{size}M")));
+                self.insert_jvm("-Xms".into(), Some(format!("{size}M")));
             }
             None => {
-                self.jvm.remove("-Xms");
+                self.jvm.retain(|(k, _)| k != "-Xms");
             }
         }
         match max {
             Some(size) => {
-                self.jvm.insert("-Xmx".into(), Some(format!("{size}M")));
+                self.insert_jvm("-Xmx".into(), Some(format!("{size}M")));
             }
             None => {
-                self.jvm.remove("-Xmx");
+                self.jvm.retain(|(k, _)| k != "-Xmx");
             }
         }
         self
@@ -42,23 +49,24 @@ impl LaunchArguments {
 
 impl Display for LaunchArguments {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for (key, value) in &self.jvm {
-            write!(f, "{key}")?;
-            if let Some(value) = value {
-                write!(f, " {value}")?;
+        fn fmt_map(f: &mut Formatter<'_>, map: &Vec<(String, Option<String>)>) -> fmt::Result {
+            for (key, value) in map {
+                write!(f, "{}", key.replace(' ', ""))?;
+                if let Some(value) = value {
+                    if key.ends_with('=') {
+                        write!(f, "{}", value.replace(' ', ""))?;
+                    } else {
+                        write!(f, " {}", value.replace(' ', ""))?;
+                    }
+                }
+                writeln!(f)?;
             }
-            writeln!(f)?;
+            Ok(())
         }
 
+        fmt_map(f, &self.jvm)?;
         writeln!(f, "{}", self.main_class)?;
-
-        for (key, value) in &self.game {
-            write!(f, "{key}")?;
-            if let Some(value) = value {
-                write!(f, " {value}")?;
-            }
-            writeln!(f)?;
-        }
+        fmt_map(f, &self.game)?;
 
         Ok(())
     }
@@ -96,18 +104,16 @@ impl Variables<Ready> {
         } else if let Some(args) = &instance.manifest.minecraft_arguments
             && let Some(args) = self.resolve(args)
         {
-            let mut game = HashMap::new();
-            game.insert(args, None);
             LaunchArguments {
                 main_class,
-                jvm: HashMap::new(),
-                game,
+                jvm: Vec::new(),
+                game: vec![(args, None)],
             }
         } else {
             LaunchArguments {
                 main_class,
-                jvm: HashMap::new(),
-                game: HashMap::new(),
+                jvm: Vec::new(),
+                game: Vec::new(),
             }
         }
     }
@@ -162,7 +168,17 @@ fn filter_none(
     y: Option<&String>,
 ) -> Option<(String, Option<String>)> {
     match variables.resolve(x) {
-        None => None,
+        None => {
+            warn!(
+                "Failed to resolve argument: {x} {}",
+                match y {
+                    None => "",
+                    Some(v) => &v,
+                }
+            );
+
+            None
+        }
         Some(x) => match y {
             None => Some((x, None)),
             Some(y) => variables.resolve(y).map(|y| (x, Some(y))),

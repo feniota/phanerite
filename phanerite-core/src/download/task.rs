@@ -13,11 +13,13 @@ use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, OnceLock};
 use url::Url;
 
+#[derive(Debug)]
 pub enum Target {
     File(PathBuf),
     Extract(ExtractTask),
 }
 
+#[derive(Debug)]
 pub struct Context<'cx> {
     pub storage: &'cx Storage,
 }
@@ -43,6 +45,7 @@ pub struct DownloadTaskBuilder<U, T, C> {
     share: Option<Arc<OnceCell<PathBuf>>>,
 }
 
+#[derive(Debug)]
 pub struct DownloadTask<'cx> {
     pub(crate) context: Context<'cx>,
     pub(crate) url: Url,
@@ -53,11 +56,12 @@ pub struct DownloadTask<'cx> {
     pub process: DownloadProcess,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DownloadProcess {
     inner: Arc<DownloadProcessInner>,
 }
 
+#[derive(Debug)]
 struct DownloadProcessInner {
     name: Option<String>,
     event: Event,

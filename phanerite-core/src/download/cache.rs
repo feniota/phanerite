@@ -75,9 +75,11 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
         self.downloader.send(req).await
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
-        // 空 Hash 和压缩包无法缓存
-        let (hash, dst) = match (&task.file_hash, &task.target) {
-            (hash, Target::File(dst)) if !hash.is_empty() => (hash, dst),
+        // 空 Hash 和压缩包无法缓存，仅缓存共享的文件
+        let (hash, dst, share) = match (&task.file_hash, &task.target, &task.share) {
+            (hash, Target::File(dst), Some(share)) if !hash.is_empty() => {
+                (hash, dst, share.clone())
+            }
             _ => {
                 self.downloader.download(task).await?;
                 return Ok(());
@@ -93,11 +95,10 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
         }
 
         // 未命中缓存
-        let path = task.share.as_ref().unwrap().clone();
         let hash = hash.clone();
         self.downloader.download(task).await?;
         // 记录地址
-        if let Some(path) = path.get() {
+        if let Some(path) = share.get() {
             self.bucket_cache.insert(hash, path.to_owned()).await;
         };
 

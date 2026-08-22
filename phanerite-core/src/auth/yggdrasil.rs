@@ -924,8 +924,8 @@ impl super::Authentication for Authentication {
                     "-Dauthlibinjector.yggdrasil.prefetched={}",
                     self.meta_base64()
                 );
-                args.jvm.insert(agent, None);
-                args.jvm.insert(meta, None);
+                args.insert_jvm(agent, None);
+                args.insert_jvm(meta, None);
             }
         }
     }

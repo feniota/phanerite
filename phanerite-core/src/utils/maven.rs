@@ -42,6 +42,55 @@ impl MavenArtifact {
         base.join(&self.path())
             .map_err(|e| crate::error::Error::other(e.to_string()))
     }
+
+    /// Generates the SHA-1 checksum URL.
+    pub fn sha1_url(&self, base: &Url) -> crate::error::Result<Url> {
+        self.suffix_url(base, ".sha1")
+    }
+
+    /// Generates the MD5 checksum URL.
+    pub fn md5_url(&self, base: &Url) -> crate::error::Result<Url> {
+        self.suffix_url(base, ".md5")
+    }
+
+    /// Generates the SHA-256 checksum URL.
+    pub fn sha256_url(&self, base: &Url) -> crate::error::Result<Url> {
+        self.suffix_url(base, ".sha256")
+    }
+
+    /// Generates the SHA-512 checksum URL.
+    pub fn sha512_url(&self, base: &Url) -> crate::error::Result<Url> {
+        self.suffix_url(base, ".sha512")
+    }
+
+    /// Generates the POM URL for this artifact.
+    pub fn pom_url(&self, base: &Url) -> crate::error::Result<Url> {
+        let path = format!(
+            "{}/{}/{}/{}-{}.pom",
+            self.group.replace('.', "/"),
+            self.artifact,
+            self.version,
+            self.artifact,
+            self.version,
+        );
+
+        base.join(&path)
+            .map_err(|e| crate::error::Error::other(e.to_string()))
+    }
+
+    /// Generates the Gradle Module Metadata URL for this artifact.
+    pub fn module_url(&self, base: &Url) -> crate::error::Result<Url> {
+        self.suffix_url(base, ".module")
+    }
+
+    fn suffix_url(&self, base: &Url, suffix: &str) -> crate::error::Result<Url> {
+        let mut url = self.url(base)?;
+        let path = format!("{}{}", url.path(), suffix);
+
+        url.set_path(&path);
+
+        Ok(url)
+    }
 }
 
 impl FromStr for MavenArtifact {

@@ -5,11 +5,14 @@ use crate::instance::Instance;
 use crate::instance::overlay::OverlayManifest;
 use crate::mod_loader::{LoaderInstall, LoaderMeta};
 use crate::runtime::java::JavaRuntime;
+use crate::storage::Storage;
+use crate::utils::Sha256Hash;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::path::Path;
@@ -103,6 +106,10 @@ impl LoaderInstall for NeoForge {
             extension: "jar".to_string(),
         };
         let url = maven.url(&NEOFORGE_MAVEN)?;
+        let hash_url = maven.sha256_url(&NEOFORGE_MAVEN)?;
+        let hash = downloader.fetch(hash_url, None).await?;
+        let hash = String::from_utf8_lossy(&hash);
+        let hash = hash.parse::<Sha256Hash>()?;
 
         debug!("Downloading NeoForge Installer: {url}");
         let installer = raw.storage.temp_file().await?;
@@ -110,6 +117,7 @@ impl LoaderInstall for NeoForge {
             .url(url)
             .to_path(installer.to_owned(), raw.storage)
             .file_name(format!("NeoForge-{}", selected))
+            .hash(hash)
             .build();
         downloader.download(task).await?;
         let mut body = Vec::new();
@@ -129,12 +137,25 @@ impl LoaderInstall for NeoForge {
 
         debug!("Build a virtual installation environment for NeoForge");
         let temp = raw.storage.temp_dir().await?;
+        let fake_storage = Storage::new(&temp).await?;
         // 假 launcher_profiles.json 骗 Installer 安装
-        let mut profile = async_fs::File::create(&temp.join("launcher_profiles.json")).await?;
+        let launcher_profiles = temp.join("launcher_profiles.json");
+        let mut profile = async_fs::File::create(&launcher_profiles).await?;
         profile.write_all(b"{\"profiles\":{}}").await?;
         drop(profile);
 
-        // TODO: 接管 NeoForge 安装器的下载任务
+        // 接管 NeoForge 安装器的下载任务
+        let tasks = manifest
+            .manifest
+            .libraries
+            .iter()
+            .scan(HashSet::new(), |f, x| Some(x.to_task(&fake_storage, f)))
+            .flatten();
+        // 尝试下载，不管是否成功
+        downloader
+            .download_concurrent(tasks)
+            .for_each(async |_| {})
+            .await;
 
         // 运行安装器
         async_process::Command::new(&raw.runtime)
@@ -148,6 +169,7 @@ impl LoaderInstall for NeoForge {
             .success()
             .ok_or(Error::other("The NeoForge installer exits on failure"))?;
         // 拿走安装结果
+        async_fs::remove_file(launcher_profiles).await?;
         merge_move(&temp.join("libraries"), raw.storage.libraries_dir()).await?;
         // 合并版本配置
         raw.manifest.merge_overlay(manifest, 30000);

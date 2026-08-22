@@ -71,6 +71,11 @@ fn instance_section(
                 .rounded(cx.theme().radius)
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
+                .hover(|style| {
+                    style
+                        .bg(cx.theme().sidebar_accent.opacity(0.8))
+                        .text_color(cx.theme().sidebar_accent_foreground)
+                })
                 .child(Icon::new(icon))
                 .child(div().flex_1().child(label.to_string()))
                 .child(div().child(instances.len().to_string()))
@@ -146,6 +151,13 @@ impl SidebarItem for InstanceMenu {
                         item.bg(cx.theme().sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                             .font_medium()
+                    })
+                    .when(!matches!(self.current, Route::Play), |item| {
+                        item.hover(|style| {
+                            style
+                                .bg(cx.theme().sidebar_accent.opacity(0.8))
+                                .text_color(cx.theme().sidebar_accent_foreground)
+                        })
                     })
                     .child(Icon::new(IconName::Play))
                     .child("Play")

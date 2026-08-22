@@ -11,11 +11,6 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
     let state = app.read(cx);
     let count = state.instances.read(cx).len();
     let running = state.sessions.read(cx).running_count();
-    let _account = state
-        .accounts
-        .read(cx)
-        .active()
-        .map(|item| item.username.clone());
     let bar = StatusBar::new()
         .left("Phanerite")
         .left(

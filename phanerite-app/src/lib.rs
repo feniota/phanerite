@@ -91,15 +91,8 @@ impl Render for Phanerite {
                     gpui_component::h_flex()
                         .items_center()
                         .gap_2()
-                        .child(components::phanerite_app_icon::render())
-                        .child(div().text_sm().child("Phanerite"))
-                        .child(
-                            div()
-                                .font_family(crate::theme::MONO_FONT_FAMILY)
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("v0.1.0-pre"),
-                        ),
+                        .child(assets::phanerite_logo().size(px(18.)))
+                        .child(div().text_sm().child("Phanerite Launcher")),
                 ),
             )
             .child(

@@ -1,8 +1,10 @@
 //! Custom assets
 
 mod icons;
+mod logo;
 
 pub use icons::PhaIcon;
+pub use logo::render as phanerite_logo;
 
 use anyhow::anyhow;
 use gpui::{AssetSource, Result, SharedString};
@@ -13,6 +15,7 @@ use zstd::bulk::decompress as zstd_decompress;
 /// Application assets, with gpui-component's built-in assets as a fallback.
 #[derive(RustEmbed)]
 #[folder = "assets"]
+#[include = "phanerite-logo.svg"]
 #[include = "icons/**/*.svg"]
 #[include = "fonts/**/*.zst"]
 pub struct Assets;

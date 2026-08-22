@@ -35,8 +35,14 @@ impl SidebarInstanceItem {
 }
 
 impl RenderOnce for SidebarInstanceItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let reference = self.instance.reference();
+        let hovered = window.use_keyed_state(
+            format!("sidebar-instance-hovered-{}", self.instance.id),
+            cx,
+            |_, _| false,
+        );
+        let is_hovered = *hovered.read(cx);
         h_flex()
             .id(format!("sidebar-instance-{}", self.instance.id))
             .w_full()
@@ -50,11 +56,16 @@ impl RenderOnce for SidebarInstanceItem {
                     .text_color(cx.theme().sidebar_accent_foreground)
                     .font_medium()
             })
-            .when(!self.active, |item| {
-                item.hover(|style| {
-                    style
-                        .bg(cx.theme().sidebar_accent.opacity(0.8))
-                        .text_color(cx.theme().sidebar_accent_foreground)
+            .when(!self.active && is_hovered, |item| {
+                item.bg(cx.theme().sidebar_accent.opacity(0.8))
+                    .text_color(cx.theme().sidebar_accent_foreground)
+            })
+            .on_hover(move |is_hovered, _, cx| {
+                hovered.update(cx, |hovered, cx| {
+                    if *hovered != *is_hovered {
+                        *hovered = *is_hovered;
+                        cx.notify();
+                    }
                 })
             })
             .child(crate::components::instance_icon::render_sized(

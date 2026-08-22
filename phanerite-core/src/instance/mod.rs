@@ -9,10 +9,8 @@
 // `Instance<'_, R, C>` 的两个参数分别记录「Java 绑好了没」和「文件齐不
 // 齐」：
 //
-// - `R`：[`NotReady`] → 绑定后变成
-//   [`JavaRuntime`]
-// - `C`：[`NotReady`] →
-//   [`Ready`]
+// - `R`：[`NotReady`] → 绑定后变成 [`JavaRuntime`]
+// - `C`：[`NotReady`] → [`Ready`]
 //
 // [`Instance::launch`] 只对 `Instance<'_, JavaRuntime, Ready>` 存在，
 // [`Instance::install_loader`] 只要求 `R = JavaRuntime`。于是「没装 Java
@@ -24,11 +22,9 @@
 //
 // # 安装是「生成任务」而不是「执行下载」
 //
-// [`Instance::install`] 返回的是
-// [`DownloadTask`] 的迭代器；交给哪
-// 个 [`Downloader`] 执行、并发多少、要不要
-// 监视进度，全部由调用方决定。[`Instance::install_less`] 是跳过已存在
-// 文件的版本。
+// [`Instance::install`] 返回的是 [`DownloadTask`] 的迭代器；交给哪个
+// [`Downloader`] 执行、并发多少、要不要监视进度，全部由调用方决定。
+// [`Instance::install_less`] 是跳过已存在文件的版本。
 //
 // 由模组加载器带来的、无法从标准清单推导出来的下载任务，走
 // [`LoaderInstall::extra_downloads`](crate::mod_loader::LoaderInstall::extra_downloads)。
@@ -61,10 +57,8 @@
 //! The two parameters of `Instance<'_, R, C>` record "is a Java bound" and
 //! "are the files complete":
 //!
-//! - `R`: [`NotReady`] → becomes
-//!   [`JavaRuntime`] once bound
-//! - `C`: [`NotReady`] →
-//!   [`Ready`]
+//! - `R`: [`NotReady`] → becomes [`JavaRuntime`] once bound
+//! - `C`: [`NotReady`] → [`Ready`]
 //!
 //! [`Instance::launch`] exists only for `Instance<'_, JavaRuntime, Ready>`,
 //! and [`Instance::install_loader`] only requires `R = JavaRuntime`. Two
@@ -78,12 +72,11 @@
 //!
 //! # Installing produces tasks, it does not download
 //!
-//! [`Instance::install`] returns an iterator of
-//! [`DownloadTask`]; which
-//! [`Downloader`] runs them, at what
-//! concurrency, and whether progress is monitored at all, is entirely up to
-//! the caller. [`Instance::install_less`] is the variant that skips files
-//! that already exist.
+//! [`Instance::install`] returns an iterator of [`DownloadTask`]; which
+//! [`Downloader`] runs them, at what concurrency, and whether progress is
+//! monitored at all, is entirely up to the caller.
+//! [`Instance::install_less`] is the variant that skips files that already
+//! exist.
 //!
 //! Download tasks that a mod loader brings along and that cannot be derived
 //! from the standard manifest go through

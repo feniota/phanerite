@@ -99,31 +99,47 @@ impl<'storage> Storage {
         })
     }
     // 仅当清理器工作时，临时文件能够最及时地清理
-    // 用法示例
-    // ```
+    //
+    // # 用法示例
+    //
+    // ```no_run
+    // # fn main() -> phanerite_core::error::Result<()> {
+    // # smol::block_on(async {
     // use phanerite_core::storage::Storage;
+    //
     // let storage = Storage::new(".minecraft").await?;
+    //
     // // 请勿丢弃 `_shutdown`，否则会导致清理线程停止
     // let (cleaner, _shutdown) = storage.run_cleaner();
     // smol::spawn(cleaner).detach();
-    // ```
-    // 优雅停机：只需要让 `_shutdown` 离开作用域即可
-    // ```
+    //
+    // // 优雅停机：只需要让 `_shutdown` 离开作用域即可
     // drop(_shutdown);
+    // # Ok(())
+    // # })
+    // # }
     // ```
     /// Temporary files are only cleaned up promptly while the cleaner is
     /// running
-    /// Usage example
-    /// ```
+    ///
+    /// # Usage example
+    ///
+    /// ```no_run
+    /// # fn main() -> phanerite_core::error::Result<()> {
+    /// # smol::block_on(async {
     /// use phanerite_core::storage::Storage;
+    ///
     /// let storage = Storage::new(".minecraft").await?;
+    ///
     /// // Do not drop `_shutdown`, or the cleaner thread will stop
     /// let (cleaner, _shutdown) = storage.run_cleaner();
     /// smol::spawn(cleaner).detach();
-    /// ```
-    /// Graceful shutdown: just let `_shutdown` go out of scope
-    /// ```
+    ///
+    /// // Graceful shutdown: just let `_shutdown` go out of scope
     /// drop(_shutdown);
+    /// # Ok(())
+    /// # })
+    /// # }
     /// ```
     pub fn run_cleaner(&self) -> (impl Future<Output = ()> + 'static, ShutdownGuard) {
         let (tx, rx) = async_channel::bounded(1);

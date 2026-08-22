@@ -13,7 +13,6 @@ use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
-use std::collections::HashSet;
 
 fn main() -> Result<(), Error> {
     smol::block_on(async {
@@ -37,7 +36,7 @@ fn main() -> Result<(), Error> {
 
         // install 只生成任务，实际执行由下载器负责
         downloader
-            .join(instance.install(HashSet::new()).await?)
+            .join(instance.install(std::collections::HashSet::new()).await?)
             .await
             .iter()
             .for_each(|e| eprintln!("{e}"));

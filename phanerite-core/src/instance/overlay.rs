@@ -134,6 +134,10 @@ impl InstanceManifest {
         }
         self.libraries.clear();
 
+        // Lower priority first, so higher-priority patches overwrite them.
+        // Stable, so patches of equal priority keep their insertion order.
+        self.patches.sort_by_key(|p| p.priority);
+
         let manifests: Vec<_> = self.patches.iter().map(|p| p.manifest.clone()).collect();
         for m in &manifests {
             self.apply_optional(m);

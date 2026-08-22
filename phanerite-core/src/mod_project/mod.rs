@@ -4,14 +4,13 @@
 // 是站点上的一个项目，[`ModVersion`] 是项目的一个具体版本——只有到了版本
 // 这一层才谈得上下载。
 //
-// [`ModVersion::download`] 返回的同样是
-// [`DownloadTask`]，和本库其它地方
+// [`ModVersion::download`] 返回的同样是 [`DownloadTask`]，和本库其它地方
 // 一致：生成任务，不执行。
 //
 // # 搜索是流
 //
-// [`ModsRepository::search`] 返回 [`Stream`] 而不是
-// `Vec`。仓库都是分页的，用流可以边翻页边出结果，调用方取多少就翻多少。
+// [`ModsRepository::search`] 返回 [`Stream`] 而不是 `Vec`。仓库都是分页的，
+// 用流可以边翻页边出结果，调用方取多少就翻多少。
 //
 // # 署名
 //
@@ -32,16 +31,14 @@
 //! concrete version of that project — only at the version level does
 //! downloading become meaningful.
 //!
-//! [`ModVersion::download`] likewise returns a
-//! [`DownloadTask`], consistent with the
-//! rest of this crate: it produces a task, it does not run one.
+//! [`ModVersion::download`] likewise returns a [`DownloadTask`], consistent
+//! with the rest of this crate: it produces a task, it does not run one.
 //!
 //! # Search is a stream
 //!
-//! [`ModsRepository::search`] returns a [`Stream`] rather
-//! than a `Vec`. Repositories are paginated, and a stream lets results come
-//! out while paging continues, so the caller pages exactly as far as it
-//! consumes.
+//! [`ModsRepository::search`] returns a [`Stream`] rather than a `Vec`.
+//! Repositories are paginated, and a stream lets results come out while
+//! paging continues, so the caller pages exactly as far as it consumes.
 //!
 //! # Attribution
 //!

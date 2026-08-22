@@ -15,8 +15,7 @@
 // - [`neoforge`] 必须跑官方安装器。下载 installer jar，在临时目录里造一个
 //   假的 `launcher_profiles.json` 骗过它，用实例绑定的 Java 执行，再把
 //   产出的 `libraries` 合并回来。安装器自己发起的下载不经过本库的
-//   [`Downloader`]，因此不受镜像、缓存和进度
-//   监视的管辖。
+//   [`Downloader`]，因此不受镜像、缓存和进度监视的管辖。
 //
 // 正因为 NeoForge 这条路要开 java 进程，
 // [`Instance::install_loader`](crate::instance::Instance::install_loader)
@@ -57,9 +56,8 @@
 //!   installer jar, fabricates a fake `launcher_profiles.json` in a temporary
 //!   directory to satisfy it, runs it with the Java bound to the instance,
 //!   and merges the resulting `libraries` back in. The downloads the
-//!   installer itself issues do not go through this crate's
-//!   [`Downloader`], so they are not subject to
-//!   mirrors, caching or progress monitoring.
+//!   installer itself issues do not go through this crate's [`Downloader`],
+//!   so they are not subject to mirrors, caching or progress monitoring.
 //!
 //! Because the NeoForge path has to spawn a java process,
 //! [`Instance::install_loader`](crate::instance::Instance::install_loader)

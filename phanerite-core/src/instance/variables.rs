@@ -181,7 +181,7 @@ impl ReadyVariables {
                 .chain(std::iter::once(instance.client_file()))
                 .map(std::path::absolute)
                 .map(|p| p.map(|x| x.to_string_lossy().into_owned()))
-                .try_collect::<HashSet<_>>()?
+                .collect::<std::result::Result<HashSet<_>, _>>()?
                 .into_iter()
                 .collect::<Vec<_>>()
                 .join(if cfg!(windows) { ";" } else { ":" }),

@@ -9,9 +9,9 @@
 //
 // # 扫描范围
 //
-// [`RuntimeScanPath`] 抽象「去哪里找」，[`Storage`]
-// 和 [`MultiStorage`](crate::storage::multi::MultiStorage) 都实现了它，
-// 所以既可以只扫一个游戏目录，也可以一次扫完全部。
+// [`RuntimeScanPath`] 抽象「去哪里找」，[`Storage`] 和
+// [`MultiStorage`](crate::storage::multi::MultiStorage) 都实现了它，所以
+// 既可以只扫一个游戏目录，也可以一次扫完全部。
 //
 // [`java::JavaManager`] 在此之上再叠加系统里的 Java（`PATH` 与
 // `JAVA_HOME`），可以用 [`java::JavaManager::disable_system`] 关掉。识别
@@ -40,8 +40,7 @@
 //!
 //! # Scan scope
 //!
-//! [`RuntimeScanPath`] abstracts over "where to look".
-//! [`Storage`] and
+//! [`RuntimeScanPath`] abstracts over "where to look". [`Storage`] and
 //! [`MultiStorage`](crate::storage::multi::MultiStorage) both implement it,
 //! so a scan can cover a single game directory or all of them at once.
 //!

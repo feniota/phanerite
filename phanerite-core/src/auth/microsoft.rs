@@ -306,7 +306,7 @@ impl Tenant {
         let mut url = AUTHORITY.clone();
         url.path_segments_mut()
             .expect("AUTHORITY should always be a base URL")
-            .extend(&[<&str>::from(self), "oauth2", "v2.0", path]);
+            .extend([<&str>::from(self), "oauth2", "v2.0", path]);
         url
     }
 }

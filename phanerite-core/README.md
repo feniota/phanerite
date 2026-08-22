@@ -59,13 +59,12 @@ than with the module listing.
 ## Getting started
 
 ```rust
+use phanerite_core::download::DownloaderExt;
 use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::vanilla::VersionIndex;
-use phanerite_core::download::DownloaderExt;
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
 use phanerite_core::storage::Storage;
-use std::collections::HashSet;
 
 fn main() -> Result<(), Error> {
     smol::block_on(async {
@@ -89,7 +88,7 @@ fn main() -> Result<(), Error> {
 
         // install only generates tasks; the downloader is responsible for executing them
         downloader
-            .join(instance.install(HashSet::new()).await?)
+            .join(instance.install(std::collections::HashSet::new()).await?)
             .await
             .iter()
             .for_each(|e| eprintln!("{e}"));

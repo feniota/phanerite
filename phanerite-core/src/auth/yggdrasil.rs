@@ -606,7 +606,7 @@ fn endpoint(server: &Url, path: &str) -> Result<Url> {
     url.path_segments_mut()
         .map_err(|_| Error::other("cannot-be-a-base URL"))?
         .pop_if_empty()
-        .extend(&["authserver", path]);
+        .extend(["authserver", path]);
     Ok(url)
 }
 
@@ -859,7 +859,7 @@ async fn authenticate(
         .path_segments_mut()
         .map_err(|_| Error::other("cannot-be-a-base URL"))?
         .pop_if_empty()
-        .extend(&["authserver", "authenticate"]);
+        .extend(["authserver", "authenticate"]);
     let res = downloader.post_json(server, &req).await?.into_body();
 
     serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()
@@ -887,7 +887,7 @@ async fn signout(
         .path_segments_mut()
         .map_err(|_| Error::other("cannot-be-a-base URL"))?
         .pop_if_empty()
-        .extend(&["authserver", "signout"]);
+        .extend(["authserver", "signout"]);
     let res = downloader.post_json(server, req).await?;
 
     if res.status() == 204 {

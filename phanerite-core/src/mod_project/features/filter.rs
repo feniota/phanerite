@@ -47,8 +47,7 @@ pub struct FilteredModsRepository<'repo, R: ModsRepository<ModType: ModFilter>> 
     repo: &'repo R,
 }
 
-pub impl(crate) trait ModsRepositoryFilterExt:
-    ModsRepository<ModType: ModFilter>
+pub trait ModsRepositoryFilterExt: ModsRepository<ModType: ModFilter>
 where
     Self: Sized,
 {

@@ -1,7 +1,3 @@
-// 舒适处理 Iterator 错误
-#![feature(iterator_try_collect)]
-// 测试 impl_restriction 并反馈到 Rust 社区
-#![feature(impl_restriction)]
 // 硬链接检测引用计数
 #![cfg_attr(target_os = "windows", feature(windows_by_handle))]
 // Phanerite 的核心库：一个没有界面的 Minecraft 启动器后端

@@ -16,10 +16,9 @@
 //   （序列化是同步的，对写者优先的锁取读锁会死锁）；后者把
 //   `SecretString` 的序列化显式写出来，让「凭据被写成明文」这件事必须在
 //   字段上声明才会发生。
-// - [`maven`]、[`uuid`]、[`version`]：Maven 坐标、无连字符
-//   UUID、版本号比较。其中 [`version::compare_versions`] 和
-//   [`version::is_stable`] 都是启发式的，只供展示与排序，不要拿来做兼容性
-//   判断。
+// - [`maven`]、[`uuid`]、[`version`]：Maven 坐标、无连字符 UUID、版本号
+//   比较。其中 [`version::compare_versions`] 和 [`version::is_stable`]
+//   都是启发式的，只供展示与排序，不要拿来做兼容性判断。
 //! Infrastructure shared across modules
 //!
 //! This is not a junk drawer: it holds the things several modules depend on
@@ -46,11 +45,10 @@
 //!   the serialization of `SecretString` explicitly, so that "the credential
 //!   gets written out in plain text" can only happen when a field declares
 //!   it.
-//! - [`maven`], [`uuid`] and [`version`]: Maven coordinates,
-//!   hyphenless UUIDs, and version comparison. Both
-//!   [`version::compare_versions`] and [`version::is_stable`] are heuristics
-//!   meant for display and ordering only; do not use them to decide
-//!   compatibility.
+//! - [`maven`], [`uuid`] and [`version`]: Maven coordinates, hyphenless
+//!   UUIDs, and version comparison. Both [`version::compare_versions`] and
+//!   [`version::is_stable`] are heuristics meant for display and ordering
+//!   only; do not use them to decide compatibility.
 
 // ouroboros 展开后存在多余生命周期
 // https://github.com/someguynamedjosh/ouroboros/issues/140

@@ -86,15 +86,20 @@ impl JavaDownload for Zulu {
 struct ZuluPackage {
     // /// CA / SA
     // availability_type: String,
-    /// Azul Zulu 构建版本，例如 [21, 52, 15, 0]
+    // Azul Zulu 构建版本，例如 [21, 52, 15, 0]
+    /// Azul Zulu build version, e.g. [21, 52, 15, 0]
     distro_version: Vec<u32>,
-    /// 下载地址
+    // 下载地址
+    /// Download URL
     download_url: Url,
-    /// Java 版本，例如 [21, 0, 12]
+    // Java 版本，例如 [21, 0, 12]
+    /// Java version, e.g. [21, 0, 12]
     java_version: Vec<u32>,
-    // /// 是否最新版本
+    // // 是否最新版本
+    // /// Whether this is the latest version
     // latest: bool,
-    /// 文件名
+    // 文件名
+    /// File name
     name: String,
     // /// OpenJDK build number
     // openjdk_build_number: u32,

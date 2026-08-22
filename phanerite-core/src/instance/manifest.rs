@@ -38,7 +38,8 @@ pub struct InstanceManifest {
     pub root: Option<bool>,
     #[serde(default)]
     pub patches: Vec<Patch>,
-    /// 旧版本 minecraftArguments
+    // 旧版本 minecraftArguments
+    /// `minecraftArguments` from older versions
     #[serde(skip_serializing_if = "Option::is_none")]
     pub minecraft_arguments: Option<String>,
     #[serde(flatten)]

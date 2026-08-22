@@ -7,8 +7,10 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use url::Url;
 
-/// 可用于记录共享储存桶 Hash 的记录器
-/// 必须区分 Storage 保存
+// 可用于记录共享储存桶 Hash 的记录器
+// 必须区分 Storage 保存
+/// A recorder for the hashes in the shared bucket
+/// Must be kept separate per `Storage`
 #[allow(async_fn_in_trait)]
 pub trait BucketRecorder: Send + Sync {
     async fn query(&self, key: &Hash) -> Option<impl Deref<Target = PathBuf>>;

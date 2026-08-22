@@ -202,7 +202,8 @@ fn main() {
     }
 }
 
-/// 显示下载速度和进度
+// 显示下载速度和进度
+/// Shows the download speed and progress
 fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
@@ -249,7 +250,8 @@ fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
     g
 }
 
-/// 检测阻塞时间
+// 检测阻塞时间
+/// Measures the blocking time
 fn blocking_monitor(executor: &async_executor::Executor<'static>) -> impl Drop {
     use std::sync::Arc;
     use std::sync::atomic::Ordering::Relaxed;

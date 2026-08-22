@@ -25,16 +25,21 @@ pub struct Instance<'storage, R: Clone, C: Clone> {
 
     pub storage: &'storage Storage,
 
-    /// Runtime 的准备状态
-    /// JavaRuntime 或 NotReady
+    // Runtime 的准备状态
+    // JavaRuntime 或 NotReady
+    /// Readiness state of the runtime
+    /// Either `JavaRuntime` or `NotReady`
     pub runtime: R,
-    /// 游戏完整性状态
-    /// Ready 或 NotReady
+    // 游戏完整性状态
+    // Ready 或 NotReady
+    /// Integrity state of the game
+    /// Either `Ready` or `NotReady`
     pub completeness: C,
 }
 
 impl<'storage> Instance<'storage, NotReady, NotReady> {
-    /// 创建实例
+    // 创建实例
+    /// Creates an instance
     pub async fn create(
         manifest: impl Into<InstanceManifest>,
         name: Option<impl AsRef<str>>,
@@ -70,7 +75,8 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
 
         Self::open(&manifest.id, storage).await
     }
-    /// 打开本地实例
+    // 打开本地实例
+    /// Opens a local instance
     pub async fn open(name: impl AsRef<str>, storage: &'storage Storage) -> Result<Self> {
         let instance_dir = storage.versions_dir().join(name.as_ref());
         let json = find_manifest(name.as_ref(), &instance_dir).await?;
@@ -82,7 +88,8 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
             completeness: NotReady,
         })
     }
-    /// 扫描实例
+    // 扫描实例
+    /// Scans for instances
     pub fn scan(storage: &'storage Storage) -> impl Stream<Item = Result<Self>> + 'storage {
         futures::stream::try_unfold((storage, None), async |(storage, dir)| {
             let mut dir = match dir {
@@ -102,15 +109,18 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
 }
 
 impl<R: Clone, C: Clone> Instance<'_, R, C> {
-    /// 获取当前实例的游戏文件路径
+    // 获取当前实例的游戏文件路径
+    /// Gets the path to this instance's game file
     pub fn client_file(&self) -> PathBuf {
         self.instance_dir.join(format!("{}.jar", self.manifest.jar))
     }
-    /// 获取当前实例 Java 版本
+    // 获取当前实例 Java 版本
+    /// Gets this instance's Java version
     pub fn java_major(&self) -> u32 {
         self.manifest.java_version.major_version
     }
-    /// 重命名
+    // 重命名
+    /// Renames the instance
     pub async fn rename(&mut self, name: impl Into<String>) -> Result<()> {
         let name = name.into();
         let path = self.storage.versions_dir().join(&name);
@@ -123,7 +133,8 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         self.save().await?;
         Ok(())
     }
-    /// 复制
+    // 复制
+    /// Copies the instance
     pub async fn copy(&self, name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         let path = self.storage.versions_dir().join(&name);
@@ -142,13 +153,15 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         };
         Ok(new)
     }
-    /// 删除
+    // 删除
+    /// Deletes the instance
     pub async fn delete(self) -> Result<()> {
         async_fs::remove_dir_all(self.instance_dir).await?;
         self.storage.clean_hardlink().await?;
         Ok(())
     }
-    /// 持久化版本清单
+    // 持久化版本清单
+    /// Persists the version manifest
     pub async fn save(&self) -> Result<()> {
         let file = self.instance_dir.join(format!("{}.json", self.manifest.id));
         let mut file = async_fs::File::create(file).await?;
@@ -156,7 +169,8 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         file.write_all(&json).await?;
         Ok(())
     }
-    /// 修复 Assets 索引（如果打开失败）
+    // 修复 Assets 索引（如果打开失败）
+    /// Repairs the asset index (if it fails to open)
     pub async fn fix_assets_index(&self, downloader: &impl Downloader) -> Result<AssetIndexList> {
         let index_path = self
             .storage
@@ -183,8 +197,11 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
             }
         }
     }
-    /// 粗略检查游戏完整性，返回缺失文件
-    /// 检查 Assets 索引，不检查压缩包，不校验 Hash
+    // 粗略检查游戏完整性，返回缺失文件
+    // 检查 Assets 索引，不检查压缩包，不校验 Hash
+    /// Roughly checks the game's integrity and returns the missing files
+    /// Checks the asset index; does not check archives and does not verify
+    /// hashes
     pub async fn check_exist(
         &self,
         features: HashSet<&'static str>,
@@ -193,8 +210,10 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         let tasks = filter_existed(tasks, false);
         Ok(tasks)
     }
-    /// 检查游戏完整性，返回缺失文件
-    /// 检查 Assets 索引，重下压缩包，校验 Hash
+    // 检查游戏完整性，返回缺失文件
+    // 检查 Assets 索引，重下压缩包，校验 Hash
+    /// Checks the game's integrity and returns the missing files
+    /// Checks the asset index, re-downloads archives, and verifies hashes
     pub async fn check_full(
         &self,
         features: HashSet<&'static str>,
@@ -206,7 +225,8 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         Ok(tasks)
     }
 
-    /// 构建下载任务，并减少下载量
+    // 构建下载任务，并减少下载量
+    /// Builds the download tasks, keeping the download volume down
     pub async fn install_less(
         &self,
         features: HashSet<&'static str>,
@@ -214,7 +234,8 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
         let full = self.install(features).await?;
         Ok(filter_existed(full, true))
     }
-    /// 构建完整下载任务
+    // 构建完整下载任务
+    /// Builds the full set of download tasks
     pub async fn install(
         &self,
         features: HashSet<&'static str>,
@@ -272,7 +293,8 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
 }
 
 impl<'a, R: Clone> Instance<'a, R, NotReady> {
-    /// 确定已经完成了完整性检查
+    // 确定已经完成了完整性检查
+    /// Asserts that the integrity check has been completed
     pub fn ensure_ready(self) -> Instance<'a, R, Ready> {
         Instance {
             instance_dir: self.instance_dir,
@@ -319,7 +341,9 @@ impl Instance<'_, JavaRuntime, Ready> {
     }
 }
 
-/// `async_process::Command`的包装，用于保证参数文件不会被提前删除
+// `async_process::Command`的包装，用于保证参数文件不会被提前删除
+/// Wrapper around `async_process::Command` that keeps the argument file from
+/// being deleted too early
 pub struct LaunchCommand<'a> {
     cmd: async_process::Command,
     _arg_temp: TempGuard<'a>,
@@ -339,7 +363,8 @@ impl DerefMut for LaunchCommand<'_> {
     }
 }
 
-/// 寻找并打开实例清单 JSON
+// 寻找并打开实例清单 JSON
+/// Finds and opens the instance manifest JSON
 async fn find_manifest(name: impl AsRef<str>, instance_dir: &PathBuf) -> Result<Vec<u8>> {
     // 优先考虑 versions/{name}/{name}.json
     let file = instance_dir.join(format!("{}.json", name.as_ref()));

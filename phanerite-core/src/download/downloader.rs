@@ -16,21 +16,29 @@ use tracing::{debug, error, warn};
 use url::Url;
 
 pub struct DownloaderBuilder {
-    /// 重试次数
+    // 重试次数
+    /// Number of retries
     retries: usize,
-    /// 最大并发数,
+    // 最大并发数,
+    /// Maximum concurrency
     concurrency: usize,
-    /// 大文件阈值
+    // 大文件阈值
+    /// Large-file threshold
     threshold: u64,
-    /// 大文件并行度
+    // 大文件并行度
+    /// Parallelism for large files
     large_parallelism: usize,
-    /// 小文件并行度
+    // 小文件并行度
+    /// Parallelism for small files
     small_parallelism: usize,
-    /// 大文件缓冲大小
+    // 大文件缓冲大小
+    /// Buffer size for large files
     large_buffer: usize,
-    /// 小文件缓冲大小
+    // 小文件缓冲大小
+    /// Buffer size for small files
     small_buffer: usize,
-    /// UA
+    // UA
+    /// User agent
     user_agent: &'static str,
 }
 
@@ -57,42 +65,50 @@ impl Default for DownloaderBuilder {
 }
 
 impl DownloaderBuilder {
-    /// 设置重试次数
+    // 设置重试次数
+    /// Sets the number of retries
     pub fn retries(mut self, retries: usize) -> Self {
         self.retries = retries;
         self
     }
-    /// 设置并发度
+    // 设置并发度
+    /// Sets the concurrency
     pub fn concurrency(mut self, max: NonZeroU8) -> Self {
         self.concurrency = max.get() as usize;
         self
     }
-    /// 设置大文件阈值
+    // 设置大文件阈值
+    /// Sets the large-file threshold
     pub fn threshold(mut self, threshold: u64) -> Self {
         self.threshold = threshold;
         self
     }
-    /// 设置大文件并行度
+    // 设置大文件并行度
+    /// Sets the parallelism for large files
     pub fn large_parallelism(mut self, max: NonZeroU8) -> Self {
         self.large_parallelism = max.get() as usize;
         self
     }
-    /// 设置小文件并行度
+    // 设置小文件并行度
+    /// Sets the parallelism for small files
     pub fn small_parallelism(mut self, max: NonZeroU8) -> Self {
         self.small_parallelism = max.get() as usize;
         self
     }
-    /// 设置大文件下载缓冲
+    // 设置大文件下载缓冲
+    /// Sets the download buffer for large files
     pub fn large_buffer(mut self, buffer: usize) -> Self {
         self.large_buffer = buffer;
         self
     }
-    /// 设置大文件下载缓冲
+    // 设置大文件下载缓冲
+    /// Sets the download buffer for small files
     pub fn small_buffer(mut self, buffer: usize) -> Self {
         self.small_buffer = buffer;
         self
     }
-    /// 设置 User-Agent
+    // 设置 User-Agent
+    /// Sets the User-Agent
     pub fn user_agent(mut self, ua: &'static str) -> Self {
         self.user_agent = ua;
         self
@@ -138,15 +154,20 @@ pub struct RawDownloader {
     concurrency: usize,
     threshold: u64,
 
-    /// HTTP 客户端
+    // HTTP 客户端
+    /// HTTP client
     client: HttpClient,
-    /// 获取大缓冲
+    // 获取大缓冲
+    /// Acquires a large buffer
     large_rx: Receiver<Vec<u8>>,
-    /// 归还大缓冲
+    // 归还大缓冲
+    /// Returns a large buffer
     large_tx: Sender<Vec<u8>>,
-    /// 获取小缓冲
+    // 获取小缓冲
+    /// Acquires a small buffer
     small_rx: Receiver<Vec<u8>>,
-    /// 归还小缓冲
+    // 归还小缓冲
+    /// Returns a small buffer
     small_tx: Sender<Vec<u8>>,
 }
 
@@ -188,7 +209,8 @@ impl Downloader for RawDownloader {
         Ok(Response::from_parts(parts, body))
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
-        /// 用于发送失败信号
+        // 用于发送失败信号
+        /// Sends the failure signal
         struct FailGuard<'a> {
             process: &'a DownloadProcess,
         }
@@ -242,7 +264,8 @@ impl RawDownloader {
         DownloaderBuilder::default()
     }
 
-    /// 重试体
+    // 重试体
+    /// The retried body of the download
     async fn retry_body<'cx>(
         &self,
         task: &DownloadTask<'cx>,
@@ -312,7 +335,8 @@ impl RawDownloader {
             )))
         }
     }
-    /// 下载后的保存和解压
+    // 下载后的保存和解压
+    /// Saving and extracting after the download
     async fn post_download<'cx>(
         &self,
         task: &DownloadTask<'cx>,
@@ -368,7 +392,8 @@ impl RawDownloader {
 
         Ok(())
     }
-    /// 申请下载缓存，限制总并行度
+    // 申请下载缓存，限制总并行度
+    /// Acquires a download buffer, bounding the total parallelism
     async fn alloc_buf(&self, size: Option<u64>) -> impl DerefMut<Target = [u8]> {
         struct BufferGuard {
             buf: Option<Vec<u8>>,

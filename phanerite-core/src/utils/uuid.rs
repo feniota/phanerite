@@ -2,7 +2,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
-/// 用于序列化/反序列化无符号 UUID
+// 用于序列化/反序列化无符号 UUID
+/// Serializes/deserializes UUIDs without hyphens
 #[derive(Debug, Clone)]
 pub struct UnhyphenatedUuid(Uuid);
 

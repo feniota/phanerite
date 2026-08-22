@@ -3,7 +3,8 @@ use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 use url::Url;
 
-/// GET `/search` 得到的信息
+// GET `/search` 得到的信息
+/// Information returned by GET `/search`
 /// <https://docs.modrinth.com/api/operations/searchprojects/>
 #[derive(Deserialize)]
 pub(super) struct SearchProject {
@@ -66,7 +67,8 @@ impl From<ProjectType> for crate::mod_project::features::filter::ProjectType {
     }
 }
 
-/// GET `/project/{id|slug}` 得到的信息
+// GET `/project/{id|slug}` 得到的信息
+/// Information returned by GET `/project/{id|slug}`
 /// <https://docs.modrinth.com/api/operations/getproject/>
 /// <https://docs.modrinth.com/api/operations/getprojects/>
 #[derive(Deserialize)]

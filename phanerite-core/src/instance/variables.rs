@@ -14,7 +14,8 @@ pub struct Variables<S: Default> {
 }
 
 impl<S: Default> Variables<S> {
-    /// 新旧版必选配置
+    // 新旧版必选配置
+    /// Settings required by both old and new versions
     pub fn required(
         mut self,
         auth_player_name: impl Into<String>,
@@ -28,13 +29,15 @@ impl<S: Default> Variables<S> {
             .insert("auth_access_token", auth_access_token.into());
         self
     }
-    /// 旧版必选配置
+    // 旧版必选配置
+    /// Settings required by older versions
     pub fn legacy(mut self, auth_session: impl Into<String>, user_type: impl Into<String>) -> Self {
         self.vars.insert("auth_session", auth_session.into());
         self.vars.insert("user_type", user_type.into());
         self
     }
-    /// 新版必选配置
+    // 新版必选配置
+    /// Settings required by newer versions
     pub fn modern(mut self, clientid: impl Into<String>, auth_xuid: impl Into<String>) -> Self {
         self.vars.insert("clientid", clientid.into());
         self.vars.insert("auth_xuid", auth_xuid.into());
@@ -67,7 +70,8 @@ impl<S: Default> Variables<S> {
             .insert("quick_play_realms", quick_play_realms.into());
         self
     }
-    /// 启用特性
+    // 启用特性
+    /// Enables a feature
     pub fn feature(mut self, feature: &'static str) -> Self {
         self.feat.insert(feature);
         self
@@ -78,7 +82,8 @@ impl Variables<NotReady> {
     pub fn new() -> Self {
         Default::default()
     }
-    /// 从实例生成必要项
+    // 从实例生成必要项
+    /// Generates the required entries from an instance
     pub fn generated<R: Clone, C: Clone>(
         mut self,
         instance: &Instance<R, C>,
@@ -120,31 +125,43 @@ impl Variables<Ready> {
 }
 
 struct ReadyVariables {
-    /// 实例名称
+    // 实例名称
+    /// Instance name
     version_name: String,
-    /// 版本类型
+    // 版本类型
+    /// Version type
     version_type: VersionType,
-    /// 实例根目录
+    // 实例根目录
+    /// Instance root directory
     game_directory: PathBuf,
-    /// 资源根目录
+    // 资源根目录
+    /// Asset root directory
     assets_root: PathBuf,
-    /// 资源索引名
+    // 资源索引名
+    /// Asset index name
     assets_index_name: String,
-    /// 游戏位置
+    // 游戏位置
+    /// Game location
     classpath: String,
-    /// 二进制库位置
+    // 二进制库位置
+    /// Native library location
     natives_directory: PathBuf,
-    /// 启动器名称
+    // 启动器名称
+    /// Launcher name
     launcher_name: &'static str,
-    /// 启动器版本
+    // 启动器版本
+    /// Launcher version
     launcher_version: &'static str,
-    /// 日志前缀
+    // 日志前缀
+    /// Log prefix
     path: PathBuf,
 
     // NeoForge 扩展
-    /// Library 根目录
+    // Library 根目录
+    /// Library root directory
     library_directory: PathBuf,
-    /// 路径分隔符
+    // 路径分隔符
+    /// Path separator
     classpath_separator: &'static str,
 }
 

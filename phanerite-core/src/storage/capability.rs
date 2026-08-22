@@ -4,7 +4,8 @@ use std::ops::BitAnd;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// 目录能力
+// 目录能力
+/// Directory capabilities
 #[derive(Clone, Copy, Debug)]
 pub struct DirCapability {
     pub read: bool,
@@ -25,7 +26,8 @@ impl BitAnd for DirCapability {
     }
 }
 
-/// 遍历检查目录能力
+// 遍历检查目录能力
+/// Walks the tree and probes the directory capabilities
 pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
     walk_dirs(root)
         .map(|dir| async move { probe_dir(&dir).await })
@@ -42,7 +44,8 @@ pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
         .await
 }
 
-/// 检查目录能力
+// 检查目录能力
+/// Probes the capabilities of a directory
 async fn probe_dir(current: &Path) -> DirCapability {
     let test_file = current.join(format!(".test-{}", Uuid::now_v7()));
     let test_link = current.join(format!(".test-link-{}", Uuid::now_v7()));
@@ -66,7 +69,8 @@ async fn probe_dir(current: &Path) -> DirCapability {
     }
 }
 
-/// 遍历目录
+// 遍历目录
+/// Walks the directory tree
 fn walk_dirs(root: PathBuf) -> impl Stream<Item = PathBuf> {
     futures::stream::unfold(vec![root], |mut stack| async move {
         let dir = stack.pop()?;

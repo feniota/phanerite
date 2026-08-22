@@ -1,31 +1,69 @@
-//! 登录凭据
+// 登录凭据
+//
+// 凭据会被放进 [`MultiAccount`] 全局共享，因此所有操作都取 `&self`，
+// 会随续期变化的部分由各自内部的一把 `RwLock` 保护。
+//
+// # 并发
+//
+// 续期不是纯函数：Yggdrasil 的 `refresh` 会作废旧的访问令牌，
+// 微软则会轮换刷新令牌。因此「读旧令牌 → 请求 → 写新令牌」
+// 必须是一个临界区，否则并发续期会把已经作废的令牌写回本地。
+//
+// 临界区用 `RwLock::upgradable_read()` 进入：它允许其他读者继续读，
+// 但互斥其他可升级读者，等于免费的单飞门闩；网络交互结束后
+// `upgrade()` 成写锁提交，提交期间不再 `await`。
+//
+// 划线标准是「**会不会改变服务端的令牌状态**」而不是「要不要 `&mut`」，
+// 所以 `invalidate()` / `signout()` 这类不写本地状态的操作同样要进临界区。
+//
+// 由此约定三条纪律，改动这个模块时必须遵守：
+//
+// 1. 锁只在公开方法里获取，私有 helper 一律不碰锁（签名收 `&State`
+//    或裸字段，返回待提交的新状态）。公开方法可以先做一次短读锁的
+//    快路径预检，但进入临界区之后不得再次获取。
+// 2. 持锁期间不调用任何其他 `&self` 方法。`RwLock` 是写者优先的，
+//    递归读锁会被排队中的写者挡死。
+// 3. guard 不逃逸，任何公开访问器都不返回 guard。持久化用
+//    [`Authentication::serialize()`]：它在锁内取一份快照，
+//    序列化本身在锁外进行，不需要阻塞获取读锁。
+//! Login credentials
 //!
-//! 凭据会被放进 [`MultiAccount`] 全局共享，因此所有操作都取 `&self`，
-//! 会随续期变化的部分由各自内部的一把 `RwLock` 保护。
+//! Credentials are shared globally through [`MultiAccount`], so every
+//! operation takes `&self`; the parts that change on renewal are each
+//! protected by their own internal `RwLock`.
 //!
-//! # 并发
+//! # Concurrency
 //!
-//! 续期不是纯函数：Yggdrasil 的 `refresh` 会作废旧的访问令牌，
-//! 微软则会轮换刷新令牌。因此「读旧令牌 → 请求 → 写新令牌」
-//! 必须是一个临界区，否则并发续期会把已经作废的令牌写回本地。
+//! Renewal is not a pure function: Yggdrasil's `refresh` invalidates the old
+//! access token, and Microsoft rotates the refresh token. "Read the old token
+//! → send the request → write the new token" must therefore be a single
+//! critical section, otherwise concurrent renewals write an
+//! already-invalidated token back to disk.
 //!
-//! 临界区用 `RwLock::upgradable_read()` 进入：它允许其他读者继续读，
-//! 但互斥其他可升级读者，等于免费的单飞门闩；网络交互结束后
-//! `upgrade()` 成写锁提交，提交期间不再 `await`。
+//! The critical section is entered with `RwLock::upgradable_read()`: it lets
+//! other readers keep reading but excludes other upgradable readers, which
+//! amounts to a free single-flight latch. Once the network exchange is done,
+//! `upgrade()` turns it into a write lock to commit, and there is no `await`
+//! during the commit.
 //!
-//! 划线标准是「**会不会改变服务端的令牌状态**」而不是「要不要 `&mut`」，
-//! 所以 `invalidate()` / `signout()` 这类不写本地状态的操作同样要进临界区。
+//! The line is drawn at "**does this change the token state on the server**",
+//! not at "does this need `&mut`", so operations like `invalidate()` /
+//! `signout()` must enter the critical section too even though they write no
+//! local state.
 //!
-//! 由此约定三条纪律，改动这个模块时必须遵守：
+//! This gives three rules that must be followed when changing this module:
 //!
-//! 1. 锁只在公开方法里获取，私有 helper 一律不碰锁（签名收 `&State`
-//!    或裸字段，返回待提交的新状态）。公开方法可以先做一次短读锁的
-//!    快路径预检，但进入临界区之后不得再次获取。
-//! 2. 持锁期间不调用任何其他 `&self` 方法。`RwLock` 是写者优先的，
-//!    递归读锁会被排队中的写者挡死。
-//! 3. guard 不逃逸，任何公开访问器都不返回 guard。持久化用
-//!    [`Authentication::serialize()`]：它在锁内取一份快照，
-//!    序列化本身在锁外进行，不需要阻塞获取读锁。
+//! 1. Locks are only acquired in public methods; private helpers never touch a
+//!    lock (they take `&State` or bare fields and return the new state to be
+//!    committed). A public method may run a fast-path pre-check under a short
+//!    read lock, but must not acquire again once inside the critical section.
+//! 2. No other `&self` method is called while holding the lock. `RwLock` is
+//!    writer-preferring, so a recursive read lock deadlocks behind a queued
+//!    writer.
+//! 3. Guards do not escape; no public accessor returns a guard. Use
+//!    [`Authentication::serialize()`] for persistence: it takes a snapshot
+//!    inside the lock, and the serialization itself happens outside the lock,
+//!    so no blocking read lock is needed.
 
 use crate::download::Downloader;
 use crate::error::Result;
@@ -44,28 +82,46 @@ pub mod yggdrasil;
 // 临时的 trait，可能需要改进
 #[allow(async_fn_in_trait)]
 pub trait Authentication: Eq {
-    /// 根据登录信息生成变量
+    // 根据登录信息生成变量
+    /// Builds the variables from the login information
     async fn vars(&self) -> Result<Variables<NotReady>>;
-    /// 取一份可以持久化的快照
+    // 取一份可以持久化的快照
+    //
+    // 内部状态由锁保护，`Serialize` 是同步的，两者无法直接对接，
+    // 因此先在锁内复制出快照，序列化在锁外进行。
+    //
+    // 快照里的凭据是明文，落盘位置与加密方式由调用方决定
+    /// Takes a snapshot that can be persisted
     ///
-    /// 内部状态由锁保护，`Serialize` 是同步的，两者无法直接对接，
-    /// 因此先在锁内复制出快照，序列化在锁外进行。
+    /// The internal state is protected by a lock and `Serialize` is
+    /// synchronous, so the two cannot be connected directly; a snapshot is
+    /// copied out inside the lock first, and the serialization happens outside
+    /// it.
     ///
-    /// 快照里的凭据是明文，落盘位置与加密方式由调用方决定
+    /// The credentials in the snapshot are in plaintext; where they are
+    /// written and how they are encrypted is up to the caller
     async fn serialize(&self) -> impl Serialize;
-    /// 需要对启动参数的额外注入
+    // 需要对启动参数的额外注入
+    /// Extra injection into the launch arguments, when needed
     fn inject(&self) -> impl AsyncFnOnce(&mut LaunchArguments) {
         async |_| {}
     }
-    /// 启动前的准备，凭据失效时自行续期
+    // 启动前的准备，凭据失效时自行续期
+    //
+    // 无法续期时返回错误，此时需要用户重新登录
+    /// Preparation before launch; renews the credentials itself when they have
+    /// expired
     ///
-    /// 无法续期时返回错误，此时需要用户重新登录
+    /// Returns an error when renewal is not possible, in which case the user
+    /// has to log in again
     async fn ready(&self, downloader: &impl Downloader) -> Result<()> {
         let _ = downloader;
         Ok(())
     }
 
-    /// 根据登录信息和 `Instance` 生成启动参数
+    // 根据登录信息和 `Instance` 生成启动参数
+    /// Builds the launch arguments from the login information and an
+    /// `Instance`
     async fn args<R: Clone, C: Clone>(
         &self,
         instance: &Instance<'_, R, C>,
@@ -77,10 +133,15 @@ pub trait Authentication: Eq {
     }
 }
 
-/// 统一的账户，用于持久化
+// 统一的账户，用于持久化
+//
+// 落盘位置与加密方式由调用方决定，
+// 其中的凭据都是明文，不应该直接暴露给用户
+/// Unified account type, used for persistence
 ///
-/// 落盘位置与加密方式由调用方决定，
-/// 其中的凭据都是明文，不应该直接暴露给用户
+/// Where it is written and how it is encrypted is up to the caller; the
+/// credentials it holds are all in plaintext and should not be exposed to the
+/// user directly
 #[derive(Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
@@ -90,7 +151,8 @@ pub enum Account {
     Yggdrasil(yggdrasil::Authentication),
 }
 
-/// [`Account`] 的快照，与 [`Account`] 的序列化格式一致
+// [`Account`] 的快照，与 [`Account`] 的序列化格式一致
+/// Snapshot of an [`Account`], matching [`Account`]'s serialization format
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AccountData<'a> {

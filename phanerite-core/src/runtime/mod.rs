@@ -7,18 +7,23 @@ use std::str::FromStr;
 
 pub mod java;
 
-/// `runtime` 目录下的子目录命名规则：
+// `runtime` 目录下的子目录命名规则：
+// {os}-{arch}-{package}-{major}-{vendor}
+/// Naming rule for the subdirectories under `runtime`:
 /// {os}-{arch}-{package}-{major}-{vendor}
 pub(crate) struct RuntimePath {
     /// `std::env::consts::OS`
     os: String,
     /// `std::env::consts::ARCH`
     arch: String,
-    /// runtime 类型，例如 `jre`
+    // runtime 类型，例如 `jre`
+    /// Runtime type, for example `jre`
     package: String,
-    /// runtime 版本
+    // runtime 版本
+    /// Runtime version
     major: usize,
-    /// runtime 供应商，例如 `zulu`,`oracle`
+    // runtime 供应商，例如 `zulu`,`oracle`
+    /// Runtime vendor, for example `zulu`, `oracle`
     vendor: String,
 }
 
@@ -37,7 +42,9 @@ impl RuntimePath {
     }
 }
 
-/// 提供 `RuntimePath` 根目录的类型，例如 `Storage`
+// 提供 `RuntimePath` 根目录的类型，例如 `Storage`
+/// A type that provides the root directory of a `RuntimePath`, for example
+/// `Storage`
 pub trait RuntimeScanPath {
     type Provider<'a>: AsRef<Storage> + 'a
     where

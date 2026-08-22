@@ -140,9 +140,13 @@ pub struct Options {
     pub sound_categories: HashMap<String, f32>,
     pub model_parts: HashMap<String, bool>,
 
-    /// 未识别的配置项。
+    // 未识别的配置项。
+    //
+    // 用于兼容未来 Minecraft 版本新增的配置。
+    /// Unrecognized configuration entries.
     ///
-    /// 用于兼容未来 Minecraft 版本新增的配置。
+    /// They keep the parser compatible with settings added in future Minecraft
+    /// versions.
     pub other: HashMap<String, String>,
 }
 

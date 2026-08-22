@@ -4,14 +4,22 @@ use std::{
     pin::Pin,
 };
 
-/// Minecraft 日志解析器。
+// Minecraft 日志解析器。
+//
+// Parser 是有状态的：
+//
+// - update() 接收任意大小的日志 chunk
+// - 内部自动处理不完整行
+// - 每一行可能产生多个 Parsed
+// - State 保存从历史日志中推导出的上下文
+/// Minecraft log parser.
 ///
-/// Parser 是有状态的：
+/// The parser is stateful:
 ///
-/// - update() 接收任意大小的日志 chunk
-/// - 内部自动处理不完整行
-/// - 每一行可能产生多个 Parsed
-/// - State 保存从历史日志中推导出的上下文
+/// - update() takes a log chunk of any size
+/// - incomplete lines are handled internally
+/// - each line may produce several `Parsed` values
+/// - `State` holds the context derived from past logs
 #[derive(Default)]
 pub struct LogsParser {
     state: State,
@@ -19,28 +27,36 @@ pub struct LogsParser {
     buffer: String,
 }
 
-/// Parser 的配置。
+// Parser 的配置。
+/// Configuration of the parser.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// 是否产生普通的 Log 事件。
+    // 是否产生普通的 Log 事件。
+    /// Whether to emit plain `Log` events.
     pub emit_logs: bool,
 
-    /// 是否产生无法识别格式的 Raw 事件。
+    // 是否产生无法识别格式的 Raw 事件。
+    /// Whether to emit `Raw` events for input in an unrecognized format.
     pub emit_raw: bool,
 
-    /// 是否解析玩家事件。
+    // 是否解析玩家事件。
+    /// Whether to parse player events.
     pub parse_players: bool,
 
-    /// 是否解析聊天。
+    // 是否解析聊天。
+    /// Whether to parse chat.
     pub parse_chat: bool,
 
-    /// 是否解析死亡。
+    // 是否解析死亡。
+    /// Whether to parse deaths.
     pub parse_death: bool,
 
-    /// 是否解析 advancement。
+    // 是否解析 advancement。
+    /// Whether to parse advancements.
     pub parse_advancement: bool,
 
-    /// 是否解析性能相关日志。
+    // 是否解析性能相关日志。
+    /// Whether to parse performance-related logs.
     pub parse_performance: bool,
 }
 
@@ -58,21 +74,29 @@ impl Default for Config {
     }
 }
 
-/// Minecraft 日志的持久化解析状态。
+// Minecraft 日志的持久化解析状态。
+//
+// 这里放“从过去日志中可以推导出来、并且对未来解析有意义”的信息。
+/// Persistent parsing state of the Minecraft logs.
 ///
-/// 这里放“从过去日志中可以推导出来、并且对未来解析有意义”的信息。
+/// This holds the information that "can be derived from past logs and is
+/// meaningful for future parsing".
 #[derive(Debug, Default)]
 pub struct State {
-    /// 当前服务器生命周期。
+    // 当前服务器生命周期。
+    /// Current server lifecycle.
     pub server: ServerState,
 
-    /// 当前已知的玩家。
+    // 当前已知的玩家。
+    /// Players currently known.
     pub players: HashMap<String, PlayerState>,
 
-    /// 最近一次观察到的性能状态。
+    // 最近一次观察到的性能状态。
+    /// Most recently observed performance state.
     pub performance: PerformanceState,
 
-    /// 当前世界相关状态。
+    // 当前世界相关状态。
+    /// Current world-related state.
     pub world: WorldState,
 }
 
@@ -102,10 +126,12 @@ pub struct ServerState {
 
 #[derive(Debug, Default)]
 pub struct PerformanceState {
-    /// 最近一次 "Can't keep up" 的延迟。
+    // 最近一次 "Can't keep up" 的延迟。
+    /// Delay of the most recent "Can't keep up".
     pub last_lag_ms: Option<u64>,
 
-    /// 最近一次 "Can't keep up" 报告的 tick 数。
+    // 最近一次 "Can't keep up" 报告的 tick 数。
+    /// Number of ticks reported by the most recent "Can't keep up".
     pub last_lag_ticks: Option<u64>,
 }
 
@@ -114,13 +140,16 @@ pub struct WorldState {
     pub saving: bool,
 }
 
-/// 一个完整日志行解析后产生的事件。
+// 一个完整日志行解析后产生的事件。
+/// Event produced by parsing one complete log line.
 #[derive(Debug, Clone)]
 pub enum Parsed {
-    /// 标准 Minecraft 日志。
+    // 标准 Minecraft 日志。
+    /// Standard Minecraft log.
     Log(Log),
 
-    /// 无法识别为标准 Minecraft 日志的输入。
+    // 无法识别为标准 Minecraft 日志的输入。
+    /// Input that could not be recognized as a standard Minecraft log.
     Raw(String),
 
     Server(ServerEvent),
@@ -225,19 +254,28 @@ impl LogsParser {
         self
     }
 
-    /// 当前解析状态。
+    // 当前解析状态。
+    /// Current parsing state.
     pub fn state(&self) -> &State {
         &self.state
     }
 
-    /// 输入任意大小的日志 chunk。
+    // 输入任意大小的日志 chunk。
+    //
+    // 输入不要求：
+    //
+    // - 一次只有一行
+    // - 一定以换行符结尾
+    //
+    // 只有已经完整接收到的行才会被解析。
+    /// Feeds in a log chunk of any size.
     ///
-    /// 输入不要求：
+    /// The input is not required to:
     ///
-    /// - 一次只有一行
-    /// - 一定以换行符结尾
+    /// - contain only one line at a time
+    /// - end with a newline
     ///
-    /// 只有已经完整接收到的行才会被解析。
+    /// Only lines that have been received in full are parsed.
     pub fn update(&mut self, input: impl AsRef<str>) -> Vec<Parsed> {
         self.buffer.push_str(input.as_ref());
 
@@ -262,9 +300,12 @@ impl LogsParser {
         result
     }
 
-    /// 输入结束时调用。
+    // 输入结束时调用。
+    //
+    // 用于处理最后一个没有 `\n` 的日志行。
+    /// Called when the input ends.
     ///
-    /// 用于处理最后一个没有 `\n` 的日志行。
+    /// It handles the last log line, which has no `\n`.
     pub fn finish(&mut self) -> Vec<Parsed> {
         if self.buffer.is_empty() {
             return Vec::new();
@@ -317,7 +358,8 @@ impl LogsParser {
         result
     }
 
-    /// 更新长期状态。
+    // 更新长期状态。
+    /// Updates the long-lived state.
     fn update_state(&mut self, log: &Log, events: &mut Vec<Parsed>) {
         let message = log.message.as_str();
 
@@ -584,10 +626,14 @@ impl LogsParser {
         }
     }
 
-    /// 将 parser 自己转换成一个 Stream。
+    // 将 parser 自己转换成一个 Stream。
+    //
+    // 注意这里是 `self` by-value：
+    // parser 的状态会被 stream 接管。
+    /// Turns the parser itself into a `Stream`.
     ///
-    /// 注意这里是 `self` by-value：
-    /// parser 的状态会被 stream 接管。
+    /// Note that `self` is taken by value here: the parser's state is taken
+    /// over by the stream.
     pub fn stream<S>(self, input: S) -> impl Stream<Item = Parsed>
     where
         S: Stream<Item = String>,

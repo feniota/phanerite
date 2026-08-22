@@ -8,7 +8,8 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 
-/// jvm 参数 + main_class + game 参数
+// jvm 参数 + main_class + game 参数
+/// JVM arguments + main class + game arguments
 pub struct LaunchArguments {
     pub(crate) main_class: String,
     pub(crate) jvm: HashMap<String, Option<String>>,
@@ -16,7 +17,8 @@ pub struct LaunchArguments {
 }
 
 impl LaunchArguments {
-    /// 设置 JVM 内存，单位 MiB
+    // 设置 JVM 内存，单位 MiB
+    /// Sets the JVM memory, in MiB
     pub fn set_memory(mut self, min: Option<u64>, max: Option<u64>) -> Self {
         match min {
             Some(size) => {
@@ -111,7 +113,8 @@ impl Variables<Ready> {
     }
 }
 
-/// 将条件参数转换为字符串
+// 将条件参数转换为字符串
+/// Turns the conditional arguments into strings
 fn flatten_arguments<'a>(
     arguments: impl Iterator<Item = &'a Argument> + 'a,
     features: &'a HashSet<&'static str>,
@@ -131,7 +134,8 @@ fn flatten_arguments<'a>(
     })
 }
 
-/// 对参数分块
+// 对参数分块
+/// Chunks the arguments
 fn chunk_arguments<'a, I>(
     mut input: Peekable<I>,
 ) -> impl Iterator<Item = (&'a String, Option<&'a String>)>
@@ -150,7 +154,8 @@ where
     })
 }
 
-/// 排除无法替换的参数
+// 排除无法替换的参数
+/// Filters out the arguments that cannot be substituted
 fn filter_none(
     variables: &Variables<Ready>,
     x: &str,

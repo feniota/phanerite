@@ -99,7 +99,8 @@ impl Ord for MetaData {
     }
 }
 
-/// 查找 Fabric 库
+// 查找 Fabric 库
+/// Looks up the Fabric libraries
 fn fabric_libraries(manifest: &InstanceManifest) -> impl Iterator<Item = FabricLibrary> {
     manifest.libraries.iter().filter_map(|x| {
         (x.extra.get("url")? == "https://maven.fabricmc.net/").then_some(FabricLibrary {

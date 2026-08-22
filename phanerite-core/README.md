@@ -1,6 +1,6 @@
 # Phanerite Core
 
-[![Crates.io](https://img.shields.io/crates/v/phanerite-core.svg)](https://crates.io/crates/your-crate)
+[![Crates.io](https://img.shields.io/crates/v/phanerite-core.svg)](https://crates.io/crates/phanerite-core)
 [![Documentation](https://docs.rs/phanerite-core/badge.svg)](https://docs.rs/phanerite-core)
 [![License](https://img.shields.io/crates/l/phanerite-core.svg)](../LICENSE)
 

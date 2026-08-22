@@ -5,12 +5,12 @@ pub enum PhaIcon {
     PlayFilled,
 }
 
-impl Into<gpui_component::Icon> for PhaIcon {
-    fn into(self) -> gpui_component::Icon {
-        match self {
-            Self::Flame => gpui_component::Icon::default().path("icons/flame.svg"),
-            Self::Layers => gpui_component::Icon::default().path("icons/layers.svg"),
-            Self::PlayFilled => gpui_component::Icon::default().path("icons/play-filled.svg"),
+impl From<PhaIcon> for gpui_component::Icon {
+    fn from(icon: PhaIcon) -> Self {
+        match icon {
+            PhaIcon::Flame => Self::default().path("icons/flame.svg"),
+            PhaIcon::Layers => Self::default().path("icons/layers.svg"),
+            PhaIcon::PlayFilled => Self::default().path("icons/play-filled.svg"),
         }
     }
 }

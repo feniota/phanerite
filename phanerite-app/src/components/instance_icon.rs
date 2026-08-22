@@ -59,7 +59,7 @@ fn rasterize(prisms: &mut [Prism]) -> (HashMap<(i32, i32), usize>, i32, i32, i32
             let from_top = prism.h - 1 - row;
             let tapered = (prism.w - (2 - from_top).max(0)).max(1);
             let inset = (prism.w - tapered) / 2;
-            let shift = (prism.lean * row as i32 + 2) / 4;
+            let shift = (prism.lean * row + 2) / 4;
             let mut start = prism.x + inset + shift;
             let mut end = start + tapered - 1;
 
@@ -135,10 +135,13 @@ fn close_holes(cells: &mut [Option<usize>], size: i32) {
         let mut tone = 1;
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x + dx, y + dy);
-            if nx >= 0 && ny >= 0 && nx < size && ny < size {
-                if let Some(neighbour) = cells[(ny * size + nx) as usize] {
-                    tone = tone.min(neighbour);
-                }
+            if nx >= 0
+                && ny >= 0
+                && nx < size
+                && ny < size
+                && let Some(neighbour) = cells[(ny * size + nx) as usize]
+            {
+                tone = tone.min(neighbour);
             }
         }
         cells[index] = Some(tone);

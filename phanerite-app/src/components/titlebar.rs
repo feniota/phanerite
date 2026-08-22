@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 //! Titlebar from GPUI Component.
 //! Copied here to increase its height.
 /*

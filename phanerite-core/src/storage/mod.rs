@@ -1,3 +1,88 @@
+// 启动器的文件布局
+//
+// [`Storage`] 是一张路径表，不是文件系统的封装：它只回答「某类数据应该
+// 放在哪」，真正的读写发生在别处。所以需要写文件的调用往往在构造阶段就
+// 注入 `Storage`，而落盘要等到任务被执行的时候。
+//
+// # 目录能力探测
+//
+// 一棵目录树可能横跨多个文件系统，硬链接和符号链接不保证处处可用。
+// [`Storage::new`] 会遍历整棵树逐个目录实测（见 [`capability`]），把结果
+// 取交集，再据此把共享策略从 `Hardlink` 逐级降到 `Symlink`、`Move`
+// （见 [`SharePreference`]）。因此 [`Storage::share_preference`] 给出的是
+// 偏好而不是保证。
+//
+// # 共享储存桶
+//
+// `{root}/share` 下的文件以内容的 Blake3 值命名，取前两位作为子目录。
+// 声明了 `share()` 的下载任务会先落进桶里，再按上面选出的策略链接到目标
+// 位置，于是多个实例引用同一份文件时不会重复占用磁盘。
+//
+// 桶不自动回收。删掉实例之后要调用 [`Storage::clean_hardlink`] 清理引用
+// 计数已经归零的文件和空目录（见 [`bucket`]）。
+//
+// # 临时文件
+//
+// [`temp::TempGuard`] 在 Drop 时把删除操作交给 `Storage` 自带的执行器，
+// 而不是同步阻塞地删。这个执行器需要有人推动：把 [`Storage::run_cleaner`]
+// 返回的 future spawn 出去，并且不要丢掉一起返回的
+// [`temp::ShutdownGuard`]。没有人推动时，临时文件只能等 `Storage` 自己
+// Drop 的那一刻被尽力清理一次。
+//
+// # 多个 Storage
+//
+// [`multi::MultiStorage`] 用于同时管理多个游戏目录。
+// [`multi::StorageWithPlugin`] 可以把生命周期必须与 `Storage` 一致的东西
+// （清理任务的 `ShutdownGuard`、带缓存的下载器……）绑在一起，避免它们被
+// 提前释放。
+//! The launcher's file layout
+//!
+//! [`Storage`] is a table of paths, not a wrapper around the filesystem: it
+//! only answers "where should this kind of data live", while the actual
+//! reads and writes happen elsewhere. That is why a call that needs to write
+//! a file often has `Storage` injected at construction time, with the write
+//! itself deferred until the task runs.
+//!
+//! # Directory capability probing
+//!
+//! A directory tree may span several filesystems, so hard links and symlinks
+//! are not guaranteed to work everywhere. [`Storage::new`] walks the whole
+//! tree and tests each directory empirically (see [`capability`]), takes the
+//! intersection of the results, and uses it to degrade the share strategy
+//! from `Hardlink` down through `Symlink` to `Move` (see
+//! [`SharePreference`]). [`Storage::share_preference`] therefore states a
+//! preference, not a guarantee.
+//!
+//! # Share bucket
+//!
+//! Files under `{root}/share` are named after the Blake3 hash of their
+//! contents, with the first two characters used as a subdirectory. A
+//! download task that declares `share()` lands in the bucket first and is
+//! then linked to its target location using the strategy chosen above, so
+//! that several instances referencing the same file do not each take up
+//! disk space.
+//!
+//! The bucket is not reclaimed automatically. After deleting an instance,
+//! call [`Storage::clean_hardlink`] to clear out files whose reference count
+//! has dropped to zero, along with the empty directories left behind (see
+//! [`bucket`]).
+//!
+//! # Temporary files
+//!
+//! On drop, [`temp::TempGuard`] hands the removal over to the executor that
+//! `Storage` carries, rather than blocking on it synchronously. Something
+//! has to drive that executor: spawn the future returned by
+//! [`Storage::run_cleaner`], and do not drop the [`temp::ShutdownGuard`]
+//! returned alongside it. With nothing driving it, temporary files only get
+//! one best-effort sweep at the moment `Storage` itself is dropped.
+//!
+//! # Several storages
+//!
+//! [`multi::MultiStorage`] manages several game directories at once.
+//! [`multi::StorageWithPlugin`] can tie objects whose lifetime must match
+//! `Storage` (the cleaner's `ShutdownGuard`, a caching downloader, ...) to
+//! it, so that they are not released early.
+
 pub mod bucket;
 pub mod capability;
 pub mod multi;

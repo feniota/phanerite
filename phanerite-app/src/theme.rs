@@ -1,6 +1,6 @@
 //! Theme application, typography scale, and shared visual constants.
 
-use gpui::{px, App, Hsla, Window};
+use gpui::{App, Hsla, Window, px};
 use gpui_component::{Theme, ThemeMode};
 
 use crate::palette::{self, token};

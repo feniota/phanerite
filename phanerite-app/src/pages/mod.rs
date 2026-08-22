@@ -69,7 +69,9 @@ pub(crate) fn page_shell(
     content: impl IntoElement,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{ActiveTheme as _, StyledExt as _, scroll::ScrollableElement as _, v_flex};
+    use gpui_component::{
+        ActiveTheme as _, StyledExt as _, scroll::ScrollableElement as _, v_flex,
+    };
     v_flex()
         .size_full()
         .min_h_0()

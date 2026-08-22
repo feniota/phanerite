@@ -5,10 +5,12 @@ use crate::{
     route::Route,
     state::{AppState, InstanceSummary},
 };
+use chrono::{Local, Timelike as _};
 use gpui::{
-    App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px,
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
@@ -16,26 +18,53 @@ use gpui_component::{
     scroll::ScrollableElement as _,
     v_flex,
 };
+use std::time::Duration;
 
 use super::route_button;
 
 fn instance_card(
+    scope: &str,
     instance: &InstanceSummary,
     flame: bool,
     app: Entity<AppState>,
-    cx: &App,
-) -> impl IntoElement {
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::AnyElement {
     let reference = instance.reference();
     let sessions = app.read(cx).sessions.read(cx);
     let running = sessions.is_running(&reference);
+    let card_id = format!("{scope}-instance-card-{}", instance.id);
+    let button_reference = reference.clone();
+    let hovered = window.use_keyed_state(format!("{card_id}-hover"), cx, |_, _| false);
+    let background = transition(
+        (card_id.clone(), "background"),
+        if *hovered.read(cx) {
+            cx.theme().sidebar_accent.opacity(0.8)
+        } else {
+            cx.theme().accordion
+        },
+        Transition::new(Duration::from_millis(250)),
+        window,
+        cx,
+    );
 
     h_flex()
+        .id(card_id)
+        .cursor_pointer()
         .w_full()
         .items_center()
         .rounded(cx.theme().radius)
         .border_1()
         .border_color(cx.theme().border)
-        .bg(cx.theme().accordion)
+        .bg(background)
+        .on_hover(move |is_hovered, _, cx| {
+            hovered.update(cx, |hovered, cx| {
+                if *hovered != *is_hovered {
+                    *hovered = *is_hovered;
+                    cx.notify();
+                }
+            })
+        })
         .child(
             h_flex()
                 .min_w_0()
@@ -95,8 +124,16 @@ fn instance_card(
                     )
                 }),
         )
+        .on_click({
+            let app = app.clone();
+            move |_, _, cx| {
+                app.update(cx, |state, cx| {
+                    state.push(Route::InstanceDetail(reference.clone()), cx)
+                })
+            }
+        })
         .child(
-            Button::new(format!("play-open-{}", instance.id))
+            Button::new(format!("{scope}-play-open-{}", instance.id))
                 .mr_3()
                 .ghost()
                 .icon(IconName::Play)
@@ -104,11 +141,12 @@ fn instance_card(
                     let app = app.clone();
                     move |_, _, cx| {
                         app.update(cx, |state, cx| {
-                            state.push(Route::InstanceDetail(reference.clone()), cx)
+                            state.push(Route::InstanceDetail(button_reference.clone()), cx)
                         })
                     }
                 }),
         )
+        .into_any_element()
 }
 
 pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -125,7 +163,12 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
         .cloned()
         .collect();
     let account = state.accounts.read(cx).active().cloned();
-    let greeting = "Good afternoon.";
+    let greeting = match Local::now().hour() {
+        5..12 => "Good morning.",
+        12..18 => "Good afternoon.",
+        18..22 => "Good evening.",
+        _ => "Welcome back.",
+    };
 
     v_flex()
         .h_full()
@@ -171,6 +214,19 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                 ),
         )
         .when_some(recommended, |this, instance| {
+            let card_id = format!("recommended-instance-card-{}", instance.id);
+            let hovered = window.use_keyed_state(format!("{card_id}-hover"), cx, |_, _| false);
+            let background = transition(
+                (card_id.clone(), "background"),
+                if *hovered.read(cx) {
+                    cx.theme().sidebar_accent.opacity(0.8)
+                } else {
+                    cx.theme().accordion
+                },
+                Transition::new(Duration::from_millis(250)),
+                window,
+                cx,
+            );
             this.child(
                 v_flex()
                     .flex_shrink_0()
@@ -185,66 +241,98 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                     .child(
                         h_flex()
                             .items_center()
-                            .gap_4()
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded_xl()
+                            .bg(background)
                             .overflow_hidden()
-                            .pl_4()
-                            .child(crate::components::instance_icon::render(&instance, cx))
                             .child(
-                                v_flex()
+                                h_flex()
+                                    .id(card_id)
+                                    .cursor_pointer()
                                     .min_w_0()
                                     .flex_1()
-                                    .gap_1()
-                                    .py_4()
+                                    .items_center()
+                                    .gap_4()
+                                    .pl_4()
+                                    .on_hover(move |is_hovered, _, cx| {
+                                        hovered.update(cx, |hovered, cx| {
+                                            if *hovered != *is_hovered {
+                                                *hovered = *is_hovered;
+                                                cx.notify();
+                                            }
+                                        })
+                                    })
+                                    .on_click({
+                                        let app = app.clone();
+                                        let reference = instance.reference();
+                                        move |_, _, cx| {
+                                            app.update(cx, |state, cx| {
+                                                state.push(
+                                                    Route::InstanceDetail(reference.clone()),
+                                                    cx,
+                                                )
+                                            })
+                                        }
+                                    })
+                                    .child(crate::components::instance_icon::render(&instance, cx))
                                     .child(
-                                        h_flex()
+                                        v_flex()
                                             .min_w_0()
-                                            .items_center()
-                                            .gap_2()
+                                            .flex_1()
+                                            .gap_1()
+                                            .py_4()
                                             .child(
-                                                div()
+                                                h_flex()
                                                     .min_w_0()
-                                                    .truncate()
-                                                    .text_base()
-                                                    .font_semibold()
-                                                    .child(instance.name.clone()),
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .min_w_0()
+                                                            .truncate()
+                                                            .text_base()
+                                                            .font_semibold()
+                                                            .child(instance.name.clone()),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .px_2()
+                                                            .rounded_full()
+                                                            .bg(cx.theme().secondary)
+                                                            .text_xs()
+                                                            .child(format!(
+                                                                "MC {}",
+                                                                instance.mc_version
+                                                            )),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .px_2()
+                                                            .rounded_full()
+                                                            .bg(cx.theme().secondary)
+                                                            .text_xs()
+                                                            .child(instance.loader.label()),
+                                                    ),
                                             )
                                             .child(
                                                 div()
-                                                    .px_2()
-                                                    .rounded_full()
-                                                    .bg(cx.theme().secondary)
                                                     .text_xs()
-                                                    .child(format!("MC {}", instance.mc_version)),
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(instance.description.clone()),
                                             )
                                             .child(
                                                 div()
-                                                    .px_2()
-                                                    .rounded_full()
-                                                    .bg(cx.theme().secondary)
                                                     .text_xs()
-                                                    .child(instance.loader.label()),
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(format!(
+                                                        "{} mods    {} packs    {} worlds    Java {}",
+                                                        instance.enabled_mods(),
+                                                        instance.resource_packs.len(),
+                                                        instance.worlds.len(),
+                                                        instance.java
+                                                    )),
                                             ),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(instance.description.clone()),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(format!(
-                                                "{} mods    {} packs    {} worlds    Java {}",
-                                                instance.enabled_mods(),
-                                                instance.resource_packs.len(),
-                                                instance.worlds.len(),
-                                                instance.java
-                                            )),
                                     ),
                             )
                             .child(
@@ -323,7 +411,16 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                         v_flex().gap_2().children(
                             server_owner_recommendations
                                 .iter()
-                                .map(|instance| instance_card(instance, false, app.clone(), cx)),
+                                .map(|instance| {
+                                    instance_card(
+                                        "server-owner",
+                                        instance,
+                                        false,
+                                        app.clone(),
+                                        window,
+                                        cx,
+                                    )
+                                }),
                         ),
                     ),
             )
@@ -357,7 +454,14 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                         .children(row.iter().map(|instance| {
                             h_flex()
                                 .flex_1()
-                                .child(instance_card(instance, true, app.clone(), cx))
+                                .child(instance_card(
+                                    "all",
+                                    instance,
+                                    true,
+                                    app.clone(),
+                                    window,
+                                    cx,
+                                ))
                         }))
                         .when(row.len() == 1, |row| row.child(div().flex_1()))
                 }))),

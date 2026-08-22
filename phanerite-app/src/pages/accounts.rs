@@ -1,6 +1,6 @@
 //! Accounts page for managing authenticated and offline player profiles.
 
-use super::page_shell;
+use super::{page_shell, page_title};
 use crate::state::AppState;
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{
@@ -24,8 +24,11 @@ pub fn render(app: Entity<AppState>, _window: &mut Window, cx: &App) -> impl Int
             }),
     );
     page_shell(
-        "Accounts",
-        "One active account per launch; offline accounts work for single-player only.",
+        Some(page_title(
+            "Accounts",
+            "One active account per launch; offline accounts work for single-player only.",
+            cx,
+        )),
         content,
         cx,
     )

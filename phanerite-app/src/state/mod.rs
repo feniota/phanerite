@@ -98,13 +98,21 @@ impl AccountType {
 /// frequency stores. Launch progress and live log output are deliberately not
 /// reachable from here, so no consumer of this entity can observe them.
 pub struct AppState {
+    /// Registered storage roots and the storage root currently selected by the app.
     pub registry: StorageRegistry,
+    /// Current route and the navigation history used by page transitions.
     pub navigation: Navigation,
+    /// Instance metadata and the currently loaded instances.
     pub instances: Entity<InstanceStore>,
+    /// Configured Minecraft accounts and the active account selection.
     pub accounts: Entity<AccountStore>,
+    /// Application settings, preferences, and discovered Java runtimes.
     pub settings: Entity<SettingsStore>,
+    /// Crash reports associated with the registered storage roots.
     pub crashes: Entity<CrashStore>,
+    /// Summaries of launched and recently finished game sessions.
     pub sessions: Entity<SessionStore>,
+    /// Subscriptions that forward changes from child stores to this app state.
     _subscriptions: Vec<Subscription>,
 }
 

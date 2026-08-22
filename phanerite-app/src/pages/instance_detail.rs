@@ -7,7 +7,7 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use super::{back_button, instance_exists, missing_resource, page_shell};
+use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{
     route::{CrashRef, InstanceRef, Route},
     state::AppState,
@@ -145,5 +145,10 @@ pub fn render(
                 app,
             )),
     );
-    page_shell(instance.name, instance.description, cards, cx).into_any_element()
+    page_shell(
+        Some(page_title(instance.name, instance.description, cx)),
+        cards,
+        cx,
+    )
+    .into_any_element()
 }

@@ -15,6 +15,7 @@ pub mod setup;
 pub mod shaders;
 pub mod worlds;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
@@ -63,35 +64,39 @@ pub fn render(
         })
 }
 
-pub(crate) fn page_shell(
+pub(crate) fn page_title(
     title: impl Into<gpui::SharedString>,
     description: impl Into<gpui::SharedString>,
+    cx: &App,
+) -> impl IntoElement {
+    use gpui_component::{ActiveTheme as _, StyledExt as _, v_flex};
+    v_flex()
+        .gap_1()
+        .px_6()
+        .pt_6()
+        .pb_4()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .child(div().text_lg().font_semibold().child(title.into()))
+        .child(
+            div()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(description.into()),
+        )
+}
+
+pub(crate) fn page_shell(
+    title: Option<impl IntoElement>,
     content: impl IntoElement,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{
-        ActiveTheme as _, StyledExt as _, scroll::ScrollableElement as _, v_flex,
-    };
+    use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, v_flex};
     v_flex()
         .size_full()
         .min_h_0()
         .bg(cx.theme().background)
-        .child(
-            v_flex()
-                .gap_1()
-                .px_6()
-                .pt_6()
-                .pb_4()
-                .border_b_1()
-                .border_color(cx.theme().border)
-                .child(div().text_lg().font_semibold().child(title.into()))
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(description.into()),
-                ),
-        )
+        .when_some(title, |element, title| element.child(title))
         .child(
             div()
                 .flex_1()

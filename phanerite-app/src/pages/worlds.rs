@@ -1,6 +1,6 @@
 //! World management page for a selected instance.
 
-use super::{back_button, instance_exists, missing_resource, page_shell};
+use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{route::InstanceRef, state::AppState};
 use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex, v_flex};
@@ -53,8 +53,11 @@ pub fn render(
                 })),
         );
     page_shell(
-        "Worlds",
-        format!("Saved worlds for {}.", instance.name),
+        Some(page_title(
+            "Worlds",
+            format!("Saved worlds for {}.", instance.name),
+            cx,
+        )),
         content,
         cx,
     )

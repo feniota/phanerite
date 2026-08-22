@@ -230,7 +230,6 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
         .h_full()
         .w_full()
         .flex_shrink_0()
-        .border_r_1()
         .border_color(cx.theme().sidebar_border)
         .child(
             Sidebar::new("launcher-sidebar")

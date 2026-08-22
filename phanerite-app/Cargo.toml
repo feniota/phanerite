@@ -30,7 +30,6 @@ gallery = ["seed"]
 
 [dependencies]
 phanerite-core = { path = "../phanerite-core" }
-# zed-industries/zed?rev=08827f9 (pinned by gpui-component)
 gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
   "font-kit",
@@ -41,9 +40,11 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "
 gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
 anyhow = "1.0"
+chrono.workspace = true
 rust-embed = "8.12.0"
 smallvec = "1.15.2"
 zstd = "0.13.3"
+dirs = "6.0.0"
 
 [dev-dependencies]
 gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }

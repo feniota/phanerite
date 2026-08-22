@@ -3,7 +3,7 @@
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, v_flex};
 
-use super::{page_shell, route_button};
+use super::{page_shell, page_title, route_button};
 use crate::{route::Route, state::AppState};
 
 pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoElement {
@@ -62,8 +62,11 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                 )
         }));
     page_shell(
-        "Aphanite configurations",
-        "Modpack configurations provided by your connected Aphanite server.",
+        Some(page_title(
+            "Aphanite configurations",
+            "Modpack configurations provided by your connected Aphanite server.",
+            cx,
+        )),
         content,
         cx,
     )

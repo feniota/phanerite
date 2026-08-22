@@ -32,6 +32,7 @@ pub fn render(
 
     Button::new(id)
         .bg(background)
+        .cursor_pointer()
         .on_hover(move |is_hovered, _, cx| {
             hovered.update(cx, |hovered, cx| {
                 if *hovered != *is_hovered {

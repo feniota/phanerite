@@ -1,6 +1,6 @@
 //! Mods page for browsing and managing an instance's installed mods.
 
-use super::{back_button, instance_exists, missing_resource, page_shell};
+use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{route::InstanceRef, state::AppState};
 use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 use gpui_component::button::ButtonVariants as _;
@@ -73,8 +73,11 @@ pub fn render(
             }),
     );
     page_shell(
-        "Mods",
-        format!("Manage the isolated mods folder for {}.", instance.name),
+        Some(page_title(
+            "Mods",
+            format!("Manage the isolated mods folder for {}.", instance.name),
+            cx,
+        )),
         content,
         cx,
     )

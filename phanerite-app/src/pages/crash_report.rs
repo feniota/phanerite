@@ -1,6 +1,6 @@
 //! Crash report page with local findings and shareable diagnostics.
 
-use super::{back_button, crash_exists, missing_resource, page_shell};
+use super::{back_button, crash_exists, missing_resource, page_shell, page_title};
 use crate::{route::CrashRef, state::AppState};
 use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{
@@ -115,8 +115,11 @@ pub fn render(
                 .child(Button::new("crash-retry").primary().label("Retry launch")),
         );
     page_shell(
-        "Crash report",
-        "Local diagnostic findings and redacted output for this failed launch.",
+        Some(page_title(
+            "Crash report",
+            "Local diagnostic findings and redacted output for this failed launch.",
+            cx,
+        )),
         content,
         cx,
     )

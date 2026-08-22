@@ -1,6 +1,6 @@
 //! Per-instance launch settings page.
 
-use super::{back_button, instance_exists, missing_resource, page_shell};
+use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{
     route::InstanceRef,
     state::{AppState, LaunchSettings},
@@ -62,8 +62,11 @@ pub fn render(
                 ),
         );
     page_shell(
-        "Launch settings",
-        "Values inherit global defaults until you override them for this instance.",
+        Some(page_title(
+            "Launch settings",
+            "Values inherit global defaults until you override them for this instance.",
+            cx,
+        )),
         content,
         cx,
     )

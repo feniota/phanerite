@@ -1,6 +1,6 @@
 //! Shader-pack management page for a selected instance.
 
-use super::{back_button, instance_exists, missing_resource, page_shell};
+use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{route::InstanceRef, state::AppState};
 use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 use gpui_component::button::ButtonVariants as _;
@@ -72,8 +72,11 @@ pub fn render(
             }),
     );
     page_shell(
-        "Shader packs",
-        format!("Shader packs installed for {}.", instance.name),
+        Some(page_title(
+            "Shader packs",
+            format!("Shader packs installed for {}.", instance.name),
+            cx,
+        )),
         content,
         cx,
     )

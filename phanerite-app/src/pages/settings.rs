@@ -9,7 +9,7 @@ use gpui_component::{
 
 use crate::state::AppState;
 
-use super::page_shell;
+use super::{page_shell, page_title};
 
 pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoElement {
     let app_state = app.read(cx);
@@ -88,8 +88,11 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
         ))
         .child(Button::new("settings-updates").label("Check for updates"));
     page_shell(
-        "Settings",
-        "Global preferences. Instance-specific options live in each instance's detail panel.",
+        Some(page_title(
+            "Settings",
+            "Global preferences. Instance-specific options live in each instance's detail panel.",
+            cx,
+        )),
         content,
         cx,
     )

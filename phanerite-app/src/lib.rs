@@ -11,6 +11,7 @@ pub mod route;
 pub mod seed;
 pub mod state;
 pub mod theme;
+pub mod utils;
 
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,

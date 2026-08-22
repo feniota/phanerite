@@ -45,10 +45,8 @@ impl AssetSource for Assets {
                 Some(compressed) => {
                     let decompressed = zstd_decompress(
                         &compressed,
-                        // capacity: "The decompressed data should be at most capacity bytes"
-                        // Likely designed to avoid attack. However the decompressed source file
-                        // is controlled by ourself. So this is not needed
-                        usize::MAX,
+                        // 64MB to avoid OOM caused by unexpected asset corruption
+                        64 * 1024 * 1024,
                     )?;
                     Ok(Some(Cow::from(decompressed)))
                 }

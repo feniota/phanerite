@@ -4,7 +4,7 @@ use super::page_shell;
 use crate::state::AppState;
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 use gpui_component::{
-    ActiveTheme as _, IconName, StyledExt,
+    ActiveTheme as _, IconName, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };

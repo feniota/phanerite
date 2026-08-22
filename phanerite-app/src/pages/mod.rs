@@ -69,7 +69,7 @@ pub(crate) fn page_shell(
     content: impl IntoElement,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{ActiveTheme as _, StyledExt, scroll::ScrollableElement as _, v_flex};
+    use gpui_component::{ActiveTheme as _, StyledExt as _, scroll::ScrollableElement as _, v_flex};
     v_flex()
         .size_full()
         .min_h_0()
@@ -126,7 +126,7 @@ pub(crate) fn back_button(app: Entity<AppState>) -> gpui_component::button::Butt
 }
 
 pub(crate) fn missing_resource(label: &str, app: Entity<AppState>) -> impl IntoElement {
-    use gpui_component::{StyledExt, button::Button, v_flex};
+    use gpui_component::{StyledExt as _, button::Button, v_flex};
     v_flex()
         .size_full()
         .items_center()

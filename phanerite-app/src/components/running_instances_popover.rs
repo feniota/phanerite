@@ -3,7 +3,7 @@
 use gpui::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
 };
-use gpui_component::StyledExt;
+use gpui_component::StyledExt as _;
 use gpui_component::v_flex;
 
 use crate::state::AppState;

@@ -1,11 +1,11 @@
 //! Primary navigation sidebar and its instance navigation entries.
 
 use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce as _,
     StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Collapsible, Icon, IconName, StyledExt,
+    ActiveTheme as _, Collapsible, Icon, IconName, StyledExt as _,
     button::ButtonVariants as _,
     sidebar::{Sidebar, SidebarFooter, SidebarItem},
     v_flex,

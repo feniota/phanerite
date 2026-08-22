@@ -4,7 +4,7 @@ use gpui::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
-use gpui_component::{ActiveTheme as _, StyledExt, h_flex};
+use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
 
 use crate::{
     route::Route,

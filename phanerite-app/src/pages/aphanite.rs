@@ -1,7 +1,7 @@
 //! Aphanite service page showing the connected server and its status.
 
 use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt, h_flex, v_flex};
+use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, v_flex};
 
 use super::{page_shell, route_button};
 use crate::{route::Route, state::AppState};

@@ -198,14 +198,14 @@ END OF TERMS AND CONDITIONS
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Background, ClickEvent, Context, Decorations, Hsla, InteractiveElement,
+    AnyElement, App, Background, ClickEvent, Context, Decorations, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce, Rgba,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
     WindowControlArea, WindowOptions, div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
+    ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _, h_flex,
 };
 use smallvec::SmallVec;
 

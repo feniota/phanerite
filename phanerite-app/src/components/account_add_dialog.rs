@@ -2,7 +2,7 @@
 
 use gpui::{App, AppContext as _, Entity, ParentElement as _, Styled as _, Window};
 use gpui_component::{
-    WindowExt,
+    WindowExt as _,
     button::{Button, ButtonVariants as _},
     input::{Input, InputState},
     v_flex,

@@ -1,5 +1,7 @@
 //! Phanerite launcher application shell and root presentation entity.
 
+#![warn(clippy::unused_trait_names)]
+
 pub mod assets;
 pub mod components;
 pub mod pages;
@@ -15,7 +17,7 @@ use gpui::{
     ParentElement as _, Render, Styled as _, Window, div, px,
 };
 use gpui_base::{h_resizable, resizable_panel};
-use gpui_component::{ActiveTheme as _, Root, scroll::ScrollableElement, v_flex};
+use gpui_component::{ActiveTheme as _, Root, scroll::ScrollableElement as _, v_flex};
 
 use crate::components::titlebar::TitleBar;
 use crate::state::{

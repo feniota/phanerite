@@ -2,7 +2,7 @@
 
 use gpui::App;
 use gpui::Window;
-use gpui_component::{Icon, IconName, WindowExt};
+use gpui_component::{Icon, IconName, WindowExt as _};
 use std::rc::Rc;
 
 /// Opens the shared destructive confirmation pattern. The callback performs

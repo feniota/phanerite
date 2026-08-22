@@ -1,7 +1,7 @@
 //! Bottom status bar for low-frequency application status and actions.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _};
-use gpui_component::status_bar::StatusBar;
+use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, div};
+use gpui_component::{separator::Separator, status_bar::StatusBar};
 
 use crate::state::AppState;
 
@@ -11,22 +11,23 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
     let state = app.read(cx);
     let count = state.instances.read(cx).len();
     let running = state.sessions.read(cx).running_count();
-    let account = state
+    let _account = state
         .accounts
         .read(cx)
         .active()
         .map(|item| item.username.clone());
     let bar = StatusBar::new()
         .left("Phanerite")
-        .left("0.1.0-pre")
-        .child(format!("{count} instances"));
-    let bar = if running > 0 {
-        bar.child(format!("{running} running"))
-    } else {
-        bar
-    };
-    if let Some(account) = account {
-        bar.right(format!("Signed in as {account}"))
+        .left(
+            div()
+                .font_family(crate::theme::MONO_FONT_FAMILY)
+                .child("0.1.0-pre"),
+        )
+        .left(Separator::vertical())
+        .left(format!("{count} instances"));
+    if running > 0 {
+        bar.left(Separator::vertical())
+            .left(format!("{running} running"))
     } else {
         bar
     }

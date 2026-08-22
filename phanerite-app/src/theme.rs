@@ -1,6 +1,6 @@
 //! Theme application, typography scale, and shared visual constants.
 
-use gpui::{App, Hsla, Window, px};
+use gpui::{px, App, Hsla, Window};
 use gpui_component::{Theme, ThemeMode};
 
 use crate::palette::{self, token};
@@ -16,7 +16,7 @@ pub const MONO_FONT_FAMILY: &str = "Adwaita Mono";
 pub mod text {
     /// Meta, counts and timestamps — the floor, nothing smaller.
     pub const MICRO: f32 = 12.0;
-    /// Dense body: list rows, descriptions, most of the app chrome.
+    /// Dense body: list rows, descriptions, most of the phanerite-app chrome.
     pub const XS: f32 = 13.0;
     /// Emphasized body and form labels.
     pub const SM: f32 = 15.0;

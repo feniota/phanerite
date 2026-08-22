@@ -5,7 +5,7 @@ use gpui_component::status_bar::StatusBar;
 
 use crate::state::AppState;
 
-/// This deliberately observes only low/medium-frequency app state. It never
+/// This deliberately observes only low/medium-frequency phanerite-app state. It never
 /// receives LaunchStore or LiveLogStore handles.
 pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
     let state = app.read(cx);

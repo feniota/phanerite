@@ -1,4 +1,4 @@
-//! Storage registry and persistence context for app-managed data.
+//! Storage registry and persistence context for phanerite-app-managed data.
 
 use std::{
     path::{Path, PathBuf},

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-/// A stable identifier for an app-managed storage entry.
+/// A stable identifier for an phanerite-app-managed storage entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StorageId(u64);
 

@@ -433,6 +433,15 @@ pub struct Pending<'a, D: Downloader> {
 }
 
 impl<D: Downloader> Pending<'_, D> {
+    /// 预填了用户码的地址，适合做成可点击的链接或二维码
+    ///
+    /// 微软不返回 RFC 8628 的 `verification_uri_complete`，这里用登录页支持的
+    /// `otc` 参数拼出来，属于未文档化的行为，仍然需要展示 `message` 兜底
+    pub fn verification_uri_complete(&self) -> Url {
+        let mut url = self.verification_uri.clone();
+        url.query_pairs_mut().append_pair("otc", &self.user_code);
+        url
+    }
     /// 服务端建议的轮询间隔
     pub fn interval(&self) -> Duration {
         self.interval

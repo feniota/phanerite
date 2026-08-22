@@ -26,6 +26,7 @@ fn main() {
             // 可登录的账户类型，默认仅个人账户
             .tenant(microsoft::Tenant::Consumers)
             // Azure 应用注册的客户端 ID，需要允许公共客户端流
+                // 注册 ID 后，需要在 https://aka.ms/AppRegInfo 提交申请用于 Minecraft
             .client_id(
                 std::env::var("MICROSOFT_CLIENT_ID")
                     .expect("Fill in the Azure client ID in the environment variable"),
@@ -39,6 +40,8 @@ fn main() {
                 let mut pending = login.device_code().await?;
                 // 提示用户完成授权，`message` 已经包含地址与用户码
                 println!("{}", pending.message);
+                // 也可以直接给出预填用户码的地址，省掉手动输入
+                println!("直接打开: {}", pending.verification_uri_complete());
                 println!(
                     "({} 后过期，每 {} 秒轮询一次)",
                     pending.expires_at(),

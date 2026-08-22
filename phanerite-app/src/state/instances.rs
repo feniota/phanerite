@@ -66,7 +66,7 @@ pub struct JavaRuntimeSummary {
 }
 
 impl JavaRuntimeSummary {
-    /// Projects the core runtime into owned presentation data. The app never
+    /// Projects the core runtime into owned presentation data. The phanerite-app never
     /// stores a borrowed core runtime or loses the executable path.
     pub fn from_core(runtime: &phanerite_core::runtime::java::JavaRuntime) -> Self {
         Self {

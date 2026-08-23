@@ -1,5 +1,6 @@
 use phanerite_core::auth;
 use phanerite_core::auth::{Authentication, MultiAccount};
+use phanerite_core::download::cache::CachedDownloader;
 use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::Zulu;
@@ -35,7 +36,7 @@ fn main() {
         // 下载缓存，建议保持尽可能长的生命周期
         // 不建议使用 default，因为内置的记录器无法持久化，可共享的文件需要再次下载
         // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
-        let cached_downloader = raw_downloader.with_cache_default();
+        let cached_downloader = CachedDownloader::default(raw_downloader);
 
         // 创建 Storage
         // 由于登录需要 Storage 提供存放 Authlib-Injector 的位置，将 Storage 移入 MultiStorage 的步骤往后推迟

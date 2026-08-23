@@ -1,9 +1,8 @@
 // 下载
 //
 // [`Downloader`] 是这个模块对外的唯一接口，能力靠包装逐层叠加：
-// [`downloader::RawDownloader`] 负责真正的 HTTP，其余包装器都同样实现
-// `Downloader`，对内层既可以只借引用，也可以持有智能指针把它 own 下来，
-// 因此可以自由组合、就地丢弃。
+// [`downloader::RawDownloader`] 负责真正的 HTTP，其余包装器都只持有内层
+// 的引用并同样实现 `Downloader`，因此可以自由组合、就地丢弃。
 //
 // ```text
 // RawDownloader              连接池、重试、缓冲池、流式落盘
@@ -17,7 +16,7 @@
 // 程序或 `Storage` 同寿，而 [`group::DownloadGroup`] 应当一次性使用——
 // 它的 [`group::Monitor`] 只增不减，复用会让进度越算越大。
 //
-// [`DownloaderExt::with_cache_default`] 用的是内存记录器，进程重启后认不
+// [`DownloaderExt::with_cache`] 使用内存记录器，进程重启后认不
 // 出桶里已有的文件，会重新下载一遍。要持久化就自己实现
 // [`cache::BucketRecorder`] 并传给 [`DownloaderExt::with_cache`]。
 //
@@ -42,9 +41,9 @@
 //!
 //! [`Downloader`] is this module's only public interface; capabilities are
 //! layered on by wrapping. [`downloader::RawDownloader`] does the actual
-//! HTTP, and every other wrapper implements `Downloader` as well, holding the
-//! layer inside it either by plain reference or by a smart pointer that owns
-//! it, so they compose freely and can be dropped on the spot.
+//! HTTP, and every other wrapper merely holds a reference to the layer
+//! inside it and implements `Downloader` as well, so they compose freely and
+//! can be dropped on the spot.
 //!
 //! ```text
 //! RawDownloader            connection pool, retries, buffer pool, streaming to disk
@@ -62,10 +61,10 @@
 //! [`group::Monitor`] only ever grows, so reusing it makes the progress
 //! figures drift upwards.
 //!
-//! [`DownloaderExt::with_cache_default`] uses an in-memory recorder, which
+//! [`DownloaderExt::with_cache`] uses an in-memory recorder, which
 //! will not recognise files already in the bucket after a restart and
 //! downloads them again. To persist that state, implement
-//! [`cache::BucketRecorder`] yourself and pass it to
+//! [`cache::StorageRegistry`] yourself and pass it to
 //! [`DownloaderExt::with_cache`].
 //!
 //! # Tasks
@@ -91,7 +90,7 @@
 //! is the Java runtime; [`authlib_injector`] is the injector required for
 //! third-party login; [`mirror`] holds the Chinese mirrors.
 
-use crate::download::cache::{BucketRecorder, CachedDownloader};
+use crate::download::cache::{CachedDownloader, StorageRegistry};
 use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
@@ -100,7 +99,6 @@ use crate::utils::Hash;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
-use std::path::PathBuf;
 use url::Url;
 
 pub mod authlib_injector;
@@ -153,55 +151,26 @@ pub trait Downloader: Send + Sync {
     }
 }
 
-// 以引用包装下载器的快捷方式
-//
-// 这里的方法一律只借用 `&self`，得到的包装器是 `&Self` 版本，寿命受制于
-// 被包装的下载器，适合就地组合、用完即弃。
-//
-// 包装器本身并不限于引用：它们对内层的持有方式是泛型的 `B: Borrow<D>`，
-// 因此 `Arc<D>`、`Box<D>` 乃至直接 move 进去的 `D` 都可以。要用持有智能
-// 指针的版本（例如包装器需要比调用处活得更久，或要跨任务共享），就绕过
-// 这个 trait，直接调各自类型的构造函数：[`DownloadGroup::new`]、
-// [`DownloaderWithMirror::new`]、[`CachedDownloader::new`] 与
-// [`CachedDownloader::new_default`]。
-/// Shortcuts that wrap a downloader by reference
-///
-/// Every method here only borrows `&self` and hands back the `&Self` flavour
-/// of the wrapper, whose lifetime is bound to the downloader it wraps —
-/// convenient for composing on the spot and dropping right after.
-///
-/// The wrappers themselves are not limited to references: how they hold the
-/// inner layer is generic over `B: Borrow<D>`, so an `Arc<D>`, a `Box<D>` or
-/// even a `D` moved in all work. To get the owning, smart-pointer flavour
-/// (say the wrapper has to outlive the call site, or be shared across tasks),
-/// bypass this trait and call each type's own constructor:
-/// [`DownloadGroup::new`], [`DownloaderWithMirror::new`],
-/// [`CachedDownloader::new`] and [`CachedDownloader::new_default`].
 pub trait DownloaderExt: Downloader + Sized {
-    // 借用自身，获取适合读取进度的下载任务组
-    /// Borrows self into a download task group suited for reading progress
+    // 获取适合读取进度的下载任务组
+    /// Gets a download task group suited for reading progress
     fn with_group(&self) -> DownloadGroup<Self, &Self> {
         DownloadGroup::new(self)
     }
-    // 借用自身，获得带有镜像的下载器
-    /// Borrows self into a downloader backed by a mirror
+    // 获得带有镜像的下载器
+    /// Gets a downloader backed by a mirror
     fn with_mirror<M: Mirror>(&self, mirror: M) -> DownloaderWithMirror<Self, &Self, M> {
         DownloaderWithMirror::new(self, mirror)
     }
 
-    // 借用自身，获得带有缓存的下载器
-    /// Borrows self into a downloader backed by a cache
-    fn with_cache<R: BucketRecorder>(
-        &self,
-        get_bytes: u64,
-        bucket_recorder: R,
-    ) -> CachedDownloader<Self, &Self, R> {
-        CachedDownloader::new(self, get_bytes, bucket_recorder)
-    }
-    // 借用自身，获得带有缓存的下载器（默认缓存大小）
-    /// Borrows self into a downloader backed by a cache (default cache size)
-    fn with_cache_default(&self) -> CachedDownloader<Self, &Self, scc::HashMap<Hash, PathBuf>> {
-        CachedDownloader::<Self, &Self, scc::HashMap<Hash, PathBuf>>::new_default(self)
+    // 默认 `Downloader::fetch()` 的最大缓存字节数
+    /// Default maximum number of bytes `Downloader::fetch()` will cache
+    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024; // 5 MiB
+
+    // 获得带有缓存的下载器
+    /// Gets a downloader backed by a cache
+    fn with_cache<S: StorageRegistry>(&self, storage_cache: S) -> CachedDownloader<Self, &Self, S> {
+        CachedDownloader::new(self, storage_cache, ())
     }
 }
 

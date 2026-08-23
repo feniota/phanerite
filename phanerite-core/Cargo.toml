@@ -58,11 +58,10 @@ zip = "8.6"
 zstd = { version = "0.13", default-features = false }
 
 # database / data structures
-bytes.workspace = true
-moka = { version = "0.12", features = ["future"] }
+moka = { version = "0.12", features = ["future"], optional = true }
 ouroboros = "0.18"
 scc = "3.8"
-
+bytes.workspace = true
 
 # time / identifiers
 chrono.workspace = true
@@ -76,3 +75,7 @@ tracing.workspace = true
 dotenvy = "0.15"
 smol = "2.0"
 tracing-subscriber = "0.3"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

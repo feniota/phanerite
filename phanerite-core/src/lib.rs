@@ -1,3 +1,5 @@
+// Enable docs.rs "Available on crate feature xxxx only" banners
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 // 硬链接检测引用计数
 #![cfg_attr(target_os = "windows", feature(windows_by_handle))]
 // Phanerite 的核心库：一个没有界面的 Minecraft 启动器后端

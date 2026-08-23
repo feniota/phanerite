@@ -1,5 +1,12 @@
 {
   "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "cargo": {
+          "features": "all"
+        }
+      }
+    },
     "oxlint": {
       "initialization_options": {
         "settings": {

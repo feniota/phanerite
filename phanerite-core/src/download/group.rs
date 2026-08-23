@@ -5,14 +5,18 @@ use crate::utils::Hash;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
+use std::borrow::Borrow;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use url::Url;
 
-pub struct DownloadGroup<'a, D: Downloader> {
-    downloader: &'a D,
+pub struct DownloadGroup<D: Downloader, B: Borrow<D> + Send + Sync> {
     monitor: Monitor,
+
+    downloader: B,
+    _marker: PhantomData<fn() -> D>,
 }
 
 #[derive(Clone, Default)]
@@ -26,25 +30,25 @@ struct MonitorInner {
     processes: scc::HashMap<usize, DownloadProcess>,
 }
 
-impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
+impl<D: Downloader, B: Borrow<D> + Send + Sync> Downloader for DownloadGroup<D, B> {
     async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
-        self.downloader.fetch(url, hash).await
+        self.downloader.borrow().fetch(url, hash).await
     }
     async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
-        self.downloader.post_json(url, body).await
+        self.downloader.borrow().post_json(url, body).await
     }
     async fn head(&self, url: Url) -> Result<Response<()>> {
-        self.downloader.head(url).await
+        self.downloader.borrow().head(url).await
     }
     async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
-        self.downloader.send(req).await
+        self.downloader.borrow().send(req).await
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         self.monitor.push_async(task.process.clone()).await;
-        self.downloader.download(task).await
+        self.downloader.borrow().download(task).await
     }
     fn concurrency(&self) -> usize {
-        self.downloader.concurrency()
+        self.downloader.borrow().concurrency()
     }
     fn download_concurrent<'cx>(
         &self,
@@ -75,16 +79,18 @@ impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
                 CollectState::Ready(mut i) => i.next().map(|t| (t, CollectState::Ready(i))),
             },
         )
-        .map(async |x| self.downloader.download(x).await)
+        .map(async |x| self.downloader.borrow().download(x).await)
         .buffer_unordered(self.concurrency())
     }
 }
 
-impl<'a, D: Downloader> DownloadGroup<'a, D> {
-    pub(crate) fn new(downloader: &'a D) -> Self {
+impl<D: Downloader, B: Borrow<D> + Send + Sync> DownloadGroup<D, B> {
+    pub fn new(downloader: B) -> Self {
         Self {
-            downloader,
             monitor: Default::default(),
+
+            downloader,
+            _marker: Default::default(),
         }
     }
     // 获取监视器

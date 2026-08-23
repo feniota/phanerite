@@ -5082,6 +5082,7 @@ dependencies = [
  "async-recursion",
  "base64 0.23.1",
  "blake3",
+ "bytes",
  "bzip2",
  "chrono",
  "dotenvy",

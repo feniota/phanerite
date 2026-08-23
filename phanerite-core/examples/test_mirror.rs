@@ -65,7 +65,9 @@ impl Drop for ExitGuard {
 
 // 显示下载速度和进度
 /// Shows the download speed and progress
-async fn monitor(group: &DownloadGroup<'_, impl Downloader>) -> ExitGuard {
+async fn monitor<D: Downloader, B: std::borrow::Borrow<D> + Send + Sync>(
+    group: &DownloadGroup<D, B>,
+) -> ExitGuard {
     let monitor = group.monitor();
     let g = ExitGuard {
         exit: Arc::new(AtomicBool::new(false)),

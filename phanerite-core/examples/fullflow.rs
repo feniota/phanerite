@@ -209,7 +209,9 @@ fn main() {
 
 // 显示下载速度和进度
 /// Shows the download speed and progress
-fn process_monitor(group: &DownloadGroup<'_, impl Downloader>) -> impl Drop {
+fn process_monitor<D: Downloader, B: std::borrow::Borrow<D> + Send + Sync>(
+    group: &DownloadGroup<D, B>,
+) -> impl Drop {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering::Relaxed;

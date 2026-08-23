@@ -5,6 +5,7 @@ use crate::utils::secret::copy_secret;
 use crate::utils::state::NotReady;
 use crate::utils::uuid::UnhyphenatedUuid;
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
+use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
 use http::{Request, Response};
 use secrecy::{ExposeSecret, SecretString};
@@ -235,7 +236,7 @@ struct ServiceError {
 /// The authorization chain has five endpoints, so a failure has to say which
 /// one it was; otherwise all that is left is a status code and nothing to
 /// diagnose from
-fn service_error(endpoint: &str, res: &Response<Vec<u8>>) -> Error {
+fn service_error(endpoint: &str, res: &Response<Bytes>) -> Error {
     // 这些端点的失败响应不含凭据，可以整体记录
     debug!(
         "{endpoint} responded {}: {}",
@@ -638,7 +639,7 @@ struct Xui {
 
 // 解析 Xbox 端点的响应
 /// Parses the response of an Xbox endpoint
-fn xbox_result(endpoint: &str, res: Response<Vec<u8>>) -> Result<ResponseXbox> {
+fn xbox_result(endpoint: &str, res: Response<Bytes>) -> Result<ResponseXbox> {
     let status = res.status();
     // Xbox 的失败响应只有错误码与跳转地址，可以整体记录
     if !status.is_success() {

@@ -96,6 +96,7 @@ use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::utils::Hash;
+use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
 use std::path::PathBuf;
@@ -112,13 +113,13 @@ pub mod task;
 pub mod vanilla;
 
 #[allow(async_fn_in_trait)]
-pub trait Downloader {
+pub trait Downloader: Send + Sync {
     // 下载到内存（GET）
     /// Downloads into memory (GET)
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>>;
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes>;
     // 封装 POST
     /// Wraps POST
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>>;
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>>;
     // 封装 HEAD，仅保证响应头与状态码有效
     /// Wraps HEAD; only the response headers and status code are guaranteed to
     /// be meaningful
@@ -131,7 +132,7 @@ pub trait Downloader {
     ///
     /// Prefer `fetch()`/`post_json()`/`head()`; use this only when they cannot
     /// express the request
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>>;
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>>;
     // 下载文件到储存
     /// Downloads a file into storage
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()>;

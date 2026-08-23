@@ -2,6 +2,7 @@ use crate::download::Downloader;
 use crate::download::task::{DownloadTask, Target};
 use crate::error::Result;
 use crate::utils::{Hash, hash_file};
+use bytes::Bytes;
 use http::{Request, Response};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -28,7 +29,7 @@ impl BucketRecorder for scc::HashMap<Hash, PathBuf> {
 
 pub struct DownloaderWithCache<'downloader, D: Downloader, R: BucketRecorder> {
     downloader: &'downloader D,
-    get_cache: Option<moka::future::Cache<Url, Vec<u8>>>,
+    get_cache: Option<moka::future::Cache<Url, Bytes>>,
     bucket_cache: R,
 }
 
@@ -42,7 +43,7 @@ impl<'a, D: Downloader, R: BucketRecorder> DownloaderWithCache<'a, D, R> {
                 Some(
                     moka::future::Cache::builder()
                         .max_capacity(get_bytes)
-                        .weigher(|_, value: &Vec<u8>| value.len().div_ceil(1024) as u32)
+                        .weigher(|_, value: &Bytes| value.len().div_ceil(1024) as u32)
                         .build(),
                 )
             },
@@ -52,7 +53,7 @@ impl<'a, D: Downloader, R: BucketRecorder> DownloaderWithCache<'a, D, R> {
 }
 
 impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D, R> {
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
         if let Some(cache) = &self.get_cache {
             cache
                 .try_get_with(url.clone(), async {
@@ -64,13 +65,13 @@ impl<D: Downloader, R: BucketRecorder> Downloader for DownloaderWithCache<'_, D,
             self.downloader.fetch(url, hash).await
         }
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
         self.downloader.post_json(url, body).await
     }
     async fn head(&self, url: Url) -> Result<Response<()>> {
         self.downloader.head(url).await
     }
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
         // 自定义请求可能携带凭据，不缓存
         self.downloader.send(req).await
     }

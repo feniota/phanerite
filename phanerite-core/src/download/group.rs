@@ -2,6 +2,7 @@ use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask};
 use crate::error::{Error, Result};
 use crate::utils::Hash;
+use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
 use std::sync::Arc;
@@ -26,16 +27,16 @@ struct MonitorInner {
 }
 
 impl<D: Downloader> Downloader for DownloadGroup<'_, D> {
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
         self.downloader.fetch(url, hash).await
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
         self.downloader.post_json(url, body).await
     }
     async fn head(&self, url: Url) -> Result<Response<()>> {
         self.downloader.head(url).await
     }
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
         self.downloader.send(req).await
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {

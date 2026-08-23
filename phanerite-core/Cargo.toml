@@ -58,6 +58,7 @@ zip = "8.6"
 zstd = { version = "0.13", default-features = false }
 
 # database / data structures
+bytes.workspace = true
 moka = { version = "0.12", features = ["future"] }
 ouroboros = "0.18"
 scc = "3.8"

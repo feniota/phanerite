@@ -4,6 +4,7 @@ use crate::error::{Error, Result};
 use crate::storage::temp::TempGuard;
 use crate::utils::Hash;
 use async_channel::{Receiver, Sender};
+use bytes::Bytes;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use http::{Request, Response};
 use isahc::config::{Configurable, RedirectPolicy};
@@ -172,7 +173,7 @@ pub struct RawDownloader {
 }
 
 impl Downloader for RawDownloader {
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
         for _ in 0..self.retries {
             let res = self.client.get_async(url.as_str()).await?.bytes().await?;
             if let Some(h) = &hash {
@@ -184,11 +185,11 @@ impl Downloader for RawDownloader {
                     continue;
                 }
             }
-            return Ok(res);
+            return Ok(Bytes::from(res));
         }
         Err(Error::other("download failed after retries"))
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
         let req = Request::post(url.as_str())
             .header("Content-Type", "application/json")
             .body(body.as_ref().as_bytes().to_vec())
@@ -202,11 +203,11 @@ impl Downloader for RawDownloader {
         let (parts, _) = self.send(req).await?.into_parts();
         Ok(Response::from_parts(parts, ()))
     }
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
         let mut res = self.client.send_async(req).await?;
         let body = res.bytes().await?;
         let (parts, _) = res.into_parts();
-        Ok(Response::from_parts(parts, body))
+        Ok(Response::from_parts(parts, Bytes::from(body)))
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         // 用于发送失败信号

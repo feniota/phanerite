@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use futures::StreamExt;
 
 // BMCL API
@@ -16,7 +17,7 @@ use futures::Stream;
 use http::{Request, Response};
 use url::Url;
 
-pub trait Mirror {
+pub trait Mirror: Send + Sync {
     const NAME: &str;
     const ATTRIBUTION: &str;
     const NOTICE: &str;
@@ -56,11 +57,11 @@ impl<'a, D: Downloader, M: Mirror> DownloaderWithMirror<'a, D, M> {
 }
 
 impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
-    async fn fetch(&self, mut url: Url, hash: Option<Hash>) -> Result<Vec<u8>> {
+    async fn fetch(&self, mut url: Url, hash: Option<Hash>) -> Result<Bytes> {
         self.mirror.resolve(&mut url);
         self.downloader.fetch(url, hash).await
     }
-    async fn post_json(&self, mut url: Url, body: impl AsRef<str>) -> Result<Response<Vec<u8>>> {
+    async fn post_json(&self, mut url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
         self.mirror.resolve(&mut url);
         self.downloader.post_json(url, body).await
     }
@@ -68,7 +69,7 @@ impl<D: Downloader, M: Mirror> Downloader for DownloaderWithMirror<'_, D, M> {
         self.mirror.resolve(&mut url);
         self.downloader.head(url).await
     }
-    async fn send(&self, mut req: Request<Vec<u8>>) -> Result<Response<Vec<u8>>> {
+    async fn send(&self, mut req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
         let mut url: Url = req.uri().to_string().parse()?;
         self.mirror.resolve(&mut url);
         *req.uri_mut() = url

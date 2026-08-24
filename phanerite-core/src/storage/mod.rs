@@ -83,13 +83,17 @@
 //! `Storage` (the cleaner's `ShutdownGuard`, a caching downloader, ...) to
 //! it, so that they are not released early.
 
+mod ident;
+
 pub mod bucket;
 pub mod capability;
 pub mod multi;
 pub mod temp;
+pub use ident::StorageIdent;
 
 use crate::error::{Error, Result};
 use crate::storage::capability::{DirCapability, probe_tree};
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -106,7 +110,10 @@ use std::sync::Arc;
 /// `Storage` does not wrap filesystem IO, it only keeps the commonly used
 /// paths. A write therefore does not always happen in the call that `Storage`
 /// is injected into: `DownloadTask`, for example, may need `Storage` injected
-/// at construction time while the actual write happens when the download runs
+/// at construction time while the actual write happens when the download runs.
+///
+/// [`Storage`] is expensive to clone. If you do not require its full capabilities,
+/// and want only a way of identifying it, refer to [`StorageIdent`].
 #[derive(Debug)]
 pub struct Storage {
     // 启动器数据的根目录，例如 `.minecraft`
@@ -255,6 +262,11 @@ impl Storage {
             Ok(())
         }
     }
+
+    /// Get a [`StorageIdent`] representing this [`Storage`].
+    pub fn ident(&self) -> StorageIdent {
+        self.into()
+    }
 }
 
 // 分平台的链接
@@ -308,6 +320,12 @@ impl PartialEq for Storage {
 }
 
 impl Eq for Storage {}
+
+impl Hash for Storage {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.root_dir.hash(state)
+    }
+}
 
 // 共享桶储存偏好
 // 自下往上 Fallback

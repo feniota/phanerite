@@ -1,6 +1,5 @@
 use phanerite_core::auth;
 use phanerite_core::auth::{Authentication, MultiAccount};
-use phanerite_core::download::cache::CachedDownloader;
 use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
 use phanerite_core::download::java::Zulu;
@@ -30,13 +29,22 @@ fn main() {
         // ———————————————————— 全局的初始化阶段 ————————————————————
 
         // 构造 Downloader
-        //
+
         // 基本下载器，可以全局创建一次（内部有并行限制）
         let raw_downloader = RawDownloader::builder().build().await?;
-        // 下载缓存，建议保持尽可能长的生命周期
-        // 不建议使用 default，因为内置的记录器无法持久化，可共享的文件需要再次下载
-        // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
-        let cached_downloader = CachedDownloader::default(raw_downloader);
+
+        // 文件去重，建议保持尽可能长的生命周期
+        // 这里只使用内存记录器，仅适合快速验证或演示；实际使用时应通过 with_dedup()
+        // 传入可持久化的 `phanerite_core::download::dedup::StorageRegistry`。
+        let dedup_downloader = raw_downloader.with_in_memory_dedup();
+
+        // GET 响应缓存，建议保持尽可能长的生命周期
+        // 这里只缓存 fetch() 的响应，不负责下载文件的去重；内存缓存仅适合快速验证或演示。
+        // 实际使用时可通过 with_cache() 传入自定义的 FetchCache。
+        #[cfg(feature = "moka")]
+        let cached_downloader = dedup_downloader.with_in_memory_cache();
+        #[cfg(not(feature = "moka"))]
+        let cached_downloader = dedup_downloader;
 
         // 创建 Storage
         // 由于登录需要 Storage 提供存放 Authlib-Injector 的位置，将 Storage 移入 MultiStorage 的步骤往后推迟

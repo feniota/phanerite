@@ -6,19 +6,21 @@
 //
 // ```text
 // RawDownloader              连接池、重试、缓冲池、流式落盘
-//   └ with_cache()           GET 结果的内存缓存；共享桶命中则直接链接，不发请求
-//       └ with_mirror()      按镜像规则改写 URL
-//           └ with_group()   把任务登记进 Monitor，用于读进度
+//   └ with_dedup()            共享桶文件去重；命中则直接链接，不发请求
+//       └ with_cache()        GET 响应缓存，仅作用于 fetch()
+//           └ with_mirror()   按镜像规则改写 URL
+//               └ with_group() 把任务登记进 Monitor，用于读进度
 // ```
 //
 // 顺序不是随意的。`with_group` 只看得见经过它的任务，因此要套在最外层，
-// 否则被缓存短路掉的任务不会计入进度。生命周期也不同：内侧几层通常与
+// 否则被去重或缓存短路掉的任务不会计入进度。生命周期也不同：内侧几层通常与
 // 程序或 `Storage` 同寿，而 [`group::DownloadGroup`] 应当一次性使用——
 // 它的 [`group::Monitor`] 只增不减，复用会让进度越算越大。
 //
-// [`DownloaderExt::with_cache`] 使用内存记录器，进程重启后认不
-// 出桶里已有的文件，会重新下载一遍。要持久化就自己实现
-// [`cache::BucketRecorder`] 并传给 [`DownloaderExt::with_cache`]。
+// [`DownloaderExt::with_in_memory_dedup`] 使用内存记录器，进程重启后认不出桶里
+// 已有的文件，会重新下载一遍。要持久化就自己实现 [`dedup::StorageRegistry`]
+// 并传给 [`DownloaderExt::with_dedup`]。`with_cache` 只缓存 `fetch()` 的 GET
+// 响应，不参与下载文件的去重。
 //
 // # 任务
 //
@@ -46,26 +48,28 @@
 //! can be dropped on the spot.
 //!
 //! ```text
-//! RawDownloader            connection pool, retries, buffer pool, streaming to disk
-//!   └ with_cache()         in-memory cache of GET results; a share-bucket hit links
-//!                          directly and sends no request
-//!       └ with_mirror()    rewrites URLs according to the mirror's rules
-//!           └ with_group() registers tasks with a Monitor so progress can be read
+//! RawDownloader             connection pool, retries, buffer pool, streaming to disk
+//!   └ with_dedup()           deduplicates files in share buckets; a hit links directly
+//!                            and sends no request
+//!       └ with_cache()       caches GET responses, for `fetch()` only
+//!           └ with_mirror()  rewrites URLs according to the mirror's rules
+//!               └ with_group() registers tasks with a Monitor so progress can be read
 //! ```
 //!
 //! The order is not arbitrary. `with_group` only sees the tasks that pass
 //! through it, so it belongs on the outside; otherwise a task short-circuited
-//! by the cache never counts towards progress. The lifetimes differ too: the
+//! by deduplication or caching never counts towards progress. The lifetimes differ too: the
 //! inner layers usually live as long as the program or as `Storage`, whereas
 //! [`group::DownloadGroup`] should be used once and thrown away — its
 //! [`group::Monitor`] only ever grows, so reusing it makes the progress
 //! figures drift upwards.
 //!
-//! [`DownloaderExt::with_cache`] uses an in-memory recorder, which
+//! [`DownloaderExt::with_in_memory_dedup`] uses an in-memory registry, which
 //! will not recognise files already in the bucket after a restart and
 //! downloads them again. To persist that state, implement
-//! [`cache::StorageRegistry`] yourself and pass it to
-//! [`DownloaderExt::with_cache`].
+//! [`dedup::StorageRegistry`] yourself and pass it to
+//! [`DownloaderExt::with_dedup`]. In contrast, [`DownloaderExt::with_cache`]
+//! caches only `fetch()` GET responses and does not deduplicate downloaded files.
 //!
 //! # Tasks
 //!
@@ -80,9 +84,8 @@
 //!
 //! The share bucket works at the granularity of "the file that ends up on
 //! disk": a plain download enters the bucket under the Blake3 hash of the
-//! whole response, while an extraction task enters each extracted entry
-//! separately and keeps no copy of the archive itself. Tasks with an empty
-//! hash, and extraction tasks, bypass the [`cache`] layer.
+//! whole response. Files whose hashes are not already known, and extraction
+//! tasks, bypass the [`dedup`] layer.
 //!
 //! # Sources
 //!
@@ -90,19 +93,23 @@
 //! is the Java runtime; [`authlib_injector`] is the injector required for
 //! third-party login; [`mirror`] holds the Chinese mirrors.
 
-use crate::download::cache::{CachedDownloader, StorageRegistry};
+use crate::download::cache::{CachedDownloader, FetchCache};
+use crate::download::dedup::{DeduplicateDownloader, StorageRegistry};
 use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
 use crate::error::Result;
+use crate::storage::StorageIdent;
 use crate::utils::Hash;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http::{Request, Response};
+use std::path::PathBuf;
 use url::Url;
 
 pub mod authlib_injector;
 pub mod cache;
+pub mod dedup;
 pub mod downloader;
 pub mod extract;
 pub mod group;
@@ -163,14 +170,43 @@ pub trait DownloaderExt: Downloader + Sized {
         DownloaderWithMirror::new(self, mirror)
     }
 
-    // 默认 `Downloader::fetch()` 的最大缓存字节数
-    /// Default maximum number of bytes `Downloader::fetch()` will cache
-    const DEFAULT_GET_CACHE_BYTE: u64 = 5 * 1024 * 1024; // 5 MiB
-
     // 获得带有缓存的下载器
-    /// Gets a downloader backed by a cache
-    fn with_cache<S: StorageRegistry>(&self, storage_cache: S) -> CachedDownloader<Self, &Self, S> {
-        CachedDownloader::new(self, storage_cache, ())
+    /// Gets a downloader with caching
+    fn with_cache<F: FetchCache>(&self, fetch_cache: F) -> CachedDownloader<Self, &Self, F> {
+        CachedDownloader::new(self, fetch_cache)
+    }
+
+    /// Get a downloader with caching, with a maximum capacity of
+    /// `5 * 1024 * 1024` entries, backed by moka.
+    ///
+    /// This should only be used for quick validations or demonstrations.
+    /// Not recommended in actual use.
+    #[cfg(feature = "moka")]
+    fn with_in_memory_cache(
+        &self,
+    ) -> CachedDownloader<Self, &Self, moka::future::Cache<Url, Bytes>> {
+        let fetch_cache = moka::future::Cache::new(5 * 1024 * 1024);
+        CachedDownloader::new(self, fetch_cache)
+    }
+
+    /// Get a downloader with deduplication of game assets.
+    fn with_dedup<R: StorageRegistry>(
+        &self,
+        storage_registry: R,
+    ) -> DeduplicateDownloader<Self, &Self, R> {
+        DeduplicateDownloader::new(self, storage_registry)
+    }
+
+    /// Get a downloader with deduplication of game assets, backed by an
+    /// in-memory [`scc::HashMap`].
+    ///
+    /// This should only be used for quick validations or demonstrations.
+    /// Not recommended in actual use.
+    fn with_in_memory_dedup(
+        &self,
+    ) -> DeduplicateDownloader<Self, &Self, scc::HashMap<(StorageIdent, Hash), PathBuf>> {
+        let storage_registry = Default::default();
+        DeduplicateDownloader::new(self, storage_registry)
     }
 }
 

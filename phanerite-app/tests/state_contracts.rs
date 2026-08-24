@@ -3,28 +3,28 @@
 use std::path::PathBuf;
 
 use phanerite::{
-    route::{CrashRef, InstanceRef, StorageId},
+    route::{CrashRef, InstanceRef},
     state::JavaRuntimeSummary,
 };
 
 #[test]
 fn references_include_storage_context() {
-    let storage_id = StorageId::for_test(7);
+    let storage = phanerite::seed::storage_ident(7);
     assert_eq!(
-        InstanceRef::new(storage_id, "instance").storage_id,
-        storage_id
+        InstanceRef::new(storage.clone(), "instance").storage,
+        storage
     );
-    assert_eq!(CrashRef::new(storage_id, "crash").storage_id, storage_id);
+    assert_eq!(CrashRef::new(storage.clone(), "crash").storage, storage);
 }
 
 #[test]
 fn seed_projections_are_deterministic_and_storage_scoped() {
-    let storage = StorageId::for_test(7);
-    let first = phanerite::seed::seed_instances(storage);
-    let second = phanerite::seed::seed_instances(storage);
+    let storage = phanerite::seed::storage_ident(7);
+    let first = phanerite::seed::seed_instances(storage.clone());
+    let second = phanerite::seed::seed_instances(storage.clone());
 
     assert_eq!(first, second);
-    assert!(first.iter().all(|instance| instance.storage_id == storage));
+    assert!(first.iter().all(|instance| instance.storage == storage));
     assert!(first.iter().all(|instance| !instance.icon_seed.is_empty()));
 }
 

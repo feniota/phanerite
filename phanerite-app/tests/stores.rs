@@ -1,14 +1,13 @@
 //! Integration tests for application store mutation and notification behavior.
 
-use std::sync::Arc;
-
-use phanerite::{route::StorageId, state::*};
+use phanerite::state::*;
+use phanerite_core::storage::{Storage, StorageIdent as CoreStorageIdent, multi::MultiStorage};
 
 #[test]
 fn instance_equal_mutations_do_not_notify() {
-    let id = StorageId::for_test(1);
-    let mut store = InstanceStore::new(phanerite::seed::seed_instances(id));
-    store.set_storage_context(id);
+    let id = phanerite::seed::storage_ident(1);
+    let mut store = InstanceStore::new(phanerite::seed::seed_instances(id.clone()));
+    store.set_storage_context(id.clone());
     let reference = phanerite::route::InstanceRef::new(id, "inst-fog");
     assert!(!store.set_mod_enabled(&reference, "m-sodium", true));
     assert!(store.set_mod_enabled(&reference, "m-sodium", false));
@@ -17,14 +16,18 @@ fn instance_equal_mutations_do_not_notify() {
 
 #[test]
 fn stale_storage_results_are_ignored() {
-    let one = StorageId::for_test(1);
-    let two = StorageId::for_test(2);
+    let one = phanerite::seed::storage_ident(1);
+    let two = phanerite::seed::storage_ident(2);
     let mut store = InstanceStore::new(Vec::new());
-    store.set_storage_context(two);
+    store.set_storage_context(two.clone());
+    let storages = MultiStorage::new();
+    let root = tempfile::tempdir().unwrap();
+    let storage = pollster::block_on(Storage::new(root.path())).unwrap();
+    pollster::block_on(storages.insert(one.clone(), storage)).unwrap();
     assert!(!store.apply_for_storage(
-        &StorageRegistry::new(),
+        &storages,
         one,
-        phanerite::seed::seed_instances(one)
+        phanerite::seed::seed_instances(phanerite::seed::storage_ident(1))
     ));
     assert!(store.all().is_empty());
 }
@@ -44,7 +47,8 @@ fn all_mutable_stores_ignore_equal_values() {
     assert_eq!(accounts.revision(), 0);
 
     let mut launch = LaunchStore::default();
-    let reference = phanerite::route::InstanceRef::new(StorageId::for_test(1), "inst-fog");
+    let reference =
+        phanerite::route::InstanceRef::new(phanerite::seed::storage_ident(1), "inst-fog");
     let job = LaunchJob::new(reference.clone(), "The Fog", "the-fog", Loader::Fabric);
     assert!(launch.start(job.clone()));
     assert!(!launch.start(job));
@@ -65,13 +69,14 @@ fn all_mutable_stores_ignore_equal_values() {
     assert_eq!(sessions.revision(), 1);
 
     let root = tempfile::tempdir().unwrap();
-    let storage =
-        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root.path())).unwrap());
-    let mut registry = StorageRegistry::new();
-    let storage_id = registry.add(root.path(), storage).unwrap();
+    let storage = pollster::block_on(Storage::new(root.path())).unwrap();
+    let storage = CoreStorageIdent::from(&storage);
+    let storages = MultiStorage::new();
+    let storage_value = pollster::block_on(Storage::new(root.path())).unwrap();
+    pollster::block_on(storages.insert(storage.clone(), storage_value)).unwrap();
     let mut crashes = CrashStore::default();
-    crashes.set_storage_context(storage_id);
-    assert!(!crashes.apply_for_storage(&registry, storage_id, vec![]));
+    crashes.set_storage_context(storage.clone());
+    assert!(!crashes.apply_for_storage(&storages, storage, vec![]));
     assert_eq!(crashes.revision(), 0);
 }
 
@@ -79,21 +84,32 @@ fn all_mutable_stores_ignore_equal_values() {
 fn storage_registry_and_context_both_guard_late_results() {
     let root_a = tempfile::tempdir().unwrap();
     let root_b = tempfile::tempdir().unwrap();
-    let storage_a =
-        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root_a.path())).unwrap());
-    let storage_b =
-        Arc::new(pollster::block_on(phanerite_core::storage::Storage::new(root_b.path())).unwrap());
-    let mut registry = StorageRegistry::new();
-    let a = registry.add(root_a.path(), storage_a).unwrap();
-    let b = registry.add(root_b.path(), storage_b).unwrap();
-    registry.set_default(b).unwrap();
+    let storage_a = pollster::block_on(Storage::new(root_a.path())).unwrap();
+    let storage_b = pollster::block_on(Storage::new(root_b.path())).unwrap();
+    let a = CoreStorageIdent::from(&storage_a);
+    let b = CoreStorageIdent::from(&storage_b);
+    let storages = MultiStorage::new();
+    pollster::block_on(storages.insert(a.clone(), storage_a)).unwrap();
+    pollster::block_on(storages.insert(b.clone(), storage_b)).unwrap();
     let mut store = InstanceStore::new(Vec::new());
-    store.set_storage_context(a);
-    assert!(store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
-    assert_eq!(store.all()[0].storage_id, a);
-    store.set_storage_context(b);
-    assert!(!store.apply_for_storage(&registry, a, phanerite::seed::seed_instances(a)));
-    assert_eq!(store.all()[0].storage_id, a);
-    assert!(store.apply_for_storage(&registry, b, phanerite::seed::seed_instances(b)));
-    assert_eq!(store.all()[0].storage_id, b);
+    store.set_storage_context(a.clone());
+    assert!(store.apply_for_storage(
+        &storages,
+        a.clone(),
+        phanerite::seed::seed_instances(a.clone())
+    ));
+    assert_eq!(store.all()[0].storage, a);
+    store.set_storage_context(b.clone());
+    assert!(!store.apply_for_storage(
+        &storages,
+        a.clone(),
+        phanerite::seed::seed_instances(a.clone())
+    ));
+    assert_eq!(store.all()[0].storage, a);
+    assert!(store.apply_for_storage(
+        &storages,
+        b.clone(),
+        phanerite::seed::seed_instances(b.clone())
+    ));
+    assert_eq!(store.all()[0].storage, b);
 }

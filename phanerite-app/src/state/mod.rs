@@ -7,7 +7,6 @@ pub mod launch;
 pub mod logs;
 pub mod sessions;
 pub mod settings;
-pub mod storage;
 
 pub use accounts::*;
 pub use crash::*;
@@ -16,11 +15,11 @@ pub use launch::*;
 pub use logs::*;
 pub use sessions::*;
 pub use settings::*;
-pub use storage::{StorageEntry, StorageRegistry, StorageRegistryError};
 
 use gpui::{Context, Entity, Subscription};
+use phanerite_core::storage::{Storage, StorageIdent, multi::MultiStorage};
 
-use crate::route::{InstanceRef, Navigation, Route, StorageId};
+use crate::route::{InstanceRef, Navigation, Route};
 
 /// The four mod loaders Phanerite supports. Quilt is deliberately absent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -94,12 +93,14 @@ impl AccountType {
     }
 }
 
-/// App-scoped context: storage registry, navigation, and the low and medium
+/// App-scoped context: storage resources, navigation, and the low and medium
 /// frequency stores. Launch progress and live log output are deliberately not
 /// reachable from here, so no consumer of this entity can observe them.
 pub struct AppState {
-    /// Registered storage roots and the storage root currently selected by the app.
-    pub registry: StorageRegistry,
+    /// Storage roots backed by the core concurrent resource container.
+    pub storages: MultiStorage,
+    /// Storage root currently selected by the app.
+    pub default_storage: Option<StorageIdent>,
     /// Current route and the navigation history used by page transitions.
     pub navigation: Navigation,
     /// Instance metadata and the currently loaded instances.
@@ -118,7 +119,8 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(
-        registry: StorageRegistry,
+        storages: MultiStorage,
+        default_storage: Option<StorageIdent>,
         instances: Entity<InstanceStore>,
         accounts: Entity<AccountStore>,
         settings: Entity<SettingsStore>,
@@ -127,12 +129,21 @@ impl AppState {
         cx: &mut Context<Self>,
     ) -> Self {
         Self::new_with_route(
-            registry, instances, accounts, settings, crashes, sessions, None, cx,
+            storages,
+            default_storage,
+            instances,
+            accounts,
+            settings,
+            crashes,
+            sessions,
+            None,
+            cx,
         )
     }
 
     pub fn new_with_route(
-        registry: StorageRegistry,
+        storages: MultiStorage,
+        default_storage: Option<StorageIdent>,
         instances: Entity<InstanceStore>,
         accounts: Entity<AccountStore>,
         settings: Entity<SettingsStore>,
@@ -142,7 +153,7 @@ impl AppState {
         cx: &mut Context<Self>,
     ) -> Self {
         let initial = initial_route.unwrap_or_else(|| {
-            if registry.default().is_some() || cfg!(feature = "seed") {
+            if default_storage.is_some() || cfg!(feature = "seed") {
                 Route::Play
             } else {
                 Route::Setup
@@ -158,7 +169,8 @@ impl AppState {
             cx.observe(&sessions, |_, _, cx| cx.notify()),
         ];
         Self {
-            registry,
+            storages,
+            default_storage,
             navigation: Navigation::new(initial),
             instances,
             accounts,
@@ -169,9 +181,74 @@ impl AppState {
         }
     }
 
-    /// The storage the UI is currently scoped to, if any root is registered.
-    pub fn storage_id(&self) -> Option<StorageId> {
-        self.registry.default().map(|entry| entry.id)
+    /// The storage the UI is currently scoped to, if any root is selected.
+    pub fn storage(&self) -> Option<StorageIdent> {
+        self.default_storage.clone()
+    }
+
+    /// Selects a registered storage root as the default for new UI work.
+    pub fn set_default_storage(&mut self, storage: StorageIdent, cx: &mut Context<Self>) -> bool {
+        if self.default_storage.as_ref() == Some(&storage) || !self.storages.contains(&storage) {
+            return false;
+        }
+        self.default_storage = Some(storage.clone());
+        cx.notify();
+        true
+    }
+
+    /// Registers a Storage and selects it when no default exists yet.
+    // FIXME: Replace these synchronous bridges with GPUI-spawned async work
+    // when storage management is connected to the real application workflow.
+    pub fn add_storage(
+        &mut self,
+        storage: Storage,
+        cx: &mut Context<Self>,
+    ) -> Option<StorageIdent> {
+        let key = StorageIdent::from(&storage);
+        if self.storages.contains(&key)
+            || pollster::block_on(self.storages.insert(key.clone(), storage)).is_err()
+        {
+            return None;
+        }
+        if self.default_storage.is_none() {
+            self.default_storage = Some(key.clone());
+        }
+        cx.notify();
+        Some(key)
+    }
+
+    /// Removes a Storage, requiring a replacement when removing the default.
+    pub fn remove_storage(
+        &mut self,
+        storage: &StorageIdent,
+        replacement: Option<StorageIdent>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.storages.contains(storage) {
+            return false;
+        }
+        if self.default_storage.as_ref() == Some(storage) {
+            if self.storages.len() > 1 {
+                let Some(replacement) = replacement.as_ref() else {
+                    return false;
+                };
+                if replacement == storage || !self.storages.contains(replacement) {
+                    return false;
+                }
+            } else if replacement.is_some() {
+                return false;
+            }
+        } else if replacement.is_some() {
+            return false;
+        }
+        if !pollster::block_on(self.storages.remove(storage)) {
+            return false;
+        }
+        if self.default_storage.as_ref() == Some(storage) {
+            self.default_storage = replacement;
+        }
+        cx.notify();
+        true
     }
 
     pub fn route(&self) -> &Route {
@@ -198,7 +275,7 @@ impl AppState {
         let exists = self
             .instances
             .read(cx)
-            .get(reference.storage_id, &reference.instance_id)
+            .get(reference.storage.clone(), &reference.instance_id)
             .is_some();
         if exists {
             self.push(Route::InstanceDetail(reference), cx);

@@ -9,10 +9,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::{
-    route::StorageId,
-    state::{AppState, Loader, NewInstance},
-};
+use crate::state::{AppState, Loader, NewInstance};
 
 /// Opens the create-instance workflow with owned InputState entities retained
 /// by the modal's element tree.
@@ -62,8 +59,10 @@ pub fn open(window: &mut Window, cx: &mut App, app: Entity<AppState>) {
                                     return;
                                 }
                                 let description = description_for_submit.read(cx).value();
-                                let storage = StorageId::for_test(0);
                                 app_for_submit.update(cx, |state, cx| {
+                                    let Some(storage) = state.storage() else {
+                                        return;
+                                    };
                                     let created = state.instances.update(cx, |store, _| {
                                         store.create(
                                             storage,

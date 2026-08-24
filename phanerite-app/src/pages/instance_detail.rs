@@ -123,7 +123,7 @@ pub fn render(
             super::route_button(
                 "detail-crash",
                 "View last crash report",
-                Route::Crash(CrashRef::new(reference.storage_id, crash)),
+                Route::Crash(CrashRef::new(reference.storage.clone(), crash)),
                 app.clone(),
             )
             .warning(),

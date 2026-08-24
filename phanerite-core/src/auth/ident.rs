@@ -6,7 +6,7 @@
 //! not be treated as proof of identity.
 
 /// The authentication provider represented by an [`AccountIdent`].
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AccountType {
     /// An account authenticated through Microsoft's official Minecraft
     /// services.
@@ -23,7 +23,7 @@ pub enum AccountType {
 /// services while remaining independent of credentials that can be refreshed
 /// or revoked. Construct identifiers through [`crate::auth::Account::identifier`]
 /// when an [`crate::auth::Account`] is available.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AccountIdent {
     /// The account's authentication provider.
     pub acc_type: AccountType,
@@ -37,4 +37,20 @@ pub struct AccountIdent {
     /// This is the player UUID for offline accounts, XUID for Microsoft
     /// accounts, and username for Yggdrasil accounts.
     pub ident: String,
+}
+
+impl std::fmt::Display for AccountIdent {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{}__{}__{}",
+            match self.acc_type {
+                AccountType::Microsoft => "microsoft",
+                AccountType::Yggdrasil => "yggdrasil",
+                AccountType::Offline => "offline",
+            },
+            self.service,
+            self.ident
+        )
+    }
 }

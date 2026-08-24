@@ -1,70 +1,47 @@
 //! Navigation routes and stable references to storage-backed resources.
 
-use std::fmt;
-
-/// A stable identifier for an phanerite-app-managed storage entry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct StorageId(u64);
-
-impl StorageId {
-    /// Creates an identifier. App code should allocate these through its registry.
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// Constructor used by pure contract tests and seed data.
-    #[doc(hidden)]
-    pub const fn for_test(value: u64) -> Self {
-        Self(value)
-    }
-}
-
-impl fmt::Display for StorageId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
-    }
-}
+pub use phanerite_core::storage::StorageIdent;
 
 pub type InstanceId = String;
 pub type CrashReportId = String;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct InstanceRef {
-    pub storage_id: StorageId,
+    pub storage: StorageIdent,
     pub instance_id: InstanceId,
 }
 
 impl InstanceRef {
-    pub fn new(storage_id: StorageId, instance_id: impl Into<String>) -> Self {
+    pub fn new(storage: StorageIdent, instance_id: impl Into<String>) -> Self {
         Self {
-            storage_id,
+            storage,
             instance_id: instance_id.into(),
         }
     }
 
     #[doc(hidden)]
-    pub fn for_test(storage_id: StorageId, instance_id: impl Into<String>) -> Self {
-        Self::new(storage_id, instance_id)
+    pub fn for_test(storage: StorageIdent, instance_id: impl Into<String>) -> Self {
+        Self::new(storage, instance_id)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CrashRef {
-    pub storage_id: StorageId,
+    pub storage: StorageIdent,
     pub report_id: CrashReportId,
 }
 
 impl CrashRef {
-    pub fn new(storage_id: StorageId, report_id: impl Into<String>) -> Self {
+    pub fn new(storage: StorageIdent, report_id: impl Into<String>) -> Self {
         Self {
-            storage_id,
+            storage,
             report_id: report_id.into(),
         }
     }
 
     #[doc(hidden)]
-    pub fn for_test(storage_id: StorageId, report_id: impl Into<String>) -> Self {
-        Self::new(storage_id, report_id)
+    pub fn for_test(storage: StorageIdent, report_id: impl Into<String>) -> Self {
+        Self::new(storage, report_id)
     }
 }
 

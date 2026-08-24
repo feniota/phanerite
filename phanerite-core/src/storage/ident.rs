@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// [`Storage`] has 13 fields, making it expensive to clone. By converting
 /// a [`Storage`] to this type, we can identify a [`Storage`] without cloning
 /// all 13 fields.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StorageIdent {
     pub root_dir: PathBuf,
 }

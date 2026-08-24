@@ -1,6 +1,6 @@
 //! Integration tests for navigation routes and resource references.
 
-use phanerite::route::{CrashRef, InstanceRef, Navigation, Route, StorageId};
+use phanerite::route::{CrashRef, InstanceRef, Navigation, Route};
 
 #[test]
 fn back_from_root_stays_on_play() {
@@ -38,14 +38,14 @@ fn replace_does_not_add_history() {
 
 #[test]
 fn equal_instance_ids_in_different_storage_are_distinct() {
-    let first = InstanceRef::for_test(StorageId::for_test(1), "shared");
-    let second = InstanceRef::for_test(StorageId::for_test(2), "shared");
+    let first = InstanceRef::for_test(phanerite::seed::storage_ident(1), "shared");
+    let second = InstanceRef::for_test(phanerite::seed::storage_ident(2), "shared");
     assert_ne!(first, second);
 }
 
 #[test]
 fn equal_crash_ids_in_different_storage_are_distinct() {
-    let first = CrashRef::for_test(StorageId::for_test(1), "report");
-    let second = CrashRef::for_test(StorageId::for_test(2), "report");
+    let first = CrashRef::for_test(phanerite::seed::storage_ident(1), "report");
+    let second = CrashRef::for_test(phanerite::seed::storage_ident(2), "report");
     assert_ne!(first, second);
 }

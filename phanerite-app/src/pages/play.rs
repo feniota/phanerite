@@ -162,7 +162,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
         .filter(|instance| instance.aphanite)
         .cloned()
         .collect();
-    let account = state.accounts.read(cx).active().cloned();
+    let account = state.accounts.read(cx).active();
     let greeting = match Local::now().hour() {
         5..12 => "Good morning.",
         12..18 => "Good afternoon.",

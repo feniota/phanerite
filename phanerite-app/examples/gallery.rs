@@ -5,7 +5,7 @@ use gpui_component::{Root, TitleBar};
 use phanerite::{
     Phanerite,
     assets::Assets,
-    route::{CrashRef, InstanceRef, Route, StorageId},
+    route::{CrashRef, InstanceRef, Route},
 };
 
 fn argument(name: &str) -> Option<String> {
@@ -20,9 +20,9 @@ fn argument(name: &str) -> Option<String> {
 
 fn route_from_args() -> Route {
     let page = argument("--page").unwrap_or_else(|| "play".into());
-    let storage = StorageId::for_test(0);
+    let storage = phanerite::seed::storage_ident(0);
     let instance = argument("--instance").unwrap_or_else(|| "inst-fog".into());
-    let instance_ref = || InstanceRef::new(storage, instance.clone());
+    let instance_ref = || InstanceRef::new(storage.clone(), instance.clone());
     match page.as_str() {
         "setup" => Route::Setup,
         "play" => Route::Play,

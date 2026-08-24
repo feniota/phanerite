@@ -19,11 +19,11 @@ use gpui::{
 };
 use gpui_base::{h_resizable, resizable_panel};
 use gpui_component::{ActiveTheme as _, Root, scroll::ScrollableElement as _, v_flex};
+use phanerite_core::storage::{Storage, StorageIdent, multi::MultiStorage};
 
 use crate::components::titlebar::TitleBar;
 use crate::state::{
     AccountStore, AppState, CrashStore, InstanceStore, SessionStore, Settings, SettingsStore,
-    StorageRegistry,
 };
 
 /// Root presentation entity. Launch and live-log entities remain outside this
@@ -40,12 +40,12 @@ impl Phanerite {
     pub fn new_with_route(cx: &mut App, initial_route: Option<route::Route>) -> Self {
         #[cfg(feature = "seed")]
         let (instances, accounts, settings, crashes) = {
-            let storage_id = route::StorageId::for_test(0);
+            let storage = seed::storage_ident(0);
             (
-                seed::seed_instances(storage_id),
+                seed::seed_instances(storage.clone()),
                 seed::seed_accounts(),
                 SettingsStore::new(Settings::default(), seed::seed_runtimes()),
-                seed::seed_crash_reports(storage_id),
+                seed::seed_crash_reports(storage.clone()),
             )
         };
         #[cfg(not(feature = "seed"))]
@@ -56,9 +56,37 @@ impl Phanerite {
             Vec::new(),
         );
 
+        let storage = {
+            #[cfg(feature = "seed")]
+            {
+                // FIXME: Move startup storage construction into the real
+                // asynchronous application initialization flow.
+                let root = dirs::data_dir()
+                    .unwrap_or_else(std::env::temp_dir)
+                    .join("phanerite");
+                let storage = pollster::block_on(Storage::new(&root))
+                    .expect("failed to initialize Phanerite storage");
+                Some((StorageIdent::from(&storage), storage))
+            }
+            #[cfg(not(feature = "seed"))]
+            {
+                None
+            }
+        };
+        let (storage_key, storages) = match storage {
+            Some((key, storage)) => {
+                let storages = MultiStorage::new();
+                pollster::block_on(storages.insert(key.clone(), storage))
+                    .expect("failed to register Phanerite storage");
+                (Some(key), storages)
+            }
+            None => (None, MultiStorage::new()),
+        };
         let instances = cx.new(|_| InstanceStore::new(instances));
         instances.update(cx, |store, _| {
-            store.set_storage_context(route::StorageId::for_test(0));
+            if let Some(storage) = storage_key.clone() {
+                store.set_storage_context(storage);
+            }
         });
         let accounts = cx.new(|_| AccountStore::new(accounts));
         let settings = cx.new(|_| settings);
@@ -66,7 +94,8 @@ impl Phanerite {
         let sessions = cx.new(|_| SessionStore::default());
         let app = cx.new(|cx| {
             AppState::new_with_route(
-                StorageRegistry::new(),
+                storages,
+                storage_key,
                 instances,
                 accounts,
                 settings,

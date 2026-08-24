@@ -1,7 +1,15 @@
 //! Owned, deterministic gallery data translated from `design/src/lib/seed.ts`,
 //! `crash.ts` and the prototype's initial `AppState`.
 
-use crate::{route::StorageId, state::*};
+use crate::{route::StorageIdent, state::*};
+use std::path::PathBuf;
+
+/// Creates the deterministic storage identity used by the gallery seed.
+pub fn storage_ident(value: u64) -> StorageIdent {
+    StorageIdent {
+        root_dir: PathBuf::from(format!("/phanerite-test-storage/{value}")),
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewsItem {
@@ -125,14 +133,14 @@ struct InstanceSeed {
 impl InstanceSeed {
     fn build(
         self,
-        storage_id: StorageId,
+        storage: StorageIdent,
         mods: Vec<ModSummary>,
         resource_packs: Vec<ResourcePackSummary>,
         shader_packs: Vec<ShaderPackSummary>,
         worlds: Vec<WorldSummary>,
     ) -> InstanceSummary {
         InstanceSummary {
-            storage_id,
+            storage: storage.clone(),
             id: self.id.into(),
             icon_seed: icon_seed(self.name, self.mc_version, self.loader),
             name: self.name.into(),
@@ -157,7 +165,7 @@ impl InstanceSeed {
     }
 }
 
-pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
+pub fn seed_instances(storage: StorageIdent) -> Vec<InstanceSummary> {
     vec![
         InstanceSeed {
             id: "inst-fog",
@@ -177,7 +185,7 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
             memory: Some(6),
         }
         .build(
-            storage_id,
+            storage.clone(),
             vec![
                 item("m-sodium", "Sodium", "0.6.9", Loader::Fabric, true),
                 item("m-optifine", "OptiFine", "HD_U_I8", Loader::Fabric, true),
@@ -243,7 +251,7 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
             memory: None,
         }
         .build(
-            storage_id,
+            storage.clone(),
             Vec::new(),
             vec![pack("p-faithful", "Faithful 64x", "Vattic", "1.21.4", "The classic faithful higher-resolution pack.", "22.1 MB", true)],
             Vec::new(),
@@ -267,7 +275,7 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
             memory: Some(8),
         }
         .build(
-            storage_id,
+            storage.clone(),
             vec![
                 item("m-ftbq", "FTB Quests", "2100.1.1", Loader::NeoForge, true),
                 item("m-ftbl", "FTB Library", "2101.1.5", Loader::NeoForge, true),
@@ -298,7 +306,7 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
             memory: Some(6),
         }
         .build(
-            storage_id,
+            storage.clone(),
             vec![
                 item("m-old-1", "Thaumcraft", "6.1.BETA26", Loader::Forge, true),
                 item("m-old-2", "Buildcraft", "7.99.24", Loader::Forge, true),
@@ -326,7 +334,7 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
             memory: Some(5),
         }
         .build(
-            storage_id,
+            storage.clone(),
             vec![
                 item("m-create-1", "Create", "0.5.1j", Loader::Fabric, true),
                 item("m-create-2", "Create: Steam ‘n’ Rails", "1.6.4", Loader::Fabric, true),
@@ -339,51 +347,15 @@ pub fn seed_instances(storage_id: StorageId) -> Vec<InstanceSummary> {
     ]
 }
 
-pub fn seed_accounts() -> Vec<AccountSummary> {
-    vec![
-        AccountSummary {
-            id: "acc-enita".into(),
-            username: "Enita_Nureya".into(),
-            account_type: AccountType::Microsoft,
-            last_used: "2 hours ago".into(),
-            auth_server: None,
-            active_profile_id: "profile-enita".into(),
-            profiles: vec![PlayerProfileSummary {
-                id: "profile-enita".into(),
-                name: "enita".into(),
-                skin_url: "https://mc-heads.net/skin/Enita_Nureya".into(),
-                is_slim: true,
-            }],
-        },
-        AccountSummary {
-            id: "acc-steve".into(),
-            username: "Steve".into(),
-            account_type: AccountType::Offline,
-            last_used: "3 days ago".into(),
-            auth_server: None,
-            active_profile_id: "profile-steve".into(),
-            profiles: vec![PlayerProfileSummary {
-                id: "profile-steve".into(),
-                name: "Steve".into(),
-                skin_url: "https://mc-heads.net/skin/Steve".into(),
-                is_slim: false,
-            }],
-        },
-        AccountSummary {
-            id: "acc-alex".into(),
-            username: "alex_03".into(),
-            account_type: AccountType::Offline,
-            last_used: "a month ago".into(),
-            auth_server: None,
-            active_profile_id: "profile-alex".into(),
-            profiles: vec![PlayerProfileSummary {
-                id: "profile-alex".into(),
-                name: "alex_03".into(),
-                skin_url: "https://mc-heads.net/skin/Alex".into(),
-                is_slim: true,
-            }],
-        },
-    ]
+pub fn seed_accounts() -> Vec<phanerite_core::auth::Account> {
+    ["Enita_Nureya", "Steve", "alex_03"]
+        .into_iter()
+        .map(|name| {
+            phanerite_core::auth::Account::Offline(
+                phanerite_core::auth::offline::Authentication::new(name),
+            )
+        })
+        .collect()
 }
 
 pub fn seed_runtimes() -> Vec<JavaRuntimeSummary> {
@@ -628,10 +600,10 @@ fn environment(
 
 const ZULU_PATH: &str = "/home/enita/.local/share/phanerite/java/zulu-21/bin/java";
 
-pub fn seed_crash_reports(storage_id: StorageId) -> Vec<CrashReport> {
+pub fn seed_crash_reports(storage: StorageIdent) -> Vec<CrashReport> {
     vec![
         CrashReport {
-            storage_id,
+            storage: storage.clone(),
             id: "crash-sodium-optifine".into(),
             instance_id: "inst-fog".into(),
             when: "2 minutes ago".into(),
@@ -684,7 +656,7 @@ pub fn seed_crash_reports(storage_id: StorageId) -> Vec<CrashReport> {
             ),
         },
         CrashReport {
-            storage_id,
+            storage: storage.clone(),
             id: "crash-possible".into(),
             instance_id: "inst-neo".into(),
             when: "18 minutes ago".into(),
@@ -730,7 +702,7 @@ pub fn seed_crash_reports(storage_id: StorageId) -> Vec<CrashReport> {
             ),
         },
         CrashReport {
-            storage_id,
+            storage: storage.clone(),
             id: "crash-unknown".into(),
             instance_id: "inst-vanilla".into(),
             when: "yesterday".into(),
@@ -767,7 +739,7 @@ pub fn seed_crash_reports(storage_id: StorageId) -> Vec<CrashReport> {
             ),
         },
         CrashReport {
-            storage_id,
+            storage: storage.clone(),
             id: "crash-jvm".into(),
             instance_id: "inst-legacy".into(),
             when: "3 days ago".into(),
@@ -811,9 +783,9 @@ pub fn seed_crash_reports(storage_id: StorageId) -> Vec<CrashReport> {
 }
 
 /// The Aphanite server the prototype is connected to.
-pub fn seed_aphanite(storage_id: StorageId) -> AphaniteSummary {
+pub fn seed_aphanite(storage: StorageIdent) -> AphaniteSummary {
     AphaniteSummary {
-        storage_id,
+        storage,
         server_name: "Enita's Aphanite Server".into(),
         server_url: "https://aphanite.enita.cn/".into(),
     }

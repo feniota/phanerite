@@ -1,9 +1,10 @@
 //! Crash report data, local signature matching, and diagnostic redaction.
 
 use crate::{
-    route::{CrashRef, InstanceRef, StorageId},
-    state::{Loader, StorageRegistry},
+    route::{CrashRef, InstanceRef, StorageIdent},
+    state::Loader,
 };
+use phanerite_core::storage::multi::MultiStorage;
 
 /// A local, signature-based match. Rules only report patterns that appear
 /// verbatim in the captured output; this is never an AI diagnosis.
@@ -49,7 +50,7 @@ pub struct CrashEnvironment {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrashReport {
-    pub storage_id: StorageId,
+    pub storage: StorageIdent,
     pub id: String,
     pub instance_id: String,
     pub when: String,
@@ -64,11 +65,11 @@ pub struct CrashReport {
 
 impl CrashReport {
     pub fn reference(&self) -> CrashRef {
-        CrashRef::new(self.storage_id, self.id.clone())
+        CrashRef::new(self.storage.clone(), self.id.clone())
     }
 
     pub fn instance(&self) -> InstanceRef {
-        InstanceRef::new(self.storage_id, self.instance_id.clone())
+        InstanceRef::new(self.storage.clone(), self.instance_id.clone())
     }
 
     pub fn has_report(&self) -> bool {
@@ -213,7 +214,7 @@ fn redact_jwt_like(text: &str) -> String {
 #[derive(Default)]
 pub struct CrashStore {
     reports: Vec<CrashReport>,
-    current_storage: Option<StorageId>,
+    current_storage: Option<StorageIdent>,
     revision: u64,
 }
 
@@ -229,29 +230,29 @@ impl CrashStore {
         &self.reports
     }
 
-    pub fn get(&self, storage: StorageId, id: &str) -> Option<&CrashReport> {
+    pub fn get(&self, storage: StorageIdent, id: &str) -> Option<&CrashReport> {
         self.reports
             .iter()
-            .find(|report| report.storage_id == storage && report.id == id)
+            .find(|report| report.storage == storage && report.id == id)
     }
 
     pub fn find(&self, reference: &CrashRef) -> Option<&CrashReport> {
-        self.get(reference.storage_id, &reference.report_id)
+        self.get(reference.storage.clone(), &reference.report_id)
     }
 
-    pub fn set_storage_context(&mut self, storage: StorageId) {
-        self.current_storage = Some(storage);
+    pub fn set_storage_context(&mut self, storage: StorageIdent) {
+        self.current_storage = Some(storage.clone());
     }
 
-    pub fn storage_context(&self) -> Option<StorageId> {
-        self.current_storage
+    pub fn storage_context(&self) -> Option<StorageIdent> {
+        self.current_storage.clone()
     }
 
     /// Drops reports belonging to a deleted instance.
     pub fn remove_instance(&mut self, instance: &InstanceRef) -> bool {
         let before = self.reports.len();
         self.reports.retain(|report| {
-            report.storage_id != instance.storage_id || report.instance_id != instance.instance_id
+            report.storage != instance.storage || report.instance_id != instance.instance_id
         });
         if self.reports.len() == before {
             return false;
@@ -262,11 +263,11 @@ impl CrashStore {
 
     pub fn apply_for_storage(
         &mut self,
-        registry: &StorageRegistry,
-        storage: StorageId,
+        storages: &MultiStorage,
+        storage: StorageIdent,
         reports: Vec<CrashReport>,
     ) -> bool {
-        if registry.get(storage).is_none() || self.current_storage != Some(storage) {
+        if !storages.contains(&storage) || self.current_storage.as_ref() != Some(&storage) {
             return false;
         }
         if self.reports == reports {
@@ -285,7 +286,7 @@ impl CrashStore {
 /// The Aphanite server summary shown on the Aphanite page.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AphaniteSummary {
-    pub storage_id: StorageId,
+    pub storage: StorageIdent,
     pub server_name: String,
     pub server_url: String,
 }

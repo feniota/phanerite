@@ -1,9 +1,10 @@
 //! Minecraft instance models and instance store operations.
 
 use crate::{
-    route::{InstanceRef, StorageId},
-    state::{LaunchOverrides, Loader, StorageRegistry},
+    route::{InstanceRef, StorageIdent},
+    state::{LaunchOverrides, Loader},
 };
+use phanerite_core::storage::multi::MultiStorage;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,7 +83,7 @@ impl JavaRuntimeSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InstanceSummary {
-    pub storage_id: StorageId,
+    pub storage: StorageIdent,
     pub id: String,
     /// Deterministic seed string for the pixel crystal icon, in the
     /// prototype's `name|mcVersion|loader` form.
@@ -109,7 +110,7 @@ pub struct InstanceSummary {
 
 impl InstanceSummary {
     pub fn reference(&self) -> InstanceRef {
-        InstanceRef::new(self.storage_id, self.id.clone())
+        InstanceRef::new(self.storage.clone(), self.id.clone())
     }
 
     pub fn enabled_mods(&self) -> usize {
@@ -129,7 +130,7 @@ impl InstanceSummary {
 #[derive(Default)]
 pub struct InstanceStore {
     instances: Vec<InstanceSummary>,
-    current_storage: Option<StorageId>,
+    current_storage: Option<StorageIdent>,
     next_id: u64,
     revision: u64,
 }
@@ -154,14 +155,14 @@ impl InstanceStore {
         self.instances.is_empty()
     }
 
-    pub fn get(&self, storage: StorageId, id: &str) -> Option<&InstanceSummary> {
+    pub fn get(&self, storage: StorageIdent, id: &str) -> Option<&InstanceSummary> {
         self.instances
             .iter()
-            .find(|instance| instance.storage_id == storage && instance.id == id)
+            .find(|instance| instance.storage == storage && instance.id == id)
     }
 
     pub fn find(&self, reference: &InstanceRef) -> Option<&InstanceSummary> {
-        self.get(reference.storage_id, &reference.instance_id)
+        self.get(reference.storage.clone(), &reference.instance_id)
     }
 
     pub fn favorites(&self) -> impl Iterator<Item = &InstanceSummary> {
@@ -184,12 +185,12 @@ impl InstanceStore {
         self.instances.iter().filter(|instance| instance.aphanite)
     }
 
-    pub fn set_storage_context(&mut self, id: StorageId) {
+    pub fn set_storage_context(&mut self, id: StorageIdent) {
         self.current_storage = Some(id);
     }
 
-    pub fn storage_context(&self) -> Option<StorageId> {
-        self.current_storage
+    pub fn storage_context(&self) -> Option<StorageIdent> {
+        self.current_storage.clone()
     }
 
     pub fn revision(&self) -> u64 {
@@ -197,11 +198,11 @@ impl InstanceStore {
     }
 
     fn instance_mut(&mut self, reference: &InstanceRef) -> Option<&mut InstanceSummary> {
-        if self.current_storage != Some(reference.storage_id) {
+        if self.current_storage != Some(reference.storage.clone()) {
             return None;
         }
         self.instances.iter_mut().find(|instance| {
-            instance.storage_id == reference.storage_id && instance.id == reference.instance_id
+            instance.storage == reference.storage && instance.id == reference.instance_id
         })
     }
 
@@ -467,8 +468,8 @@ impl InstanceStore {
         true
     }
 
-    pub fn create(&mut self, storage: StorageId, input: NewInstance) -> Option<InstanceRef> {
-        if self.current_storage != Some(storage) {
+    pub fn create(&mut self, storage: StorageIdent, input: NewInstance) -> Option<InstanceRef> {
+        if self.current_storage != Some(storage.clone()) {
             return None;
         }
         let id = self.allocate_id("inst");
@@ -480,7 +481,7 @@ impl InstanceStore {
         );
         let icon_seed = icon_seed(&input.name, &input.mc_version, input.loader);
         let instance = InstanceSummary {
-            storage_id: storage,
+            storage: storage.clone(),
             id: id.clone(),
             icon_seed,
             name: input.name,
@@ -516,7 +517,7 @@ impl InstanceStore {
     }
 
     pub fn duplicate(&mut self, reference: &InstanceRef) -> Option<InstanceRef> {
-        if self.current_storage != Some(reference.storage_id) {
+        if self.current_storage != Some(reference.storage.clone()) {
             return None;
         }
         let source = self.find(reference)?.clone();
@@ -531,16 +532,16 @@ impl InstanceStore {
         };
         self.instances.push(copy);
         self.revision += 1;
-        Some(InstanceRef::new(reference.storage_id, id))
+        Some(InstanceRef::new(reference.storage.clone(), id))
     }
 
     pub fn remove(&mut self, reference: &InstanceRef) -> bool {
-        if self.current_storage != Some(reference.storage_id) {
+        if self.current_storage != Some(reference.storage.clone()) {
             return false;
         }
         let before = self.instances.len();
         self.instances.retain(|instance| {
-            instance.storage_id != reference.storage_id || instance.id != reference.instance_id
+            instance.storage != reference.storage || instance.id != reference.instance_id
         });
         if self.instances.len() == before {
             return false;
@@ -551,12 +552,12 @@ impl InstanceStore {
 
     pub fn apply_for_storage(
         &mut self,
-        registry: &StorageRegistry,
-        storage: StorageId,
+        storages: &MultiStorage,
+        storage: StorageIdent,
         result: Vec<InstanceSummary>,
     ) -> bool {
-        if registry.get(storage).is_some()
-            && self.current_storage == Some(storage)
+        if storages.contains(&storage)
+            && self.current_storage == Some(storage.clone())
             && self.instances != result
         {
             self.instances = result;

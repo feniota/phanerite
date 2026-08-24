@@ -75,6 +75,9 @@ use crate::utils::state::NotReady;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
+mod ident;
+
+pub use ident::*;
 pub mod microsoft;
 pub mod offline;
 pub mod yggdrasil;
@@ -151,6 +154,43 @@ pub enum Account {
     Yggdrasil(yggdrasil::Authentication),
 }
 
+impl Account {
+    /// Builds the stable key used to register this account in [`MultiAccount`].
+    ///
+    /// The key deliberately excludes renewable credentials. It consists of
+    /// the account provider, the authentication service, and the provider's
+    /// account identifier:
+    ///
+    /// - offline accounts use the fixed `"offline"` service and player UUID;
+    /// - Microsoft accounts use the fixed `"official"` service and XUID;
+    /// - Yggdrasil accounts use the configured authentication-server URL and
+    ///   username.
+    pub fn identifier(&self) -> AccountIdent {
+        let (acc_type, service, ident) = match self {
+            Self::Offline(auth) => (
+                AccountType::Offline,
+                "offline".to_string(),
+                auth.uuid.to_string(),
+            ),
+            Self::Microsoft(auth) => (
+                AccountType::Microsoft,
+                "official".to_string(),
+                auth.xuid.clone(),
+            ),
+            Self::Yggdrasil(auth) => (
+                AccountType::Yggdrasil,
+                auth.server.as_str().to_string(),
+                auth.username.clone(),
+            ),
+        };
+        AccountIdent {
+            acc_type,
+            service,
+            ident,
+        }
+    }
+}
+
 // [`Account`] 的快照，与 [`Account`] 的序列化格式一致
 /// Snapshot of an [`Account`], matching [`Account`]'s serialization format
 #[derive(Serialize)]
@@ -212,7 +252,7 @@ impl Authentication for Account {
     }
 }
 
-pub type MultiAccount = Container<Account>;
+pub type MultiAccount = Container<AccountIdent, Account>;
 impl PartialEq for Guard<'_, Account> {
     fn eq(&self, other: &Self) -> bool {
         self.deref() == other.deref()

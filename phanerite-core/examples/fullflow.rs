@@ -1,4 +1,4 @@
-use phanerite_core::auth;
+use phanerite_core::auth::{self, Account};
 use phanerite_core::auth::{Authentication, MultiAccount};
 use phanerite_core::download::downloader::RawDownloader;
 use phanerite_core::download::group::DownloadGroup;
@@ -89,12 +89,20 @@ fn main() {
             plugin: shutdown,
         };
         // Storage 移动至 MultiStorage 容器
-        storages.insert(storage_with_plugin).await;
+        let _ = storages
+            .insert(
+                storage_with_plugin.storage.identifier(),
+                storage_with_plugin,
+            )
+            .await;
 
         // 构造 MultiAccount
         let accounts = MultiAccount::new();
+        let account: Account = auth.into();
         // 将登录凭据移入 MultiAccount
-        accounts.insert(auth.into()).await;
+        let _ = accounts.insert(account.identifier(), account).await;
+
+        // Container::insert(k,v) 有可能失败。如果失败，会把传入的 (键, 值) 包装在 Err() 里原样返回。
 
         // 构造 JavaManager
         let java_manager =

@@ -1,8 +1,8 @@
 use crate::runtime::RuntimeScanPath;
-use crate::storage::Storage;
+use crate::storage::{Storage, StorageIdent};
 use crate::utils::container::{Container, Guard};
 
-pub type MultiStorage = Container<Storage>;
+pub type MultiStorage = Container<StorageIdent, Storage>;
 
 // 带插件的 Storage
 // 可以存 DownloaderWithCache，清理线程的 Shutdown 等需要与 Storage 相同生命周期的内容
@@ -29,7 +29,7 @@ impl<P> AsRef<Storage> for Guard<'_, StorageWithPlugin<P>> {
         &self.storage
     }
 }
-pub type MultiStorageWithPlugin<Plugin> = Container<StorageWithPlugin<Plugin>>;
+pub type MultiStorageWithPlugin<Plugin> = Container<StorageIdent, StorageWithPlugin<Plugin>>;
 
 impl RuntimeScanPath for MultiStorage {
     type Provider<'a> = Guard<'a, Storage>;

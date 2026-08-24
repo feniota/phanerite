@@ -264,7 +264,7 @@ impl Storage {
     }
 
     /// Get a [`StorageIdent`] representing this [`Storage`].
-    pub fn ident(&self) -> StorageIdent {
+    pub fn identifier(&self) -> StorageIdent {
         self.into()
     }
 }

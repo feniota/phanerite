@@ -2,7 +2,8 @@
 
 use gpui::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px, text,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    text,
 };
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{

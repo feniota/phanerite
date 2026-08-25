@@ -1,3 +1,4 @@
+#![allow(unused)] // FIXME
 //! Compact user avatar and username item used in account lists.
 
 use gpui::*;

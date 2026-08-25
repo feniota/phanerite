@@ -1,4 +1,4 @@
-/// Icon assets, most of which are from Lucide Icons (https://lucide.dev/).
+/// Icon assets, most of which are from Lucide Icons <https://lucide.dev/>.
 pub enum PhaIcon {
     Flame,
     Layers,

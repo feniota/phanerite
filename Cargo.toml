@@ -20,6 +20,6 @@ http = "1.5"
 image = { version = "0.25", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 strum = { version = "0.28", features = ["derive"] }
-tracing = "0.1"
+tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.24", features = ["serde", "v7"] }

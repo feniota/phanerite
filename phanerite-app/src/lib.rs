@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod components;
+pub mod db;
 pub mod pages;
 pub mod palette;
 pub mod route;
@@ -25,6 +26,14 @@ use crate::components::titlebar::TitleBar;
 use crate::state::{
     AccountStore, AppState, CrashStore, InstanceStore, SessionStore, Settings, SettingsStore,
 };
+
+/// Machine-readable ID for the application.
+///
+/// This should be globally unique, usually by using the Reverse Domain Name
+/// Notation.
+///
+/// PLEASE CHANGE THIS IF YOU DISTRIBUTE A MODIFIED VERSION OF PHANERITE.
+pub const APP_ID: &'static str = "app.phanerite";
 
 /// Root presentation entity. Launch and live-log entities remain outside this
 /// view so the sidebar and status bar cannot observe high-frequency updates.

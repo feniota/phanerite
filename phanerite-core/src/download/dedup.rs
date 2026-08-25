@@ -22,6 +22,40 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use url::Url;
 
+/// Simple wrapper type for [`PathBuf`] that implements [`Deref<Target = PathBuf>`](Deref)
+///
+/// This can be useful in implementing [`StorageRegistry`]. [`query`](StorageRegistry::query)
+/// has a return value of type `impl Deref<Target = PathBuf>`, which is usually implemented on
+/// smart pointers and guard types. This makes it annoying to implement this trait, especially when
+/// you can obtain an owned [`PathBuf`] directly without a guard or a smart pointer. In that
+/// case you can just use this type.
+///
+/// This type is simply a newtype wrapper around [`PathBuf`] that implements
+/// `Deref<Target = PathBuf>`.
+///
+/// # Example
+///
+/// ```
+/// # use phanerite_core::download::dedup::PathBufWrapper;
+/// // Let's assume that you get this path from a storage bucket
+/// let path = "/home/johndoe/.minecraft/.../a1b2c3.png";
+/// let pathbuf = PathBufWrapper::from(path.to_owned());
+/// ```
+pub struct PathBufWrapper(pub PathBuf);
+
+impl<T: Into<PathBuf>> From<T> for PathBufWrapper {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl Deref for PathBufWrapper {
+    type Target = PathBuf;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// A registry for files that keeps track of what is currently stored.
 ///
 /// Each [`Storage`](crate::storage::Storage) is converted to a [`StorageIdent`],
@@ -42,6 +76,10 @@ pub trait StorageRegistry: Send + Sync {
     ///
     /// Returns a reference-like handle to the registered path when the file
     /// is present in the registry.
+    ///
+    /// `Deref<Target = PathBuf>` is not implemented on [`PathBuf`]. If you can
+    /// obtain a [`PathBuf`] directly without smart pointers or guards, etc.,
+    /// you can use [`PathBufWrapper`] as the return type.
     async fn query(&self, key: &(StorageIdent, Hash)) -> Option<impl Deref<Target = PathBuf>>;
 
     /// Registers the path of a file identified by its storage and content hash.

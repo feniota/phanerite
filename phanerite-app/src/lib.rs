@@ -64,7 +64,7 @@ impl Phanerite {
                 let root = dirs::data_dir()
                     .unwrap_or_else(std::env::temp_dir)
                     .join("phanerite");
-                let storage = pollster::block_on(Storage::new(&root))
+                let storage = gpui::block_on(Storage::new(&root))
                     .expect("failed to initialize Phanerite storage");
                 Some((StorageIdent::from(&storage), storage))
             }
@@ -76,7 +76,7 @@ impl Phanerite {
         let (storage_key, storages) = match storage {
             Some((key, storage)) => {
                 let storages = MultiStorage::new();
-                pollster::block_on(storages.insert(key.clone(), storage))
+                gpui::block_on(storages.insert(key.clone(), storage))
                     .expect("failed to register Phanerite storage");
                 (Some(key), storages)
             }

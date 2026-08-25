@@ -42,7 +42,7 @@ impl AccountSummary {
     /// intentionally created on demand for UI rendering.
     // FIXME: Once the GUI is connected to the real account workflow, build
     // this projection asynchronously instead of blocking the UI with
-    // `pollster::block_on`.
+    // `gpui::block_on`.
     pub fn from_account(account: &Account) -> Self {
         let ident = account.identifier();
         let (username, account_type, auth_server, active_profile_id, profiles) = match account {
@@ -62,7 +62,7 @@ impl AccountSummary {
                 )
             }
             Account::Microsoft(auth) => {
-                let profile = pollster::block_on(auth.profile());
+                let profile = gpui::block_on(auth.profile());
                 let id = profile.id.to_string();
                 let (skin_url, is_slim) = profile
                     .skin()
@@ -92,8 +92,8 @@ impl AccountSummary {
                 )
             }
             Account::Yggdrasil(auth) => {
-                let profiles = pollster::block_on(auth.available_profiles());
-                let selected = pollster::block_on(auth.selected_profile());
+                let profiles = gpui::block_on(auth.available_profiles());
+                let selected = gpui::block_on(auth.selected_profile());
                 let selected_id = auth
                     .selected()
                     .map(|id| id.to_string())
@@ -146,7 +146,7 @@ impl AccountStore {
         for account in accounts {
             let key = account.identifier();
             assert!(
-                pollster::block_on(store.accounts.insert(key, account)).is_ok(),
+                gpui::block_on(store.accounts.insert(key, account)).is_ok(),
                 "seed account key must be unique"
             );
         }
@@ -241,7 +241,7 @@ impl AccountStore {
         ));
         let key = account.identifier();
         let id = key.to_string();
-        if pollster::block_on(self.accounts.insert(key.clone(), account)).is_err() {
+        if gpui::block_on(self.accounts.insert(key.clone(), account)).is_err() {
             return None;
         }
         self.active_id = Some(key);
@@ -253,7 +253,7 @@ impl AccountStore {
         let Some(key) = self.key_for_id(id) else {
             return false;
         };
-        if !pollster::block_on(self.accounts.remove(&key)) {
+        if !gpui::block_on(self.accounts.remove(&key)) {
             return false;
         }
         if self.active_id.as_ref() == Some(&key) {

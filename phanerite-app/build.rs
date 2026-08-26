@@ -28,7 +28,14 @@ fn generate_migrations() -> io::Result<()> {
         }
 
         let path = entry.path();
-        if path.extension().and_then(|extension| extension.to_str()) != Some("sql") {
+        let ext = path.extension().and_then(|extension| extension.to_str());
+
+        // Markdown documents are intentionally ignored
+        if ext == Some("md") {
+            continue;
+        }
+
+        if ext != Some("sql") {
             println!(
                 "cargo::warning={} does not have a .sql extension",
                 path.display()

@@ -17,7 +17,7 @@ categories = ["development-tools"]
 # async runtime / async utilities
 async-channel = "2.5"
 async-executor = "1.14"
-async-fs = "2.2"
+async-fs.workspace = true
 async-lock = "3.4"
 async-process = "2.5"
 async-recursion = "1.1"
@@ -55,7 +55,7 @@ flate2 = "1.1"
 tar = "0.4"
 xz2 = "0.1"
 zip = "8.6"
-zstd = { version = "0.13", default-features = false }
+zstd = { workspace = true, default-features = false }
 
 # database / data structures
 moka = { version = "0.12", features = ["future"], optional = true }

@@ -16,6 +16,7 @@ edition = "2024"
 bytes = "1.12"
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
+async-fs = "2.2"
 futures = "0.3"
 http = "1.5"
 image = { version = "0.25", default-features = false }
@@ -24,3 +25,4 @@ strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.24", features = ["serde", "v7"] }
+zstd = "0.13.3"

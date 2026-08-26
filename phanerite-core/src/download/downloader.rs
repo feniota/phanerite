@@ -2,7 +2,7 @@ use crate::download::Downloader;
 use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
 use crate::storage::temp::TempGuard;
-use crate::utils::Hash;
+use crate::utils::{Hash, hash_file};
 use async_channel::{Receiver, Sender};
 use bytes::Bytes;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -231,6 +231,12 @@ impl Downloader for RawDownloader {
         );
         task.process.start();
 
+        if self.try_deduplicate(&task).await? {
+            task.process.finish();
+            forget(guard);
+            return Ok(());
+        }
+
         // 下载文件
         let mut last_res = Err(Error::other("Unreachable"));
         for _ in 0..=self.retries {
@@ -380,7 +386,25 @@ impl RawDownloader {
                     task.context.storage.linker()(save_path, path).await?;
 
                     // 初始化 Task 的共享位置（用于外部记录）
-                    let _ = record.set(bucket_path.unwrap()).await;
+                    let bucket_path = bucket_path.unwrap();
+                    let _ = record.set(bucket_path.clone()).await;
+
+                    let key = task.file_hash.clone();
+                    if task
+                        .context
+                        .storage
+                        .registry()
+                        .insert(key.clone(), bucket_path)
+                        .await
+                        .is_err()
+                    {
+                        let _ = task
+                            .context
+                            .storage
+                            .registry()
+                            .query_and_increase(&key)
+                            .await;
+                    }
                 }
             }
             // 解压缩
@@ -393,6 +417,32 @@ impl RawDownloader {
         }
 
         Ok(())
+    }
+
+    async fn try_deduplicate<'cx>(&self, task: &DownloadTask<'cx>) -> Result<bool> {
+        let (hash, dst) = match (&task.file_hash, &task.target, &task.share) {
+            (hash, Target::File(dst), Some(_)) if !hash.is_empty() => (hash, dst),
+            _ => return Ok(false),
+        };
+
+        let registry = task.context.storage.registry();
+        let Some(src) = registry.query(hash).await else {
+            return Ok(false);
+        };
+        if hash_file(&src, hash).await.is_err() {
+            return Ok(false);
+        }
+
+        let Some(src) = registry
+            .query_and_increase(hash)
+            .await
+            .map_err(|error| Error::other(error.to_string()))?
+        else {
+            return Ok(false);
+        };
+
+        task.context.storage.linker()(&src, dst).await?;
+        Ok(true)
     }
     // 申请下载缓存，限制总并行度
     /// Acquires a download buffer, bounding the total parallelism

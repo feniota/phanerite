@@ -88,11 +88,14 @@ mod ident;
 pub mod bucket;
 pub mod capability;
 pub mod multi;
+pub mod shared;
 pub mod temp;
 pub use ident::StorageIdent;
 
 use crate::error::{Error, Result};
 use crate::storage::capability::{DirCapability, probe_tree};
+use crate::storage::shared::Registry;
+use debug_ignore::DebugIgnore;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -167,6 +170,9 @@ pub struct Storage {
     /// Shared bucket strategy
     /// Already fell back according to the directory capabilities
     share_strategy: SharePreference,
+    /// Registry for shared files
+    registry: DebugIgnore<Box<dyn Registry + Send + Sync>>,
+    registry_is_unit: bool,
     // 临时文件清理器
     /// Temporary file cleaner
     cleaner: Arc<async_executor::Executor<'static>>,
@@ -174,6 +180,19 @@ pub struct Storage {
 
 impl Storage {
     pub async fn new(root: impl AsRef<Path>) -> Result<Self> {
+        let mut storage = Self::new_with_registry(root, scc::HashMap::new()).await?;
+        if matches!(storage.share_strategy, SharePreference::Move) {
+            storage.registry = DebugIgnore(Box::new(()));
+            storage.registry_is_unit = true;
+        }
+        Ok(storage)
+    }
+
+    /// Creates a storage with a caller-provided shared-file registry.
+    pub async fn new_with_registry(
+        root: impl AsRef<Path>,
+        registry: impl Registry + Send + Sync + 'static,
+    ) -> Result<Self> {
         let root_dir = std::path::absolute(root.as_ref())?;
         if !root_dir.exists() {
             async_fs::create_dir_all(&root_dir).await?;
@@ -198,6 +217,8 @@ impl Storage {
             authlib_injector: dir(&root_dir, "authlib-injector").await?,
             capability,
             share_strategy: SharePreference::Hardlink.fallback(capability),
+            registry: DebugIgnore(Box::new(registry)),
+            registry_is_unit: false,
             root_dir,
             cleaner: Default::default(),
         })
@@ -206,7 +227,17 @@ impl Storage {
     /// Changes the preference
     pub fn share_preference(mut self, share_preference: SharePreference) -> Self {
         self.share_strategy = share_preference.fallback(self.capability);
+        if matches!(self.share_strategy, SharePreference::Move) {
+            self.registry = DebugIgnore(Box::new(()));
+            self.registry_is_unit = true;
+        } else if self.registry_is_unit {
+            self.registry = DebugIgnore(Box::new(scc::HashMap::new()));
+            self.registry_is_unit = false;
+        }
         self
+    }
+    pub(crate) fn registry(&self) -> &(dyn Registry + Send + Sync) {
+        self.registry.0.as_ref()
     }
     pub fn root_dir(&self) -> &Path {
         &self.root_dir

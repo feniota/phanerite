@@ -1804,6 +1804,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c286de4e81ea2590afc24d754e0f83810c566f50a1388fa75ebd57928c0d9745"
 
 [[package]]
+name = "debug-ignore"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffe7ed1d93f4553003e20b629abe9085e1e81b1429520f897f8f8860bc6dfc21"
+
+[[package]]
 name = "deflate64"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5670,6 +5676,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-fs",
+ "async-trait",
  "chrono",
  "concurrent-queue",
  "dirs",
@@ -5693,17 +5700,20 @@ dependencies = [
 name = "phanerite-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-channel",
  "async-executor",
  "async-fs",
  "async-lock",
  "async-process",
  "async-recursion",
+ "async-trait",
  "base64 0.23.1",
  "blake3",
  "bytes",
  "bzip2",
  "chrono",
+ "debug-ignore",
  "dotenvy",
  "event-listener",
  "flate2",

@@ -41,6 +41,7 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "
 gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
 anyhow = "1.0"
+async-trait = "0.1.92"
 chrono.workspace = true
 dotenvy.workspace = true
 rust-embed = "8.12.0"

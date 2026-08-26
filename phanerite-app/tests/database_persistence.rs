@@ -2,8 +2,7 @@
 
 use phanerite::db::{Database, migration::apply_pending, storage_registry::StorageReg};
 use phanerite_core::{
-    download::dedup::StorageRegistry,
-    storage::StorageIdent,
+    storage::{StorageIdent, shared::MultiRegistry},
     utils::{Blake3Hash, Hash, HashValue},
 };
 
@@ -14,10 +13,7 @@ fn database_path_override_persists_registry_entries() {
         let storage = StorageIdent {
             root_dir: root.path().join("storage"),
         };
-        let key = (
-            storage,
-            Hash::Blake3(Blake3Hash::from_bytes(&[42; 32]).unwrap()),
-        );
+        let hash = Hash::Blake3(Blake3Hash::from_bytes(&[42; 32]).unwrap());
         let value = root.path().join("share/asset.bin");
 
         // This integration test is compiled in debug mode, where the override
@@ -28,13 +24,16 @@ fn database_path_override_persists_registry_entries() {
         let first = Database::new();
         apply_pending(&first).await.unwrap();
         let registry = StorageReg::new(first).await;
-        registry.insert(key.clone(), value.clone()).await;
+        registry
+            .insert((&storage, hash.clone()), value.clone())
+            .await
+            .unwrap();
         drop(registry);
 
         let second = Database::new();
         apply_pending(&second).await.unwrap();
         let registry = StorageReg::new(second).await;
-        let persisted = registry.query(&key).await.unwrap();
+        let persisted = registry.query((&storage, &hash)).await.unwrap();
 
         assert_eq!(persisted.as_path(), value.as_path());
         assert!(root.path().join("database").exists());

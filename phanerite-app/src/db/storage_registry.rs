@@ -1,23 +1,16 @@
-//! [`StorageRegistry`] implementation based on the Turso database
+//! [`MultiRegistry`] implementation based on the Turso database.
 
 use super::Database;
+use anyhow::anyhow;
+use async_trait::async_trait;
 use concurrent_queue::{ConcurrentQueue, PopError};
-use phanerite_core::download::dedup::PathBufWrapper;
-use phanerite_core::{download::dedup::StorageRegistry, storage::StorageIdent, utils::Hash};
+use phanerite_core::storage::shared::{Error, MultiRegistry, Path, Result};
+use phanerite_core::{storage::StorageIdent, utils::Hash};
 use std::sync::Arc;
 use std::{ops::Deref, path::PathBuf};
 use turso::{Connection, Database as Db};
 
 const HELD_CONNECTIONS: usize = 8_usize;
-const INSERT_RETRIES: usize = 8_usize;
-
-fn is_retryable_write_error(error: &turso::Error) -> bool {
-    match error {
-        turso::Error::Busy(_) | turso::Error::BusySnapshot(_) => true,
-        turso::Error::Error(message) => message.to_ascii_lowercase().contains("conflict"),
-        _ => false,
-    }
-}
 
 pub struct StorageReg {
     pool: Pool,
@@ -42,97 +35,159 @@ impl StorageReg {
     }
 }
 
-impl StorageRegistry for StorageReg {
-    async fn query(&self, key: &(StorageIdent, Hash)) -> Option<impl Deref<Target = PathBuf>> {
+#[async_trait]
+impl MultiRegistry for StorageReg {
+    async fn query(&self, key: (&StorageIdent, &Hash)) -> Option<Path<'_>> {
         let conn = self.pool.fetch().ok()?;
-        let stmt = conn
-            .prepare_cached(
+        let mut rows = conn
+            .query(
                 r#"SELECT path
                     FROM storage_registry
                     WHERE storage = ?1 AND hash = ?2
                 "#,
+                (key.0.root_dir.to_string_lossy().as_ref(), key.1.as_bytes()),
             )
-            .await;
-        if let Err(e) = stmt {
-            if !matches!(e, turso::Error::QueryReturnedNoRows) {
-                tracing::error!("Preparing query statement failed: {}", e);
-            }
-            return None;
-        }
-        let mut stmt = stmt.unwrap();
-
-        let storage = key.0.root_dir.to_string_lossy();
-        let hash = key.1.as_bytes();
-        let row = stmt.query_row((storage.as_ref(), hash)).await;
-        if let Err(e) = row {
-            tracing::error!("Querying for storage item failed: {}", e);
-            return None;
-        }
-        let row = row.unwrap();
-        let path = row.get::<String>(0).ok()?;
-
-        Some(PathBufWrapper::from(path))
+            .await
+            .ok()?;
+        let row = rows.next().await.ok()??;
+        Some(Path::new_owned(row.get::<String>(0).ok()?.into()))
     }
 
-    async fn insert(&self, key: (StorageIdent, Hash), val: PathBuf) {
-        let ret: anyhow::Result<()> = async {
-            let conn = self.pool.fetch()?;
-            let mut begin = conn.prepare_cached("BEGIN CONCURRENT").await?;
-            let mut insert = conn
-                .prepare_cached(
-                    r#"INSERT INTO storage_registry
-                        (storage, hash, path)
-                        VALUES (?1, ?2, ?3)
-                        ON CONFLICT DO NOTHING"#,
-                )
-                .await?;
-            let mut commit = conn.prepare_cached("COMMIT").await?;
-            let mut rollback = conn.prepare_cached("ROLLBACK").await?;
+    async fn query_and_increase(&self, key: (&StorageIdent, &Hash)) -> Result<Option<Path<'_>>> {
+        let conn = self.pool.fetch().map_err(|e| anyhow!(e))?;
+        let mut begin = conn
+            .prepare_cached("BEGIN CONCURRENT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut update = conn
+            .prepare_cached(
+                "UPDATE storage_registry
+                 SET ref_count = ref_count + 1
+                 WHERE storage = ?1 AND hash = ?2",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut select = conn
+            .prepare_cached(
+                "SELECT path FROM storage_registry
+                 WHERE storage = ?1 AND hash = ?2",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut commit = conn
+            .prepare_cached("COMMIT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut rollback = conn
+            .prepare_cached("ROLLBACK")
+            .await
+            .map_err(|e| anyhow!(e))?;
 
-            let storage = key.0.root_dir.to_string_lossy();
-            let hash = key.1.as_bytes();
-            let path = val.to_string_lossy();
+        begin.execute(()).await.map_err(|e| anyhow!(e))?;
+        let storage = key.0.root_dir.to_string_lossy();
+        let params = (storage.as_ref(), key.1.as_bytes());
+        update.execute(params).await.map_err(|e| anyhow!(e))?;
+        let mut rows = select.query(params).await.map_err(|e| anyhow!(e))?;
+        let Some(row) = rows.next().await.map_err(|e| anyhow!(e))? else {
+            let _ = rollback.execute(()).await;
+            return Ok(None);
+        };
+        let path = row.get::<String>(0).map_err(|e| anyhow!(e))?;
+        commit.execute(()).await.map_err(|e| anyhow!(e))?;
+        Ok(Some(Path::new_owned(path.into())))
+    }
 
-            for attempt in 0..INSERT_RETRIES {
-                if let Err(error) = begin.execute(()).await {
-                    if is_retryable_write_error(&error) && attempt + 1 < INSERT_RETRIES {
-                        std::thread::yield_now();
-                        continue;
-                    }
-                    return Err(error.into());
-                }
+    async fn insert(&self, key: (&StorageIdent, Hash), val: PathBuf) -> Result<()> {
+        let conn = self.pool.fetch().map_err(|e| anyhow!(e))?;
+        let mut begin = conn
+            .prepare_cached("BEGIN CONCURRENT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut insert = conn
+            .prepare_cached(
+                "INSERT INTO storage_registry (storage, hash, path, ref_count)
+                 VALUES (?1, ?2, ?3, 1)",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut commit = conn
+            .prepare_cached("COMMIT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut rollback = conn
+            .prepare_cached("ROLLBACK")
+            .await
+            .map_err(|e| anyhow!(e))?;
 
-                let result = async {
-                    insert
-                        .execute((storage.as_ref(), hash, path.as_ref()))
-                        .await?;
-                    commit.execute(()).await?;
-                    Ok::<_, turso::Error>(())
-                }
-                .await;
-
-                match result {
-                    Ok(()) => return Ok(()),
-                    Err(error) => {
-                        let _ = rollback.execute(()).await;
-                        if is_retryable_write_error(&error) && attempt + 1 < INSERT_RETRIES {
-                            std::thread::yield_now();
-                            continue;
-                        }
-                        return Err(error.into());
-                    }
-                }
-            }
-
-            unreachable!("the insert retry loop always returns")
+        begin.execute(()).await.map_err(|e| anyhow!(e))?;
+        let storage = key.0.root_dir.to_string_lossy();
+        let result = insert
+            .execute((
+                storage.as_ref(),
+                key.1.as_bytes(),
+                val.to_string_lossy().as_ref(),
+            ))
+            .await;
+        if let Err(error) = result {
+            let _ = rollback.execute(()).await;
+            return Err(anyhow!(error).into());
         }
-        .await;
-        if let Err(e) = ret {
-            tracing::error!(
-                "Inserting into storage registry database failed, skipping: {}",
-                e
-            );
+        commit.execute(()).await.map_err(|e| anyhow!(e))?;
+        Ok(())
+    }
+
+    async fn decrease(&self, key: (&StorageIdent, &Hash)) -> Result<u32> {
+        let conn = self.pool.fetch().map_err(|e| anyhow!(e))?;
+        let mut begin = conn
+            .prepare_cached("BEGIN CONCURRENT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut update = conn
+            .prepare_cached(
+                "UPDATE storage_registry
+                 SET ref_count = ref_count - 1
+                 WHERE storage = ?1 AND hash = ?2 AND ref_count > 0",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut select = conn
+            .prepare_cached(
+                "SELECT ref_count FROM storage_registry
+                 WHERE storage = ?1 AND hash = ?2",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut delete = conn
+            .prepare_cached(
+                "DELETE FROM storage_registry
+                 WHERE storage = ?1 AND hash = ?2 AND ref_count = 0",
+            )
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut commit = conn
+            .prepare_cached("COMMIT")
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let mut rollback = conn
+            .prepare_cached("ROLLBACK")
+            .await
+            .map_err(|e| anyhow!(e))?;
+
+        begin.execute(()).await.map_err(|e| anyhow!(e))?;
+        let storage = key.0.root_dir.to_string_lossy();
+        let params = (storage.as_ref(), key.1.as_bytes());
+        update.execute(params).await.map_err(|e| anyhow!(e))?;
+        let mut rows = select.query(params).await.map_err(|e| anyhow!(e))?;
+        let Some(row) = rows.next().await.map_err(|e| anyhow!(e))? else {
+            let _ = rollback.execute(()).await;
+            return Err(Error::EntryNotFound);
+        };
+        let count = row.get::<u32>(0).map_err(|e| anyhow!(e))?;
+        if count == 0 {
+            delete.execute(params).await.map_err(|e| anyhow!(e))?;
         }
+        commit.execute(()).await.map_err(|e| anyhow!(e))?;
+        Ok(count)
     }
 }
 

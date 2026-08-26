@@ -5669,9 +5669,11 @@ name = "phanerite"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-fs",
  "chrono",
  "concurrent-queue",
  "dirs",
+ "dotenvy",
  "gpui",
  "gpui-base",
  "gpui-component",

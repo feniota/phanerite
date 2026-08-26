@@ -15,6 +15,7 @@ edition = "2024"
 [workspace.dependencies]
 bytes = "1.12"
 chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
 futures = "0.3"
 http = "1.5"
 image = { version = "0.25", default-features = false }

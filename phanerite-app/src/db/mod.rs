@@ -3,7 +3,7 @@
 pub mod migration;
 pub mod storage_registry;
 
-#[cfg(any(not(debug_assertions), feature = "no-memory-db"))]
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use turso::Database as Db;
@@ -20,8 +20,7 @@ pub struct Database {
 }
 
 impl Database {
-    #[cfg(any(not(debug_assertions), feature = "no-memory-db"))]
-    async fn new_fs() -> anyhow::Result<Db> {
+    async fn new_fs(path: Option<PathBuf>) -> anyhow::Result<Db> {
         let io: Arc<dyn turso_core::IO + 'static>;
         #[cfg(target_os = "linux")]
         match turso_core::UringIO::new() {
@@ -43,10 +42,20 @@ impl Database {
             io = Arc::new(turso_core::PlatformIO::new()?);
         }
 
-        let path = dirs::data_local_dir()
-            .ok_or(anyhow::anyhow!("Failed to get the local data dir"))?
-            .join(crate::APP_ID)
-            .join("database");
+        let path = match path {
+            Some(path) => path,
+            None => dirs::data_local_dir()
+                .ok_or(anyhow::anyhow!("Failed to get the local data dir"))?
+                .join(crate::APP_ID),
+        };
+
+        if let Err(e) = async_fs::create_dir_all(&path).await
+            && !matches!(e.kind(), std::io::ErrorKind::AlreadyExists)
+        {
+            return Err(e.into());
+        }
+
+        let path = path.join("database");
         let db = turso::Builder::new_local(&path.to_string_lossy())
             .with_io_impl(io)
             .build()
@@ -54,7 +63,6 @@ impl Database {
         Ok(db)
     }
 
-    #[allow(unused)]
     async fn new_memory() -> anyhow::Result<Db> {
         turso::Builder::new_local(":memory:")
             .build()
@@ -65,21 +73,35 @@ impl Database {
     /// Create a new [`Database`] on the default path
     pub fn new() -> Self {
         gpui::block_on(async {
-            #[cfg(any(not(debug_assertions), feature = "no-memory-db"))]
-            let new = Self::new_fs().await;
+            #[cfg(debug_assertions)]
+            let disk_path = {
+                let _ = dotenvy::dotenv();
+                std::env::var_os("PHANERITE_DB_PATH").map(PathBuf::from)
+            };
 
-            #[cfg(all(debug_assertions, not(feature = "no-memory-db")))]
-            let new = Self::new_memory().await;
+            #[cfg(not(debug_assertions))]
+            let disk_path = None;
+
+            let new = if cfg!(debug_assertions) && disk_path.is_none() {
+                Self::new_memory().await
+            } else {
+                Self::new_fs(disk_path).await
+            };
 
             let db = match new {
                 Ok(d) => d,
                 Err(e) => {
-                    tracing::warn!(
-                        "Failed to initialize on-disk Turso database, falling back to memory..."
-                    );
-                    tracing::warn!("{:?}", e);
+                    #[cfg(not(debug_assertions))]
+                    panic!("Failed to initialize the on-disk Turso database: {e:#}");
 
-                    turso::Builder::new_local(":memory:").build().await.unwrap()
+                    #[cfg(debug_assertions)]
+                    {
+                        tracing::warn!(
+                            "Failed to initialize on-disk Turso database, falling back to memory: {}",
+                            e
+                        );
+                        Self::new_memory().await.unwrap()
+                    }
                 }
             };
 

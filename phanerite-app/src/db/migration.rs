@@ -1,8 +1,7 @@
 //! Compile-time migration discovery and the future runtime migration entry point.
 //!
 //! `build.rs` validates the files in `migrations` and embeds their contents
-//! into the binary. Runtime application is intentionally not wired up yet because
-//! the database integration is still being built.
+//! into the binary.
 
 pub mod migration_scripts {
     include!(concat!(env!("OUT_DIR"), "/migration_scripts.rs"));
@@ -38,7 +37,9 @@ pub async fn apply_pending(db: &super::Database) -> turso::Result<()> {
             continue;
         }
 
-        connection.execute_batch(migration.sql).await?;
+        connection
+            .execute_batch(format!("BEGIN TRANSACTION;\n{}\nCOMMIT;", migration.sql))
+            .await?;
         connection
             .execute(
                 "INSERT INTO __phanerite_migrations (id, slug) VALUES (?1, ?2)",

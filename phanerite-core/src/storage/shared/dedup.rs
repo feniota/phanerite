@@ -1,7 +1,7 @@
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::storage::shared::registry::HashRegistry;
+use crate::storage::shared::HashRegistry;
 use crate::utils::{Hash, hash_file};
 use bytes::Bytes;
 use http::{Request, Response};

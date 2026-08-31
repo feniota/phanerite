@@ -1,26 +1,32 @@
 use crate::error::Result;
 use crate::storage::Storage;
 use async_fs::Metadata;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
+use std::path::PathBuf;
 use tracing::trace;
 
 impl Storage {
+    fn list_current_bucket(&self) -> impl Stream<Item = PathBuf> {
+        futures::stream::once(async_fs::read_dir(self.share_dir()))
+            .filter_map(async |dir| dir.ok())
+            .flat_map(|dir| {
+                dir.filter_map(async |entry| entry.ok())
+                    // 拉平一层目录
+                    .filter_map(async |entry| async_fs::read_dir(entry.path()).await.ok())
+                    .flatten()
+                    .filter_map(async |entry| entry.ok())
+                    .map(|entry| entry.path())
+            })
+    }
+
     // 清理共享储存桶中的孤立硬链接和空目录
     /// Cleans up orphaned hard links and empty directories in the shared
     /// bucket
     pub async fn clean_hardlink(&self) -> Result<()> {
-        let bucket = self.share_dir();
         const CONCURRENT: usize = 16;
 
         // 删除孤立文件
-        async_fs::read_dir(bucket)
-            .await?
-            .filter_map(async |x| x.ok())
-            // 拉平一层目录
-            .filter_map(async |x| async_fs::read_dir(x.path()).await.ok())
-            .flatten()
-            .filter_map(async |x| x.ok())
-            .map(|x| x.path())
+        self.list_current_bucket()
             // 过滤孤立文件
             .filter_map(async |x| {
                 async_fs::metadata(&x)
@@ -42,7 +48,7 @@ impl Storage {
             .await;
 
         // 删除空目录
-        async_fs::read_dir(bucket)
+        async_fs::read_dir(self.share_dir())
             .await?
             .filter_map(async |x| x.ok())
             .map(|x| x.path())

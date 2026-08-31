@@ -89,7 +89,7 @@ pub mod shared;
 pub mod temp;
 
 use crate::error::{Error, Result};
-use crate::storage::capability::{probe_tree, DirCapability};
+use crate::storage::capability::{DirCapability, probe_tree};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

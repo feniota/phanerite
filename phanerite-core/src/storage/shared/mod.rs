@@ -23,4 +23,5 @@ use crate::utils::Hash;
 pub trait HashRegistry: Send + Sync {
     async fn insert(&self, blake3: blake3::Hash, other: Hash) -> Result<()>;
     async fn get(&self, other: &Hash) -> Option<blake3::Hash>;
+    async fn get_all(&self, blake3: blake3::Hash) -> Vec<Hash>;
 }

@@ -17,7 +17,7 @@ categories = ["development-tools"]
 # async runtime / async utilities
 async-channel = "2.5"
 async-executor = "1.14"
-async-fs.workspace = true
+async-fs = "2.2"
 async-lock = "3.4"
 async-process = "2.5"
 async-recursion = "1.1"
@@ -55,13 +55,13 @@ flate2 = "1.1"
 tar = "0.4"
 xz2 = "0.1"
 zip = "8.6"
-zstd = { workspace = true, default-features = false }
+zstd = { version = "0.13", default-features = false }
 
 # database / data structures
-moka = { version = "0.12", features = ["future"], optional = true }
+bytes.workspace = true
+moka = { version = "0.12", features = ["future"] }
 ouroboros = "0.18"
 scc = "3.8"
-bytes.workspace = true
 
 # time / identifiers
 chrono.workspace = true
@@ -70,15 +70,8 @@ uuid.workspace = true
 # logging / diagnostics
 thiserror = "2.0"
 tracing.workspace = true
-async-trait = "0.1.92"
-anyhow = "1.0.104"
-debug-ignore = "1.0.5"
 
 [dev-dependencies]
-dotenvy.workspace = true
+dotenvy = "0.15"
 smol = "2.0"
 tracing-subscriber = "0.3"
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]

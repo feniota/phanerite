@@ -42,7 +42,7 @@ pub struct DownloadTaskBuilder<U, T, C> {
     file_name: Option<String>,
     file_size: Option<u64>,
     file_hash: Hash,
-    share: Option<Arc<OnceCell<PathBuf>>>,
+    share: Option<Arc<OnceCell<blake3::Hash>>>,
 }
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ pub struct DownloadTask<'cx> {
     pub(crate) url: Url,
     pub(crate) target: Target,
     pub(crate) file_hash: Hash,
-    pub(crate) share: Option<Arc<OnceCell<PathBuf>>>,
+    pub(crate) share: Option<Arc<OnceCell<blake3::Hash>>>,
 
     pub process: DownloadProcess,
 }

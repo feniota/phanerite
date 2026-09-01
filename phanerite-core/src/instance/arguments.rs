@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::instance::Instance;
-use crate::instance::manifest::{Action, Argument};
+use crate::instance::manifest::{Argument, Rule};
 use crate::instance::variables::Variables;
 use crate::utils::state::{NotReady, Ready};
 use std::collections::HashSet;
@@ -128,10 +128,7 @@ fn flatten_arguments<'a>(
     arguments.flat_map(|arg| match arg {
         Argument::String(s) => vec![s],
         Argument::Conditional(c) => {
-            if c.rules.iter().fold(false, |b, rule| {
-                rule.evaluate(features)
-                    .map_or(b, |a| matches!(a, Action::Allow))
-            }) {
+            if Rule::allows(&c.rules, features) {
                 c.value.iter().collect()
             } else {
                 vec![]

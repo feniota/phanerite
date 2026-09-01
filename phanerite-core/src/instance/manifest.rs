@@ -86,10 +86,27 @@ pub struct Rule {
 }
 
 impl Rule {
+    // 按顺序求值，后面命中的规则覆盖前面的；非空列表默认不允许
+    /// Evaluates a rule list in order, later matches overriding earlier ones.
+    /// A non-empty list denies by default, so the subject is allowed only when
+    /// the last rule that applies says so. An empty list is unconditional.
+    pub fn allows(rules: &[Rule], features: &HashSet<&'static str>) -> bool {
+        rules.is_empty()
+            || rules.iter().fold(false, |allowed, rule| {
+                rule.evaluate(features)
+                    .map_or(allowed, |a| matches!(a, Action::Allow))
+            })
+    }
+
     /// Evaluate this rule against the current OS and a set of enabled features.
     ///
     /// Returns `Some(action)` if the rule's OS **and** feature conditions
     /// are all met, or `None` if this rule does not apply.
+    ///
+    /// Note that rules are not a complete platform gate for libraries: from
+    /// 1.19 on, every `natives-*` variant of a library carries the same
+    /// OS-only rule and encodes the architecture in its Maven classifier
+    /// instead. [`Library`] checks the classifier on top of the rules.
     pub fn evaluate(&self, features: &HashSet<&'static str>) -> Option<Action> {
         if let Some(ref os) = self.os
             && !os.matches_current()
@@ -123,35 +140,95 @@ impl Action {
     }
 }
 
-/// OS constraint (name + optional architecture).
+// 清单里的操作系统名，`osx` 即 macOS
+/// Operating system as spelled in a manifest — `osx` means macOS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+#[strum(ascii_case_insensitive)]
+pub enum Os {
+    #[strum(to_string = "windows")]
+    Windows,
+    #[strum(to_string = "linux")]
+    Linux,
+    #[strum(to_string = "osx", serialize = "macos", serialize = "mac")]
+    Osx,
+}
+
+impl Os {
+    /// The OS this build runs on, or `None` if Minecraft has no name for it.
+    pub fn current() -> Option<Self> {
+        std::env::consts::OS.parse().ok()
+    }
+}
+
+// 清单里的 CPU 架构名。各家清单写法不一，别名都收进来
+/// CPU architecture as spelled in a manifest. Different generators use
+/// different names, so every spelling is accepted as an alias.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+#[strum(ascii_case_insensitive)]
+pub enum Arch {
+    #[strum(
+        to_string = "x86",
+        serialize = "i386",
+        serialize = "i586",
+        serialize = "i686",
+        serialize = "x32"
+    )]
+    X86,
+    #[strum(to_string = "x86_64", serialize = "x64", serialize = "amd64")]
+    X64,
+    #[strum(to_string = "arm64", serialize = "aarch64")]
+    Arm64,
+    #[strum(to_string = "arm32", serialize = "arm", serialize = "aarch32")]
+    Arm32,
+}
+
+impl Arch {
+    /// The architecture this build runs on, or `None` if no manifest name
+    /// covers it.
+    pub fn current() -> Option<Self> {
+        std::env::consts::ARCH.parse().ok()
+    }
+}
+
+/// OS constraint (name + optional architecture and version).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OsInfo {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
+    // 形如 `^10\.` 的正则，仅用于往返序列化，见 `matches_current`
+    /// A regex such as `^10\.`; kept for round-tripping only, see
+    /// [`OsInfo::matches_current`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 impl OsInfo {
     /// Check whether the current system is included by this OS constraint.
     ///
-    /// - `name` empty → matches any OS.
-    /// - `name` "osx" matches macOS (`std::env::consts::OS == "macos"`).
-    /// - `arch` `None` → matches any architecture.
+    /// - `name` empty → matches any OS; otherwise it must name the current OS
+    ///   under any of its aliases (`osx` / `macos` both mean macOS).
+    /// - `arch` `None` → matches any architecture; otherwise it must name the
+    ///   current architecture (`arm64` / `aarch64` both mean 64-bit ARM).
+    /// - `version` is **not** matched: reading the host OS version needs
+    ///   platform APIs this crate does not link, and the only pattern Mojang
+    ///   ships (`^10\.`, gating `-Dos.name=Windows 10`) is harmless to apply
+    ///   on every Windows release.
     pub fn matches_current(&self) -> bool {
-        if !self.name.is_empty() {
-            let current_os = std::env::consts::OS;
-            let mapped = match current_os {
-                "macos" => "osx",
-                other => other,
-            };
-            if self.name != mapped {
-                return false;
-            }
+        if !self.name.is_empty()
+            && !self
+                .name
+                .parse::<Os>()
+                .is_ok_and(|os| Os::current() == Some(os))
+        {
+            return false;
         }
         if let Some(ref arch) = self.arch
-            && arch != std::env::consts::ARCH
+            && !arch
+                .parse::<Arch>()
+                .is_ok_and(|arch| Arch::current() == Some(arch))
         {
             return false;
         }

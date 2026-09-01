@@ -30,7 +30,7 @@ impl BitAnd for DirCapability {
 /// Walks the tree and probes the directory capabilities
 pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
     walk_dirs(root)
-        .map(|dir| async move { probe_dir(&dir).await })
+        .map(async |dir| probe_dir(&dir).await)
         .buffer_unordered(16)
         .fold(
             DirCapability {
@@ -39,7 +39,7 @@ pub(super) async fn probe_tree(root: PathBuf) -> DirCapability {
                 hardlink: true,
                 symlink: true,
             },
-            |a, b| async move { a & b },
+            async |a, b| a & b,
         )
         .await
 }
@@ -72,7 +72,7 @@ async fn probe_dir(current: &Path) -> DirCapability {
 // 遍历目录
 /// Walks the directory tree
 fn walk_dirs(root: PathBuf) -> impl Stream<Item = PathBuf> {
-    futures::stream::unfold(vec![root], |mut stack| async move {
+    futures::stream::unfold(vec![root], async |mut stack| {
         let dir = stack.pop()?;
 
         let mut entries = match async_fs::read_dir(&dir).await {

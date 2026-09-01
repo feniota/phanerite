@@ -485,7 +485,7 @@ async fn find_manifest(name: impl AsRef<str>, instance_dir: &PathBuf) -> Result<
     // 寻找别的 json
     let jsons = async_fs::read_dir(&instance_dir)
         .await?
-        .filter_map(|entry| async move {
+        .filter_map(async |entry| {
             let entry = entry.ok()?;
             let name = entry.file_name();
             if name.to_string_lossy().ends_with(".json") && entry.path().is_file() {

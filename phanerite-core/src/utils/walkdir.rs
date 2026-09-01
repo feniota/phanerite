@@ -36,44 +36,38 @@ impl WalkDir {
 
         async_fs::create_dir_all(&dst).await?;
 
-        self.map(move |src| {
-            let root = root.clone();
-            let dst = dst.clone();
+        self.map(async |src| {
+            let relative = src
+                .strip_prefix(&root)
+                .expect("WalkDir path must be under root");
+            let target = dst.join(relative);
 
-            async move {
-                let relative = src
-                    .strip_prefix(&root)
-                    .expect("WalkDir path must be under root");
-
-                let target = dst.join(relative);
-
-                if src.is_dir() {
-                    if target.exists() {
-                        // 目标目录已经存在：
-                        // 不做任何事情，让 WalkDir 继续遍历里面的内容。
-                        return Ok(());
-                    }
-
-                    // 目标目录不存在，整个目录直接搬过去。
-                    async_fs::rename(src, target).await?;
-                } else {
-                    // 目标文件已经存在，跳过。
-                    if target.exists() {
-                        return Ok(());
-                    }
-
-                    if let Some(parent) = target.parent() {
-                        async_fs::create_dir_all(parent).await?;
-                    }
-
-                    async_fs::rename(src, target).await?;
+            if src.is_dir() {
+                if target.exists() {
+                    // 目标目录已经存在：
+                    // 不做任何事情，让 WalkDir 继续遍历里面的内容。
+                    return Ok(());
                 }
 
-                Ok(())
+                // 目标目录不存在，整个目录直接搬过去。
+                async_fs::rename(src, target).await?;
+            } else {
+                // 目标文件已经存在，跳过。
+                if target.exists() {
+                    return Ok(());
+                }
+
+                if let Some(parent) = target.parent() {
+                    async_fs::create_dir_all(parent).await?;
+                }
+
+                async_fs::rename(src, target).await?;
             }
+
+            Ok(())
         })
         .buffer_unordered(32)
-        .try_for_each(|_| async { Ok(()) })
+        .try_for_each(async |_| Ok(()))
         .await
     }
 }

@@ -15,7 +15,7 @@ impl Storage {
                     .filter_map(async |entry| async_fs::read_dir(entry.path()).await.ok())
                     .flatten()
                     .filter_map(async |entry| entry.ok())
-                    .map(|entry| entry.path())
+                    .filter_map(async |entry| std::path::absolute(entry.path()).ok())
             })
     }
 
@@ -23,7 +23,7 @@ impl Storage {
     /// Cleans up orphaned hard links and empty directories in the shared
     /// bucket
     pub async fn clean_hardlink(&self) -> Result<()> {
-        const CONCURRENT: usize = 16;
+        const CONCURRENT: usize = 32;
 
         // 删除孤立文件
         self.list_current_bucket()
@@ -71,6 +71,16 @@ impl Storage {
 
         Ok(())
     }
+
+    // pub(super) fn deep_clean_shared<'a>(
+    //     &'a self,
+    //     paths: &'a std::collections::HashSet<PathBuf>,
+    // ) -> impl Stream<Item = PathBuf> + 'a {
+    //     self.list_current_bucket().filter(|x| {
+    //         let contains = paths.contains(x);
+    //         async move { !contains }
+    //     })
+    // }
 }
 
 // 硬链接引用计数

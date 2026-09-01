@@ -67,9 +67,8 @@ impl Storage {
             .filter_map(async |entry| std::path::absolute(entry.path()).ok()))
     }
 
-    // 清理共享储存桶中的孤立硬链接和空目录
-    /// Cleans up orphaned hard links and empty directories in the shared
-    /// bucket
+    // 清理共享储存桶中的孤立硬链接
+    /// Cleans up orphaned hard links in the shared bucket
     pub async fn clean_hardlink(&self) -> Result<()> {
         // 硬链接引用计数
         /// Hard link reference count
@@ -118,9 +117,8 @@ impl Storage {
         Ok(())
     }
 
-    // 清理共享储存桶中的孤立符号链接和空目录
-    /// Cleans up orphaned symbol links and empty directories in the shared
-    /// bucket
+    // 清理共享储存桶中的孤立符号链接
+    /// Cleans up orphaned symbol links and in the shared bucket
     pub async fn clean_symlink(&self) -> Result<()> {
         // 列出被引用的文件
         let paths = WalkDir::new(self.versions_dir())

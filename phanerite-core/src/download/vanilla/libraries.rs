@@ -158,6 +158,7 @@ fn native_download<'cx>(
         .file_name(file_name)
         .file_size(artifact.size)
         .hash(artifact.sha1.clone())
+        .share()
         .build()
 }
 

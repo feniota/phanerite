@@ -9,11 +9,18 @@ use std::{
 
 type ReadDirFuture = Pin<Box<dyn Future<Output = std::io::Result<ReadDir>> + Send>>;
 
+pub enum WalkDirMode {
+    Files,
+    Directories,
+    All,
+}
+
 pub struct WalkDir {
     root: PathBuf,
     stack: Vec<PathBuf>,
     current: Option<ReadDir>,
     reading: Option<ReadDirFuture>,
+    mode: WalkDirMode,
 }
 
 impl WalkDir {
@@ -25,50 +32,72 @@ impl WalkDir {
             root,
             current: None,
             reading: None,
+            mode: WalkDirMode::Files,
         }
     }
 
-    // 移动整个目录，并跳过已有文件
-    /// Moves a whole directory, skipping files that already exist
+    /// Only yield files.
+    pub fn file_mode(mut self) -> Self {
+        self.mode = WalkDirMode::Files;
+        self
+    }
+
+    /// Only yield directories.
+    pub fn dir_mode(mut self) -> Self {
+        self.mode = WalkDirMode::Directories;
+        self
+    }
+
+    /// Yield both files and directories.
+    pub fn all_mode(mut self) -> Self {
+        self.mode = WalkDirMode::All;
+        self
+    }
+
+    // 移动整个目录的文件，并跳过已有文件
+    /// Merges the contents of this directory into `dst`.
+    ///
+    /// Existing files are skipped. Files are moved concurrently.
     pub async fn merge_move(self, dst: impl Into<PathBuf>) -> std::io::Result<()> {
         let root = self.root.clone();
         let dst = dst.into();
 
         async_fs::create_dir_all(&dst).await?;
 
-        self.map(async |src| {
-            let relative = src
-                .strip_prefix(&root)
-                .expect("WalkDir path must be under root");
-            let target = dst.join(relative);
+        self.file_mode()
+            .map(async |src| {
+                let relative = src
+                    .strip_prefix(&root)
+                    .expect("WalkDir path must be under root");
+                let target = dst.join(relative);
 
-            if src.is_dir() {
-                if target.exists() {
-                    // 目标目录已经存在：
-                    // 不做任何事情，让 WalkDir 继续遍历里面的内容。
-                    return Ok(());
+                if src.is_dir() {
+                    if target.exists() {
+                        // 目标目录已经存在：
+                        // 不做任何事情，让 WalkDir 继续遍历里面的内容。
+                        return Ok(());
+                    }
+
+                    // 目标目录不存在，整个目录直接搬过去。
+                    async_fs::rename(src, target).await?;
+                } else {
+                    // 目标文件已经存在，跳过。
+                    if target.exists() {
+                        return Ok(());
+                    }
+
+                    if let Some(parent) = target.parent() {
+                        async_fs::create_dir_all(parent).await?;
+                    }
+
+                    async_fs::rename(src, target).await?;
                 }
 
-                // 目标目录不存在，整个目录直接搬过去。
-                async_fs::rename(src, target).await?;
-            } else {
-                // 目标文件已经存在，跳过。
-                if target.exists() {
-                    return Ok(());
-                }
-
-                if let Some(parent) = target.parent() {
-                    async_fs::create_dir_all(parent).await?;
-                }
-
-                async_fs::rename(src, target).await?;
-            }
-
-            Ok(())
-        })
-        .buffer_unordered(32)
-        .try_for_each(async |_| Ok(()))
-        .await
+                Ok(())
+            })
+            .buffer_unordered(32)
+            .try_for_each(async |_| Ok(()))
+            .await
     }
 }
 
@@ -86,11 +115,29 @@ impl Stream for WalkDir {
                         let path = entry.path();
 
                         if path.is_dir() {
-                            self.stack.push(path);
-                            continue;
+                            // 无论是否输出目录，都需要继续 DFS
+                            self.stack.push(path.clone());
+
+                            match self.mode {
+                                WalkDirMode::Directories | WalkDirMode::All => {
+                                    return Poll::Ready(Some(path));
+                                }
+
+                                WalkDirMode::Files => {
+                                    continue;
+                                }
+                            }
                         }
 
-                        return Poll::Ready(Some(path));
+                        match self.mode {
+                            WalkDirMode::Files | WalkDirMode::All => {
+                                return Poll::Ready(Some(path));
+                            }
+
+                            WalkDirMode::Directories => {
+                                continue;
+                            }
+                        }
                     }
 
                     Poll::Ready(Some(Err(_))) => {

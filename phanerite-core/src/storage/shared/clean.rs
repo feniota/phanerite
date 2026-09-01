@@ -1,8 +1,11 @@
+use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::walkdir::WalkDir;
 use async_fs::Metadata;
 use futures::{Stream, StreamExt};
+use futures_lite::AsyncReadExt;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use tracing::trace;
@@ -10,24 +13,27 @@ use tracing::trace;
 const CONCURRENT: usize = 32;
 
 impl Storage {
-    // 列出当前 Storage 所有共享文件
-    async fn list_current_bucket(&self) -> Result<impl Stream<Item = PathBuf>> {
-        Ok(async_fs::read_dir(self.share_dir())
-            .await?
-            .filter_map(async |entry| entry.ok())
-            // 拉平一层目录
-            .filter_map(async |entry| async_fs::read_dir(entry.path()).await.ok())
-            .flatten()
-            .filter_map(async |entry| entry.ok())
-            .filter_map(async |entry| std::path::absolute(entry.path()).ok()))
-    }
-
-    // 删除共享桶的空目录
-    async fn remove_empty_dir(&self) -> Result<()> {
-        async_fs::read_dir(self.share_dir())
+    // 删除空目录
+    pub async fn clean_empty_dir(&self) -> Result<()> {
+        // 共享储存桶
+        let shared = async_fs::read_dir(self.share_dir())
             .await?
             .filter_map(async |x| x.ok())
-            .map(|x| x.path())
+            .map(|x| x.path());
+
+        // Assets
+        let assets = async_fs::read_dir(self.assets_objects())
+            .await?
+            .filter_map(async |x| x.ok())
+            .map(|x| x.path());
+
+        // Libraries
+        let libraries = WalkDir::new(self.libraries_dir()).dir_mode();
+
+        // 执行删除
+        shared
+            .chain(assets)
+            .chain(libraries)
             .filter_map(async |x| {
                 async_fs::read_dir(&x)
                     .await
@@ -44,7 +50,21 @@ impl Storage {
                 }
             })
             .await;
+
         Ok(())
+    }
+
+    // 列出当前 Storage 所有共享文件
+    async fn list_current_bucket(&self) -> Result<impl Stream<Item = PathBuf>> {
+        Ok(async_fs::read_dir(self.share_dir())
+            .await?
+            .filter_map(async |entry| entry.ok())
+            // 拉平一层目录
+            .filter_map(async |entry| async_fs::read_dir(entry.path()).await.ok())
+            .flatten()
+            .filter_map(async |entry| entry.ok())
+            // 保证绝对路径
+            .filter_map(async |entry| std::path::absolute(entry.path()).ok()))
     }
 
     // 清理共享储存桶中的孤立硬链接和空目录
@@ -95,8 +115,6 @@ impl Storage {
             })
             .await;
 
-        self.remove_empty_dir().await?;
-
         Ok(())
     }
 
@@ -109,6 +127,7 @@ impl Storage {
             .filter_map(async |x| x.is_symlink().then_some(x))
             .map(async_fs::read_link)
             .buffer_unordered(CONCURRENT)
+            // 保证绝对路径
             .filter_map(async |x| x.and_then(std::path::absolute).ok())
             .collect::<HashSet<_>>()
             .await;
@@ -116,7 +135,7 @@ impl Storage {
         self.list_current_bucket()
             .await?
             // 过滤孤立文件
-            .filter_map(async |x| paths.contains(&x).then_some(x))
+            .filter_map(async |x| (!paths.contains(&x)).then_some(x))
             // 执行删除
             .for_each_concurrent(CONCURRENT, async |path| {
                 trace!("Cleaning orphan file: {}", path.display());
@@ -126,7 +145,110 @@ impl Storage {
             })
             .await;
 
-        self.remove_empty_dir().await?;
+        Ok(())
+    }
+
+    pub async fn clean_assets(&self) -> Result<()> {
+        // 清理索引
+
+        /// 简化的版本清单
+        #[derive(Deserialize)]
+        struct Manifest {
+            assets: String,
+        }
+
+        // 列出被引用的索引
+        let indexes = async_fs::read_dir(self.versions_dir())
+            .await?
+            .filter_map(async |x| x.ok())
+            // 拉平一层目录
+            .filter_map(async |x| async_fs::read_dir(x.path()).await.ok())
+            .flatten()
+            .filter_map(async |x| x.ok())
+            .filter_map(async |x| std::path::absolute(x.path()).ok())
+            // 打开实例版本清单
+            .filter_map(async |x| x.extension().is_some_and(|ext| ext == "json").then_some(x))
+            .map(async |x| async_fs::File::open(x).await)
+            .buffer_unordered(CONCURRENT)
+            .filter_map(async |x| x.ok())
+            .filter_map(async |mut x| {
+                let mut buf = Vec::new();
+                x.read_to_end(&mut buf).await.ok()?;
+                serde_json::from_slice::<Manifest>(&buf).ok()
+            })
+            // 解析索引路径
+            .map(|x| self.assets_indexes().join(format!("{}.json", x.assets)))
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            .collect::<HashSet<_>>()
+            .await;
+
+        // 执行删除
+        async_fs::read_dir(self.assets_indexes())
+            .await?
+            .filter_map(async |x| x.map(|t| t.path()).ok())
+            // 筛选 json
+            .filter_map(async |x| x.extension().is_some_and(|ext| ext == "json").then_some(x))
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            // 筛选不被引用
+            .filter_map(async |x| (!indexes.contains(&x)).then_some(x))
+            .for_each_concurrent(CONCURRENT, async |path| {
+                trace!("Cleaning assets index: {}", path.display());
+                if let Err(e) = async_fs::remove_file(path).await {
+                    tracing::warn!(?e, "failed to remove assets index");
+                }
+            })
+            .await;
+
+        // 清理对象
+
+        // 列出被引用的文件
+        let objects = async_fs::read_dir(self.assets_indexes())
+            .await?
+            .filter_map(async |x| x.ok())
+            // 打开 index
+            .map(async |x| async_fs::File::open(x.path()).await)
+            .buffer_unordered(CONCURRENT)
+            .filter_map(async |x| x.ok())
+            // 反序列化 index
+            .filter_map(async |mut x| {
+                let mut buf = Vec::new();
+                x.read_to_end(&mut buf).await.ok()?;
+                serde_json::from_slice::<AssetIndexList>(&buf).ok()
+            })
+            // 解析为路径
+            .flat_map(|x| {
+                futures::stream::iter(x.objects.into_values().map(|x| {
+                    let file_name = x.hash.to_string();
+                    self.assets_objects().join(&file_name[..2]).join(file_name)
+                }))
+            })
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            .collect::<HashSet<_>>()
+            .await;
+
+        // 执行删除
+        async_fs::read_dir(self.assets_objects())
+            .await?
+            .filter_map(async |x| x.ok())
+            // 拉平一层目录
+            .filter_map(async |x| async_fs::read_dir(x.path()).await.ok())
+            .flatten()
+            .filter_map(async |x| x.ok())
+            .filter_map(async |x| std::path::absolute(x.path()).ok())
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            // 筛选不被引用
+            .filter_map(async |x| (!objects.contains(&x)).then_some(x))
+            .for_each_concurrent(CONCURRENT, async |path| {
+                trace!("Cleaning assets index: {}", path.display());
+                if let Err(e) = async_fs::remove_file(path).await {
+                    tracing::warn!(?e, "failed to remove assets object");
+                }
+            })
+            .await;
 
         Ok(())
     }

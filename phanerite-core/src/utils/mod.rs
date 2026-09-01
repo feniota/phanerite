@@ -62,5 +62,6 @@ pub mod secret;
 pub mod state;
 pub mod uuid;
 pub mod version;
+pub mod walkdir;
 
 pub use hash::*;

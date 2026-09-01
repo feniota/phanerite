@@ -9,13 +9,13 @@ use crate::storage::Storage;
 use crate::utils::Sha256Hash;
 use crate::utils::maven::MavenArtifact;
 use crate::utils::version::{compare_versions, is_stable};
+use crate::utils::walkdir::WalkDir;
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use std::path::Path;
 use std::sync::LazyLock;
 use tracing::debug;
 use url::Url;
@@ -170,39 +170,14 @@ impl LoaderInstall for NeoForge {
             .ok_or(Error::other("The NeoForge installer exits on failure"))?;
         // 拿走安装结果
         async_fs::remove_file(launcher_profiles).await?;
-        merge_move(&temp.join("libraries"), raw.storage.libraries_dir()).await?;
+        WalkDir::new(temp.join("libraries"))
+            .merge_move(raw.storage.libraries_dir())
+            .await?;
         // 合并版本配置
         raw.manifest.merge_overlay(manifest, 30000);
 
         Ok(())
     }
-}
-
-// 移动整个目录，并跳过已有文件
-/// Moves a whole directory, skipping files that already exist
-#[allow(clippy::double_must_use)]
-#[async_recursion::async_recursion]
-async fn merge_move(src: &Path, dst: &Path) -> Result<()> {
-    let mut entries = async_fs::read_dir(src).await?;
-    while let Some(entry) = entries.next().await {
-        let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        let ty = entry.file_type().await?;
-        if ty.is_dir() {
-            if dst_path.exists() {
-                merge_move(&src_path, &dst_path).await?;
-            } else {
-                async_fs::rename(&src_path, &dst_path).await?;
-            }
-        } else {
-            if dst_path.exists() {
-                continue;
-            }
-            async_fs::rename(&src_path, &dst_path).await?;
-        }
-    }
-    Ok(())
 }
 
 impl LoaderMeta for NeoForgeVersion {

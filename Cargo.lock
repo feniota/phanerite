@@ -5704,7 +5704,6 @@ dependencies = [
  "event-listener",
  "flate2",
  "futures",
- "futures-lite",
  "hex",
  "http",
  "isahc",

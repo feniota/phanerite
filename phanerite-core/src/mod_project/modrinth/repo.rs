@@ -4,8 +4,7 @@ use crate::mod_project::ModsRepository;
 use crate::mod_project::modrinth::MODRINTH_API;
 use crate::mod_project::modrinth::project::Project;
 use crate::mod_project::modrinth::serde::SearchProject;
-use futures::Stream;
-use futures_lite::stream::StreamExt;
+use futures::{Stream, StreamExt};
 use serde::Deserialize;
 use std::sync::LazyLock;
 

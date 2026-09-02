@@ -90,8 +90,8 @@ pub mod temp;
 
 use crate::error::{Error, Result};
 use crate::storage::capability::{DirCapability, probe_tree};
+use crate::storage::temp::Cleaner;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 // `Storage` 包含了启动器需要持久储存数据的地址
 // 作为依赖注入到启动器的文件系统操作中
@@ -162,7 +162,7 @@ pub struct Storage {
     share_strategy: SharePreference,
     // 临时文件清理器
     /// Temporary file cleaner
-    cleaner: Arc<async_executor::Executor<'static>>,
+    cleaner: Cleaner,
 }
 
 impl Storage {
@@ -192,7 +192,7 @@ impl Storage {
             capability,
             share_strategy: SharePreference::Hardlink.fallback(capability),
             root_dir,
-            cleaner: Default::default(),
+            cleaner: Cleaner::new(),
         })
     }
     // 修改偏好
@@ -298,16 +298,6 @@ async fn dir(root: &Path, name: &str) -> Result<PathBuf> {
         async_fs::create_dir_all(&p).await?;
     }
     Ok(p)
-}
-
-// 尝试推进清理任务，不保证异步 IO 完成
-/// Tries to drive the cleanup task forward; completion of the async IO is not
-/// guaranteed
-impl Drop for Storage {
-    fn drop(&mut self) {
-        // 不保证完全清理
-        while self.cleaner.try_tick() {}
-    }
 }
 
 impl PartialEq for Storage {

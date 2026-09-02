@@ -1,10 +1,24 @@
 use crate::error::Result;
 use crate::storage::Storage;
-use async_channel::Sender;
-use async_executor::Executor;
+use async_channel::{Receiver, Sender};
+use futures::FutureExt;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 use uuid::Uuid;
+
+#[derive(Debug)]
+pub(super) struct Cleaner {
+    rx: Receiver<(FileType, PathBuf)>,
+    tx: Sender<(FileType, PathBuf)>,
+}
+
+impl Cleaner {
+    pub(super) fn new() -> Self {
+        let (tx, rx) = async_channel::unbounded();
+        Self { rx, tx }
+    }
+}
 
 // 文件类型，用于决定清理方式
 /// File type, used to decide how to clean up
@@ -25,7 +39,7 @@ pub struct TempGuard<'storage> {
     file_type: FileType,
     // 清理器
     /// The cleaner
-    ex: &'storage Executor<'static>,
+    cleaner: &'storage Cleaner,
 }
 
 impl TempGuard<'_> {
@@ -62,7 +76,7 @@ impl<'storage> Storage {
         Ok(TempGuard {
             path,
             file_type: FileType::File,
-            ex: &self.cleaner,
+            cleaner: &self.cleaner,
         })
     }
     // 创建临时目录
@@ -73,7 +87,7 @@ impl<'storage> Storage {
         Ok(TempGuard {
             path,
             file_type: FileType::Directory,
-            ex: &self.cleaner,
+            cleaner: &self.cleaner,
         })
     }
     // 创建临时文件（阻塞 IO）
@@ -84,7 +98,7 @@ impl<'storage> Storage {
         Ok(TempGuard {
             path,
             file_type: FileType::File,
-            ex: &self.cleaner,
+            cleaner: &self.cleaner,
         })
     }
     // 创建临时目录（阻塞 IO）
@@ -95,7 +109,7 @@ impl<'storage> Storage {
         Ok(TempGuard {
             path,
             file_type: FileType::Directory,
-            ex: &self.cleaner,
+            cleaner: &self.cleaner,
         })
     }
     // 仅当清理器工作时，临时文件能够最及时地清理
@@ -142,15 +156,30 @@ impl<'storage> Storage {
     /// # }
     /// ```
     pub fn run_cleaner(&self) -> (impl Future<Output = ()> + 'static, ShutdownGuard) {
-        let (tx, rx) = async_channel::bounded(1);
-        let cleaner = self.cleaner.clone();
+        let (tx, rx) = async_channel::bounded::<()>(1);
+        let items = self.cleaner.rx.clone();
+
+        async fn do_clean((t, p): (FileType, PathBuf)) {
+            if let Err(e) = match t {
+                FileType::File => async_fs::remove_file(p).await,
+                FileType::Directory => async_fs::remove_dir_all(p).await,
+            } {
+                warn!("Failed to clean temp file: {e}")
+            }
+        }
+
         let task = async move {
-            cleaner
-                .run(async move {
-                    let _ = rx.recv().await;
-                })
-                .await;
+            loop {
+                futures::select! {
+                    item = items.recv().fuse() => match item {
+                            Ok(item) => do_clean(item).await,
+                            Err(_) => break,
+                        },
+                    _ = rx.recv().fuse() => break,
+                }
+            }
         };
+
         (task, ShutdownGuard { _guard: tx })
     }
 }
@@ -170,13 +199,6 @@ impl Drop for TempGuard<'_> {
         let path = std::mem::take(&mut self.path);
         let file_type = self.file_type;
 
-        self.ex
-            .spawn(async move {
-                let _ = match file_type {
-                    FileType::File => async_fs::remove_file(path).await,
-                    FileType::Directory => async_fs::remove_dir_all(path).await,
-                };
-            })
-            .detach();
+        let _ = self.cleaner.tx.try_send((file_type, path));
     }
 }

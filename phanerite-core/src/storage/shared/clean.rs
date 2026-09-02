@@ -1,5 +1,6 @@
 use crate::download::vanilla::assets::AssetIndexList;
 use crate::error::Result;
+use crate::instance::Instance;
 use crate::storage::Storage;
 use crate::utils::walkdir::WalkDir;
 use async_fs::Metadata;
@@ -15,6 +16,18 @@ const CONCURRENT: usize = 32;
 impl Storage {
     // 删除空目录
     pub async fn clean_empty_dir(&self) -> Result<()> {
+        // 只产出空目录
+        /// Yields the path only if it points to an empty directory
+        async fn empty_dir(path: PathBuf) -> Option<PathBuf> {
+            async_fs::read_dir(&path)
+                .await
+                .ok()?
+                .next()
+                .await
+                .is_none()
+                .then_some(path)
+        }
+
         // 共享储存桶
         let shared = async_fs::read_dir(self.share_dir())
             .await?
@@ -27,24 +40,26 @@ impl Storage {
             .filter_map(async |x| x.ok())
             .map(|x| x.path());
 
-        // Libraries
-        let libraries = WalkDir::new(self.libraries_dir()).dir_mode();
-
-        // 执行删除
+        // 执行删除，只有一层，可以并发
         shared
             .chain(assets)
-            .chain(libraries)
-            .filter_map(async |x| {
-                async_fs::read_dir(&x)
-                    .await
-                    .ok()?
-                    .next()
-                    .await
-                    .is_none()
-                    .then_some(x)
-            })
+            .filter_map(empty_dir)
+            .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
             .for_each_concurrent(CONCURRENT, async |path| {
-                trace!("Cleaning empty directory: {}", path.to_string_lossy());
+                if let Err(e) = async_fs::remove_dir(path).await {
+                    tracing::warn!(?e, "failed to remove empty");
+                }
+            })
+            .await;
+
+        // Libraries
+        // 执行删除，必须串行：后序保证子目录先于父目录产出，
+        // 但并发时父目录的检查会赶在子目录删除完成之前，嵌套空目录一趟删不干净
+        WalkDir::new(self.libraries_dir())
+            .dir_mode()
+            .filter_map(empty_dir)
+            .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
+            .for_each(async |path| {
                 if let Err(e) = async_fs::remove_dir(path).await {
                     tracing::warn!(?e, "failed to remove empty");
                 }
@@ -122,6 +137,7 @@ impl Storage {
     pub async fn clean_symlink(&self) -> Result<()> {
         // 列出被引用的文件
         let paths = WalkDir::new(self.versions_dir())
+            .file_mode()
             .filter_map(async |x| x.is_symlink().then_some(x))
             .map(async_fs::read_link)
             .buffer_unordered(CONCURRENT)
@@ -240,6 +256,33 @@ impl Storage {
             .filter_map(async |x| std::path::absolute(x).ok())
             // 筛选不被引用
             .filter_map(async |x| (!objects.contains(&x)).then_some(x))
+            .for_each_concurrent(CONCURRENT, async |path| {
+                trace!("Cleaning assets index: {}", path.display());
+                if let Err(e) = async_fs::remove_file(path).await {
+                    tracing::warn!(?e, "failed to remove assets object");
+                }
+            })
+            .await;
+
+        Ok(())
+    }
+
+    pub async fn clean_libraries(&self) -> Result<()> {
+        let paths = Instance::scan(self)
+            .filter_map(async |x| x.ok())
+            .flat_map(|x| futures::stream::iter(x.manifest.libraries))
+            .map(|x| self.libraries_dir().join(x.name.path()))
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            .collect::<HashSet<_>>()
+            .await;
+
+        WalkDir::new(self.libraries_dir())
+            .file_mode()
+            // 保证绝对路径
+            .filter_map(async |x| std::path::absolute(x).ok())
+            // 筛选不被引用
+            .filter_map(async |x| (!paths.contains(&x)).then_some(x))
             .for_each_concurrent(CONCURRENT, async |path| {
                 trace!("Cleaning assets index: {}", path.display());
                 if let Err(e) = async_fs::remove_file(path).await {

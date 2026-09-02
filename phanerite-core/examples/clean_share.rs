@@ -12,7 +12,6 @@ fn main() -> Result<()> {
         storage.clean_symlink().await?;
         storage.clean_assets().await?;
         storage.clean_libraries().await?;
-        storage.clean_empty_dir().await?;
 
         Ok::<(), Error>(())
     })?;

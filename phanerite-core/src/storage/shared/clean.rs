@@ -14,52 +14,15 @@ use tracing::trace;
 const CONCURRENT: usize = 32;
 
 impl Storage {
-    // 删除空目录
-    pub async fn clean_empty_dir(&self) -> Result<()> {
-        // 只产出空目录
-        /// Yields the path only if it points to an empty directory
-        async fn empty_dir(path: PathBuf) -> Option<PathBuf> {
-            async_fs::read_dir(&path)
-                .await
-                .ok()?
-                .next()
-                .await
-                .is_none()
-                .then_some(path)
-        }
-
-        // 共享储存桶
-        let shared = async_fs::read_dir(self.share_dir())
+    // 删除共享储存桶的空目录
+    async fn clean_empty_bucket(&self) -> Result<()> {
+        async_fs::read_dir(self.share_dir())
             .await?
             .filter_map(async |x| x.ok())
-            .map(|x| x.path());
-
-        // Assets
-        let assets = async_fs::read_dir(self.assets_objects())
-            .await?
-            .filter_map(async |x| x.ok())
-            .map(|x| x.path());
-
-        // 执行删除，只有一层，可以并发
-        shared
-            .chain(assets)
+            .map(|x| x.path())
             .filter_map(empty_dir)
             .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
             .for_each_concurrent(CONCURRENT, async |path| {
-                if let Err(e) = async_fs::remove_dir(path).await {
-                    tracing::warn!(?e, "failed to remove empty");
-                }
-            })
-            .await;
-
-        // Libraries
-        // 执行删除，必须串行：后序保证子目录先于父目录产出，
-        // 但并发时父目录的检查会赶在子目录删除完成之前，嵌套空目录一趟删不干净
-        WalkDir::new(self.libraries_dir())
-            .dir_mode()
-            .filter_map(empty_dir)
-            .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
-            .for_each(async |path| {
                 if let Err(e) = async_fs::remove_dir(path).await {
                     tracing::warn!(?e, "failed to remove empty");
                 }
@@ -129,6 +92,8 @@ impl Storage {
             })
             .await;
 
+        self.clean_empty_bucket().await?;
+
         Ok(())
     }
 
@@ -158,6 +123,8 @@ impl Storage {
                 }
             })
             .await;
+
+        self.clean_empty_bucket().await?;
 
         Ok(())
     }
@@ -264,10 +231,25 @@ impl Storage {
             })
             .await;
 
+        // 清理空目录
+        async_fs::read_dir(self.assets_objects())
+            .await?
+            .filter_map(async |x| x.ok())
+            .map(|x| x.path())
+            .filter_map(empty_dir)
+            .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
+            .for_each_concurrent(CONCURRENT, async |path| {
+                if let Err(e) = async_fs::remove_dir(path).await {
+                    tracing::warn!(?e, "failed to remove empty");
+                }
+            })
+            .await;
+
         Ok(())
     }
 
     pub async fn clean_libraries(&self) -> Result<()> {
+        // 列出被使用的库
         let paths = Instance::scan(self)
             .filter_map(async |x| x.ok())
             .flat_map(|x| futures::stream::iter(x.manifest.libraries))
@@ -277,6 +259,7 @@ impl Storage {
             .collect::<HashSet<_>>()
             .await;
 
+        // 执行删除
         WalkDir::new(self.libraries_dir())
             .file_mode()
             // 保证绝对路径
@@ -291,6 +274,31 @@ impl Storage {
             })
             .await;
 
+        // 清理空目录删除，必须串行：后序保证子目录先于父目录产出，
+        // 但并发时父目录的检查会赶在子目录删除完成之前，嵌套空目录一趟删不干净
+        WalkDir::new(self.libraries_dir())
+            .dir_mode()
+            .filter_map(empty_dir)
+            .inspect(|x| trace!("Cleaning empty directory: {}", x.to_string_lossy()))
+            .for_each(async |path| {
+                if let Err(e) = async_fs::remove_dir(path).await {
+                    tracing::warn!(?e, "failed to remove empty");
+                }
+            })
+            .await;
+
         Ok(())
     }
+}
+
+// 只产出空目录
+/// Yields the path only if it points to an empty directory
+async fn empty_dir(path: PathBuf) -> Option<PathBuf> {
+    async_fs::read_dir(&path)
+        .await
+        .ok()?
+        .next()
+        .await
+        .is_none()
+        .then_some(path)
 }

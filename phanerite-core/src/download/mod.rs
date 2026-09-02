@@ -91,7 +91,6 @@
 //! is the Java runtime; [`authlib_injector`] is the injector required for
 //! third-party login; [`mirror`] holds the Chinese mirrors.
 
-use crate::download::cache::CachedDownloader;
 use crate::download::group::DownloadGroup;
 use crate::download::mirror::{DownloaderWithMirror, Mirror};
 use crate::download::task::DownloadTask;
@@ -103,6 +102,7 @@ use http::{Request, Response};
 use url::Url;
 
 pub mod authlib_injector;
+#[cfg(feature = "moka")]
 pub mod cache;
 pub mod downloader;
 pub mod extract;
@@ -188,15 +188,17 @@ pub trait DownloaderExt: Downloader + Sized {
         DownloaderWithMirror::new(self, mirror)
     }
 
+    #[cfg(feature = "moka")]
     // 借用自身，获得带有缓存的下载器
     /// Borrows self into a downloader backed by a cache
-    fn with_cache(&self, get_bytes: u64) -> CachedDownloader<Self, &Self> {
-        CachedDownloader::new(self, get_bytes)
+    fn with_cache(&self, get_bytes: u64) -> cache::CachedDownloader<Self, &Self> {
+        cache::CachedDownloader::new(self, get_bytes)
     }
+    #[cfg(feature = "moka")]
     // 借用自身，获得带有缓存的下载器（默认缓存大小）
     /// Borrows self into a downloader backed by a cache (default cache size)
-    fn with_cache_default(&self) -> CachedDownloader<Self, &Self> {
-        CachedDownloader::new_default(self)
+    fn with_cache_default(&self) -> cache::CachedDownloader<Self, &Self> {
+        cache::CachedDownloader::new_default(self)
     }
 }
 

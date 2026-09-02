@@ -31,11 +31,12 @@ fn main() {
         // 构造 Downloader
         //
         // 基本下载器，可以全局创建一次（内部有并行限制）
-        let raw_downloader = RawDownloader::builder().build().await?;
+        let downloader = RawDownloader::builder().build().await?;
         // 下载缓存，建议保持尽可能长的生命周期
         // 不建议使用 default，因为内置的记录器无法持久化，可共享的文件需要再次下载
         // 建议构造一个可持久化的 `phanerite_core::download::cache::BucketRecorder` 作为参数传入 with_cache()
-        let cached_downloader = raw_downloader.with_cache_default();
+        #[cfg(feature = "moka")]
+        let downloader = downloader.with_cache_default();
 
         // 创建 Storage
         // 由于登录需要 Storage 提供存放 Authlib-Injector 的位置，将 Storage 移入 MultiStorage 的步骤往后推迟
@@ -48,7 +49,7 @@ fn main() {
         // 创建登录凭据
         let auth =
             // 此处使用 Yggdrasil 登录
-            auth::yggdrasil::Authentication::new_login(&cached_downloader)
+            auth::yggdrasil::Authentication::new_login(&downloader)
                 // 注入 Authlib-Injector
                 .inject(&storage)
                 .await?
@@ -114,7 +115,7 @@ fn main() {
             let storage = storage_with_plugin.as_ref();
 
             // 下载任务组，应该一次性使用
-            let downloader = cached_downloader.with_group();
+            let downloader = downloader.with_group();
             // （进度监视器）
             let _guard = process_monitor(&downloader);
 

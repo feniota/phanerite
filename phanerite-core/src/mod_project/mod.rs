@@ -72,10 +72,7 @@ pub trait ModVersion {
     fn change_log(&self) -> Option<impl Display + '_> {
         None::<&str>
     }
-    fn download<'cx, R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'cx, R, C>,
-    ) -> Result<DownloadTask<'cx>>;
+    fn download<'cx, R, C>(&self, instance: &Instance<'cx, R, C>) -> Result<DownloadTask<'cx>>;
 }
 
 // 模组项目

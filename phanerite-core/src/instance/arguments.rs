@@ -73,17 +73,14 @@ impl Display for LaunchArguments {
 }
 
 impl Variables<NotReady> {
-    pub fn to_arguments<R: Clone, C: Clone>(
-        self,
-        instance: &Instance<R, C>,
-    ) -> Result<LaunchArguments> {
+    pub fn to_arguments<R, C>(self, instance: &Instance<R, C>) -> Result<LaunchArguments> {
         let vars = self.generated(instance)?;
         Ok(vars.to_arguments(instance))
     }
 }
 
 impl Variables<Ready> {
-    pub fn to_arguments<R: Clone, C: Clone>(&self, instance: &Instance<R, C>) -> LaunchArguments {
+    pub fn to_arguments<R, C>(&self, instance: &Instance<R, C>) -> LaunchArguments {
         let main_class = instance.manifest.main_class.to_string();
         if let Some(args) = &instance.manifest.arguments {
             let flattened_jvm = flatten_arguments(args.jvm.iter(), &self.feat).peekable();

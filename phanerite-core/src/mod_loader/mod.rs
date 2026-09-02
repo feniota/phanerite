@@ -92,7 +92,7 @@ pub mod fabric;
 pub mod forge;
 pub mod neoforge;
 
-impl<R: Clone, C: Clone> Instance<'_, R, C> {
+impl<R, C> Instance<'_, R, C> {
     // 由于模组加载器而存在的额外下载任务
     // 需要手动注册
     /// Extra download tasks that exist because of the mod loader
@@ -105,7 +105,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     }
 }
 
-impl<C: Clone> Instance<'_, JavaRuntime, C> {
+impl<C> Instance<'_, JavaRuntime, C> {
     // 为实例安装模组加载器
     /// Installs a mod loader into the instance
     pub async fn install_loader<L: LoaderInstall>(
@@ -152,7 +152,7 @@ pub trait LoaderInstall: Sized {
     /// The `AsyncFnOnce` is left for the user to make the choice; beware of
     /// blocking operations, and return `crate::error::Error::Cancelled` when
     /// nothing is picked
-    async fn install<C: Clone, S>(
+    async fn install<C, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

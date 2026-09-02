@@ -84,10 +84,7 @@ impl Variables<NotReady> {
     }
     // 从实例生成必要项
     /// Generates the required entries from an instance
-    pub fn generated<R: Clone, C: Clone>(
-        mut self,
-        instance: &Instance<R, C>,
-    ) -> Result<Variables<Ready>> {
+    pub fn generated<R, C>(mut self, instance: &Instance<R, C>) -> Result<Variables<Ready>> {
         let generated = ReadyVariables::from_instance(instance)?;
         generated.insert_into(&mut self.vars);
         Ok(Variables {
@@ -166,7 +163,7 @@ struct ReadyVariables {
 }
 
 impl ReadyVariables {
-    fn from_instance<R: Clone, C: Clone>(instance: &Instance<R, C>) -> Result<Self> {
+    fn from_instance<R, C>(instance: &Instance<R, C>) -> Result<Self> {
         Ok(Self {
             version_name: instance.manifest.id.clone(),
             version_type: instance.manifest.version_type,

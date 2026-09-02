@@ -38,7 +38,7 @@ impl LoaderInstall for Fabric {
 
         Ok(Fabric { list: json })
     }
-    async fn install<C: Clone, S>(
+    async fn install<C, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

@@ -122,10 +122,7 @@ pub trait Authentication: Eq {
     // 根据登录信息和 `Instance` 生成启动参数
     /// Builds the launch arguments from the login information and an
     /// `Instance`
-    async fn args<R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'_, R, C>,
-    ) -> Result<LaunchArguments> {
+    async fn args<R, C>(&self, instance: &Instance<'_, R, C>) -> Result<LaunchArguments> {
         let vars = self.vars().await?;
         let mut args = vars.to_arguments(instance)?;
         self.inject()(&mut args).await;
@@ -273,10 +270,7 @@ impl Authentication for Guard<'_, Account> {
         self.deref().ready(downloader).await
     }
 
-    async fn args<R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'_, R, C>,
-    ) -> Result<LaunchArguments> {
+    async fn args<R, C>(&self, instance: &Instance<'_, R, C>) -> Result<LaunchArguments> {
         self.deref().args(instance).await
     }
 }

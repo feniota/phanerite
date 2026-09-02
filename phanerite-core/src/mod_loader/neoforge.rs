@@ -88,7 +88,7 @@ impl LoaderInstall for NeoForge {
             list: filter,
         })
     }
-    async fn install<C: Clone, S>(
+    async fn install<C, S>(
         self,
         raw: &mut Instance<'_, JavaRuntime, C>,
         select: S,

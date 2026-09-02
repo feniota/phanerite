@@ -116,6 +116,7 @@ use crate::utils::state::{NotReady, Ready};
 use futures::{AsyncReadExt, AsyncWriteExt};
 use futures::{Stream, StreamExt};
 use std::collections::HashSet;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
@@ -124,7 +125,7 @@ pub mod manifest;
 pub mod overlay;
 pub mod variables;
 
-pub struct Instance<'storage, R: Clone, C: Clone> {
+pub struct Instance<'storage, R, C> {
     pub instance_dir: PathBuf,
     pub manifest: InstanceManifest,
 
@@ -139,7 +140,7 @@ pub struct Instance<'storage, R: Clone, C: Clone> {
     // Ready 或 NotReady
     /// Integrity state of the game
     /// Either `Ready` or `NotReady`
-    pub completeness: C,
+    pub completeness: PhantomData<C>,
 }
 
 impl<'storage> Instance<'storage, NotReady, NotReady> {
@@ -190,7 +191,7 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
             manifest: serde_json::from_slice::<InstanceManifest>(&json)?,
             storage,
             runtime: NotReady,
-            completeness: NotReady,
+            completeness: Default::default(),
         })
     }
     // 扫描实例
@@ -213,7 +214,7 @@ impl<'storage> Instance<'storage, NotReady, NotReady> {
     }
 }
 
-impl<R: Clone, C: Clone> Instance<'_, R, C> {
+impl<R, C> Instance<'_, R, C> {
     // 获取当前实例的游戏文件路径
     /// Gets the path to this instance's game file
     pub fn client_file(&self) -> PathBuf {
@@ -240,7 +241,10 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     }
     // 复制
     /// Copies the instance
-    pub async fn copy(&self, name: impl Into<String>) -> Result<Self> {
+    pub async fn copy(&self, name: impl Into<String>) -> Result<Self>
+    where
+        R: Clone,
+    {
         let name = name.into();
         let path = self.storage.versions_dir().join(&name);
         if path.exists() {
@@ -254,7 +258,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
             manifest,
             storage: self.storage,
             runtime: self.runtime.clone(),
-            completeness: self.completeness.clone(),
+            completeness: self.completeness,
         };
         Ok(new)
     }
@@ -397,7 +401,7 @@ impl<R: Clone, C: Clone> Instance<'_, R, C> {
     }
 }
 
-impl<'a, R: Clone> Instance<'a, R, NotReady> {
+impl<'a, R> Instance<'a, R, NotReady> {
     // 确定已经完成了完整性检查
     /// Asserts that the integrity check has been completed
     pub fn ensure_ready(self) -> Instance<'a, R, Ready> {
@@ -406,12 +410,12 @@ impl<'a, R: Clone> Instance<'a, R, NotReady> {
             manifest: self.manifest,
             storage: self.storage,
             runtime: self.runtime,
-            completeness: Ready,
+            completeness: Default::default(),
         }
     }
 }
 
-impl<'a, R: Clone, C: Clone> Instance<'a, R, C> {
+impl<'a, R, C> Instance<'a, R, C> {
     pub async fn bind_java(self, java: JavaRuntime) -> Result<Instance<'a, JavaRuntime, C>> {
         Ok(Instance {
             instance_dir: self.instance_dir,

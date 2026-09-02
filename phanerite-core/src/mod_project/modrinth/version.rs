@@ -12,10 +12,7 @@ impl ModVersion for Version {
     fn change_log(&self) -> Option<impl Display + '_> {
         self.changelog.as_ref()
     }
-    fn download<'cx, R: Clone, C: Clone>(
-        &self,
-        instance: &Instance<'cx, R, C>,
-    ) -> Result<DownloadTask<'cx>> {
+    fn download<'cx, R, C>(&self, instance: &Instance<'cx, R, C>) -> Result<DownloadTask<'cx>> {
         let file = self
             .files
             .iter()

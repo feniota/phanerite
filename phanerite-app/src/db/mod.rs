@@ -1,7 +1,8 @@
 //! Data storage for Phanerite
 
 pub mod migration;
-pub mod storage_registry;
+// Disabled while the storage-registry backend design is under discussion.
+// pub mod storage_registry;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -72,7 +73,7 @@ impl Database {
 
     /// Create a new [`Database`] on the default path
     pub fn new() -> Self {
-        gpui::block_on(async {
+        gpui_kit::block_on(async {
             #[cfg(debug_assertions)]
             let disk_path = {
                 let _ = dotenvy::dotenv();

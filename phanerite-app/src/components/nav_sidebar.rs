@@ -1,14 +1,14 @@
 //! Primary navigation sidebar and its instance navigation entries.
 
-use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Collapsible, Icon, IconName, StyledExt as _,
     button::ButtonVariants as _,
     sidebar::{Sidebar, SidebarFooter, SidebarItem},
     v_flex,
+};
+use gpui_kit::{
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce as _,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
 fn activate(
     app: Entity<AppState>,
     route: Route,
-) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) {
+) -> impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) {
     move |_, _, cx| app.update(cx, |state, cx| state.push(route.clone(), cx))
 }
 
@@ -45,7 +45,7 @@ impl Collapsible for InstanceMenu {
 }
 
 fn instance_section(
-    id: &gpui::ElementId,
+    id: &gpui_kit::ElementId,
     label: &str,
     icon: IconName,
     instances: &[InstanceSummary],
@@ -124,7 +124,7 @@ fn instance_section(
 impl SidebarItem for InstanceMenu {
     fn render(
         self,
-        id: impl Into<gpui::ElementId>,
+        id: impl Into<gpui_kit::ElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -241,7 +241,7 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
                         v_flex()
                             .gap_2()
                             .child(
-                                gpui_component::button::Button::new("sidebar-account")
+                                gpui_kit::component::button::Button::new("sidebar-account")
                                     .ghost()
                                     .label(account.unwrap_or_else(|| "Offline".into()))
                                     .on_click({
@@ -254,7 +254,7 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
                                     }),
                             )
                             .child(
-                                gpui_component::button::Button::new("sidebar-settings")
+                                gpui_kit::component::button::Button::new("sidebar-settings")
                                     .ghost()
                                     .icon(IconName::Settings)
                                     .label("Settings")

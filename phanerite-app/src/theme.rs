@@ -1,7 +1,7 @@
 //! Theme application, typography scale, and shared visual constants.
 
-use gpui::{App, Hsla, Window, px};
-use gpui_component::{Theme, ThemeMode};
+use gpui_kit::component::{Theme, ThemeMode};
+use gpui_kit::{App, Hsla, Window, px};
 
 use crate::palette::{self, token};
 
@@ -267,7 +267,7 @@ pub fn sync_tokens(cx: &mut App) {
     let theme = Theme::global_mut(cx);
     theme.tokens = theme.colors.into();
     let tokens = theme.semantic_tokens();
-    gpui_base::Theme::global_mut(cx).tokens = tokens;
+    gpui_kit::base::Theme::global_mut(cx).tokens = tokens;
 }
 
 fn with_alpha(color: Hsla, alpha: f32) -> Hsla {

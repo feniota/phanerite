@@ -1,8 +1,8 @@
 #![allow(unused)] // FIXME
 //! Compact user avatar and username item used in account lists.
 
-use gpui::*;
-use gpui_component::{h_flex, searchable_list::SearchableListItem};
+use gpui_kit::component::{h_flex, searchable_list::SearchableListItem};
+use gpui_kit::*;
 
 /// Avatar + Username
 /// good for showing a single user as an selection item
@@ -51,7 +51,7 @@ impl SearchableListItem for UserItem {
 
     fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let avatar = {
-            let a = gpui_component::avatar::Avatar::new().name(&self.name);
+            let a = gpui_kit::component::avatar::Avatar::new().name(&self.name);
             if let Some(avatar_url) = &self.avatar {
                 a.src(avatar_url.clone())
             } else {

@@ -197,16 +197,16 @@ END OF TERMS AND CONDITIONS
 
 use std::rc::Rc;
 
-use gpui::{
+use gpui_kit::component::{
+    ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _,
+    h_flex,
+};
+use gpui_kit::{
     AnyElement, App, Background, ClickEvent, Context, Decorations, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce, Rgba,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
     WindowControlArea, WindowOptions, div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _, px,
-};
-use gpui_component::{
-    ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _,
-    h_flex,
 };
 use smallvec::SmallVec;
 
@@ -258,7 +258,7 @@ impl TitleBar {
         TitlebarOptions {
             title: None,
             appears_transparent: true,
-            traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
+            traffic_light_position: Some(gpui_kit::point(px(9.0), px(9.0))),
         }
     }
 
@@ -268,8 +268,8 @@ impl TitleBar {
     /// [`crate::TitleBar`], so the title bar owns dragging and double clicking itself:
     ///
     /// ```no_run
-    /// # use gpui::WindowOptions;
-    /// # use gpui_component::TitleBar;
+    /// # use gpui_kit::WindowOptions;
+    /// # use gpui_kit::component::TitleBar;
     /// let options = WindowOptions {
     ///     window_min_size: None,
     ///     ..TitleBar::window_options()
@@ -477,7 +477,7 @@ impl RenderOnce for WindowControls {
 }
 
 impl Styled for TitleBar {
-    fn style(&mut self) -> &mut gpui::StyleRefinement {
+    fn style(&mut self) -> &mut gpui_kit::StyleRefinement {
         &mut self.style
     }
 }
@@ -590,7 +590,7 @@ impl RenderOnce for TitleBar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Rgba, linear_color_stop, linear_gradient};
+    use gpui_kit::{Rgba, linear_color_stop, linear_gradient};
 
     #[test]
     fn test_default_title_bar_background() {

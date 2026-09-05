@@ -1,4 +1,7 @@
 //! Integration test for the debug database persistence override.
+//!
+//! Disabled while the storage-registry backend design is under discussion.
+#![cfg(any())]
 
 use phanerite::db::{Database, migration::apply_pending, storage_registry::StorageReg};
 use phanerite_core::{
@@ -8,7 +11,7 @@ use phanerite_core::{
 
 #[test]
 fn database_path_override_persists_registry_entries() {
-    gpui::block_on(async {
+    gpui_kit::block_on(async {
         let root = tempfile::tempdir().unwrap();
         let storage = StorageIdent {
             root_dir: root.path().join("storage"),

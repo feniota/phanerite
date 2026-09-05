@@ -17,7 +17,6 @@ use std::ops::Deref;
 /// obtained through an `scc::Guard` are protected by [EBR](https://crates.io/crates/sdd#:~:text=a%20variant%20of-,epoch%2Dbased%20reclamation,-where%20retired%20memory),
 /// so the memory of the corresponding entry is not reclaimed while the
 /// guard is alive.
-#[derive(Default)]
 pub struct Container<K: Hash + Eq + Clone, V> {
     container: scc::HashIndex<K, V>,
 }
@@ -221,6 +220,16 @@ impl<K: Hash + Eq + Clone, V> Container<K, V> {
     /// cannot be used to synchronize concurrent modifications.**
     pub fn is_empty(&self) -> bool {
         self.container.is_empty()
+    }
+}
+
+// Derived Default implements requires all type parameters to implement Default, which is not the case.
+impl<K, V> Default for Container<K, V>
+where
+    K: Hash + Eq + Clone,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

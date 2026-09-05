@@ -1,8 +1,8 @@
 //! Shared confirmation dialog for destructive actions.
 
-use gpui::App;
-use gpui::Window;
-use gpui_component::{Icon, IconName, WindowExt as _};
+use gpui_kit::App;
+use gpui_kit::Window;
+use gpui_kit::component::{Icon, IconName, WindowExt as _};
 use std::rc::Rc;
 
 /// Opens the shared destructive confirmation pattern. The callback performs
@@ -12,7 +12,7 @@ pub fn open(
     cx: &mut App,
     title: impl Into<String>,
     consequence: impl Into<String>,
-    on_confirm: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) -> bool + 'static,
+    on_confirm: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) -> bool + 'static,
 ) {
     let title = title.into();
     let consequence = consequence.into();

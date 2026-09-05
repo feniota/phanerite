@@ -16,7 +16,7 @@ pub use logs::*;
 pub use sessions::*;
 pub use settings::*;
 
-use gpui::{Context, Entity, Subscription};
+use gpui_kit::{Context, Entity, Subscription};
 use phanerite_core::storage::{Storage, StorageIdent, multi::MultiStorage};
 
 use crate::route::{InstanceRef, Navigation, Route};
@@ -206,7 +206,7 @@ impl AppState {
     ) -> Option<StorageIdent> {
         let key = StorageIdent::from(&storage);
         if self.storages.contains(&key)
-            || gpui::block_on(self.storages.insert(key.clone(), storage)).is_err()
+            || gpui_kit::block_on(self.storages.insert(key.clone(), storage)).is_err()
         {
             return None;
         }
@@ -241,7 +241,7 @@ impl AppState {
         } else if replacement.is_some() {
             return false;
         }
-        if !gpui::block_on(self.storages.remove(storage)) {
+        if !gpui_kit::block_on(self.storages.remove(storage)) {
             return false;
         }
         if self.default_storage.as_ref() == Some(storage) {

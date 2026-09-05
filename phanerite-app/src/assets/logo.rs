@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::*;
+use gpui_kit::*;
 
 pub fn render() -> Img {
     let bytes: Vec<u8> = super::Assets::get("phanerite-logo.svg")

@@ -15,8 +15,8 @@ pub mod setup;
 pub mod shaders;
 pub mod worlds;
 
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 
@@ -65,11 +65,11 @@ pub fn render(
 }
 
 pub(crate) fn page_title(
-    title: impl Into<gpui::SharedString>,
-    description: impl Into<gpui::SharedString>,
+    title: impl Into<gpui_kit::SharedString>,
+    description: impl Into<gpui_kit::SharedString>,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{ActiveTheme as _, StyledExt as _, v_flex};
+    use gpui_kit::component::{ActiveTheme as _, StyledExt as _, v_flex};
     v_flex()
         .gap_1()
         .px_6()
@@ -91,7 +91,7 @@ pub(crate) fn page_shell(
     content: impl IntoElement,
     cx: &App,
 ) -> impl IntoElement {
-    use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, v_flex};
+    use gpui_kit::component::{ActiveTheme as _, scroll::ScrollableElement as _, v_flex};
     v_flex()
         .size_full()
         .min_h_0()
@@ -108,19 +108,19 @@ pub(crate) fn page_shell(
 }
 
 pub(crate) fn route_button(
-    id: impl Into<gpui::ElementId>,
-    label: impl Into<gpui::SharedString>,
+    id: impl Into<gpui_kit::ElementId>,
+    label: impl Into<gpui_kit::SharedString>,
     route: Route,
     app: Entity<AppState>,
-) -> gpui_component::button::Button {
-    use gpui_component::button::Button;
+) -> gpui_kit::component::button::Button {
+    use gpui_kit::component::button::Button;
     Button::new(id).label(label).on_click(move |_, _, cx| {
         app.update(cx, |state, cx| state.push(route.clone(), cx));
     })
 }
 
-pub(crate) fn back_button(app: Entity<AppState>) -> gpui_component::button::Button {
-    use gpui_component::{
+pub(crate) fn back_button(app: Entity<AppState>) -> gpui_kit::component::button::Button {
+    use gpui_kit::component::{
         IconName, Sizable as _,
         button::{Button, ButtonVariants as _},
     };
@@ -133,7 +133,7 @@ pub(crate) fn back_button(app: Entity<AppState>) -> gpui_component::button::Butt
 }
 
 pub(crate) fn missing_resource(label: &str, app: Entity<AppState>) -> impl IntoElement {
-    use gpui_component::{StyledExt as _, button::Button, v_flex};
+    use gpui_kit::component::{StyledExt as _, button::Button, v_flex};
     v_flex()
         .size_full()
         .items_center()

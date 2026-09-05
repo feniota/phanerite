@@ -155,7 +155,7 @@ impl Account {
     /// the account provider, the authentication service, and the provider's
     /// account identifier:
     ///
-    /// - offline accounts use the fixed `"offline"` service and player UUID;
+    /// - offline accounts use the fixed `"offline"` service and player name;
     /// - Microsoft accounts use the fixed `"official"` service and XUID;
     /// - Yggdrasil accounts use the configured authentication-server URL and
     ///   username.
@@ -164,7 +164,7 @@ impl Account {
             Self::Offline(auth) => (
                 AccountType::Offline,
                 "offline".to_string(),
-                auth.uuid.to_string(),
+                auth.nickname.to_string(),
             ),
             Self::Microsoft(auth) => (
                 AccountType::Microsoft,
@@ -304,7 +304,23 @@ pub struct AccountIdent {
     pub service: String,
     /// The provider-scoped account identity.
     ///
-    /// This is the player UUID for offline accounts, XUID for Microsoft
-    /// accounts, and username for Yggdrasil accounts.
+    /// This is the player name for offline accounts, XUID for Microsoft
+    /// accounts, and username (email) for Yggdrasil accounts.
     pub ident: String,
+}
+
+impl std::fmt::Display for AccountIdent {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{}__{}__{}",
+            match self.acc_type {
+                AccountType::Microsoft => "microsoft",
+                AccountType::Yggdrasil => "yggdrasil",
+                AccountType::Offline => "offline",
+            },
+            self.service,
+            self.ident
+        )
+    }
 }

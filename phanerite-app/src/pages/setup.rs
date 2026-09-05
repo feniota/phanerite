@@ -1,8 +1,8 @@
 //! Initial setup page for configuring the launcher environment.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::button::ButtonVariants as _;
-use gpui_component::{ActiveTheme as _, IconName, StyledExt as _, button::Button, v_flex};
+use gpui_kit::component::button::ButtonVariants as _;
+use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, button::Button, v_flex};
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use crate::state::AppState;
 

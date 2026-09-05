@@ -1,12 +1,14 @@
 //! Dialog for collecting the fields needed to create a Minecraft instance.
 
-use gpui::{App, AppContext as _, Entity, IntoElement, ParentElement as _, Styled as _, Window};
-use gpui_component::{
+use gpui_kit::component::{
     WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
     v_flex,
+};
+use gpui_kit::{
+    App, AppContext as _, Entity, IntoElement, ParentElement as _, Styled as _, Window,
 };
 
 use crate::state::{AppState, Loader, NewInstance};
@@ -93,6 +95,6 @@ pub fn open(window: &mut Window, cx: &mut App, app: Entity<AppState>) {
 fn labelled(label: &'static str, child: impl IntoElement) -> impl IntoElement {
     v_flex()
         .gap_1()
-        .child(gpui::div().text_sm().child(label))
+        .child(gpui_kit::div().text_sm().child(label))
         .child(child)
 }

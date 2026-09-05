@@ -22,8 +22,8 @@ fn stale_storage_results_are_ignored() {
     store.set_storage_context(two.clone());
     let storages = MultiStorage::new();
     let root = tempfile::tempdir().unwrap();
-    let storage = gpui::block_on(Storage::new(root.path())).unwrap();
-    gpui::block_on(storages.insert(one.clone(), storage)).unwrap();
+    let storage = gpui_kit::block_on(Storage::new(root.path())).unwrap();
+    gpui_kit::block_on(storages.insert(one.clone(), storage)).unwrap();
     assert!(!store.apply_for_storage(
         &storages,
         one,
@@ -69,11 +69,11 @@ fn all_mutable_stores_ignore_equal_values() {
     assert_eq!(sessions.revision(), 1);
 
     let root = tempfile::tempdir().unwrap();
-    let storage = gpui::block_on(Storage::new(root.path())).unwrap();
+    let storage = gpui_kit::block_on(Storage::new(root.path())).unwrap();
     let storage = CoreStorageIdent::from(&storage);
     let storages = MultiStorage::new();
-    let storage_value = gpui::block_on(Storage::new(root.path())).unwrap();
-    gpui::block_on(storages.insert(storage.clone(), storage_value)).unwrap();
+    let storage_value = gpui_kit::block_on(Storage::new(root.path())).unwrap();
+    gpui_kit::block_on(storages.insert(storage.clone(), storage_value)).unwrap();
     let mut crashes = CrashStore::default();
     crashes.set_storage_context(storage.clone());
     assert!(!crashes.apply_for_storage(&storages, storage, vec![]));
@@ -84,13 +84,13 @@ fn all_mutable_stores_ignore_equal_values() {
 fn storage_registry_and_context_both_guard_late_results() {
     let root_a = tempfile::tempdir().unwrap();
     let root_b = tempfile::tempdir().unwrap();
-    let storage_a = gpui::block_on(Storage::new(root_a.path())).unwrap();
-    let storage_b = gpui::block_on(Storage::new(root_b.path())).unwrap();
+    let storage_a = gpui_kit::block_on(Storage::new(root_a.path())).unwrap();
+    let storage_b = gpui_kit::block_on(Storage::new(root_b.path())).unwrap();
     let a = CoreStorageIdent::from(&storage_a);
     let b = CoreStorageIdent::from(&storage_b);
     let storages = MultiStorage::new();
-    gpui::block_on(storages.insert(a.clone(), storage_a)).unwrap();
-    gpui::block_on(storages.insert(b.clone(), storage_b)).unwrap();
+    gpui_kit::block_on(storages.insert(a.clone(), storage_a)).unwrap();
+    gpui_kit::block_on(storages.insert(b.clone(), storage_b)).unwrap();
     let mut store = InstanceStore::new(Vec::new());
     store.set_storage_context(a.clone());
     assert!(store.apply_for_storage(

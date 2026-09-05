@@ -89,20 +89,20 @@ pub const fn rgba_hex(rgb: u32, alpha: u8) -> u32 {
     ((alpha as u32) << 24) | (rgb & 0x00FF_FFFF)
 }
 
-pub fn hsla_from_rgb(rgb: u32, alpha: f32) -> gpui::Hsla {
+pub fn hsla_from_rgb(rgb: u32, alpha: f32) -> gpui_kit::Hsla {
     let r = ((rgb >> 16) & 0xff) as f32 / 255.0;
     let g = ((rgb >> 8) & 0xff) as f32 / 255.0;
     let b = (rgb & 0xff) as f32 / 255.0;
-    gpui::Hsla::from(gpui::Rgba { r, g, b, a: alpha })
+    gpui_kit::Hsla::from(gpui_kit::Rgba { r, g, b, a: alpha })
 }
 
 /// Opaque color for a palette constant.
-pub fn color(rgb: u32) -> gpui::Hsla {
+pub fn color(rgb: u32) -> gpui_kit::Hsla {
     hsla_from_rgb(rgb, 1.0)
 }
 
 /// Translucent color for a palette constant, for surfaces only. Text keeps its
 /// own explicit token (see `MUTED_FOREGROUND_SUBTLE`) instead of being dimmed.
-pub fn color_alpha(rgb: u32, alpha: f32) -> gpui::Hsla {
+pub fn color_alpha(rgb: u32, alpha: f32) -> gpui_kit::Hsla {
     hsla_from_rgb(rgb, alpha)
 }

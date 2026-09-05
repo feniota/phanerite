@@ -1,11 +1,11 @@
 //! Application settings page for preferences and appearance.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use crate::state::AppState;
 

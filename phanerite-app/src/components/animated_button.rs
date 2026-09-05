@@ -1,12 +1,12 @@
-//! A `gpui_base::Button` wrapper with an animated background target.
+//! A `gpui_kit::base::Button` wrapper with an animated background target.
 
-use gpui::{
-    App, ElementId, Hsla, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
-    Styled as _, Window,
-};
-use gpui_base::{
+use gpui_kit::base::{
     Button,
     motion::{Transition, transition},
+};
+use gpui_kit::{
+    App, ElementId, Hsla, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
+    Styled as _, Window,
 };
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ pub fn render(
     normal: Hsla,
     hover: Hsla,
     child: impl IntoElement,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    on_click: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static,
     window: &mut Window,
     cx: &mut App,
 ) -> Button {

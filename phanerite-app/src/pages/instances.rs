@@ -1,12 +1,7 @@
 //! Instance list page and instance-level actions.
 
-use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
-    text,
-};
-use gpui_base::motion::{Transition, transition};
-use gpui_component::{
+use gpui_kit::base::motion::{Transition, transition};
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
@@ -15,6 +10,11 @@ use gpui_component::{
     select::{Select, SelectState},
     tag::Tag,
     v_flex,
+};
+use gpui_kit::{
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    text,
 };
 use std::time::Duration;
 
@@ -27,7 +27,7 @@ fn instance_card(
     app: Entity<AppState>,
     window: &mut Window,
     cx: &mut App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let reference = instance.reference();
     let card_id = format!("instance-card-{}", instance.id);
     let hovered = window.use_keyed_state(format!("{card_id}-hover"), cx, |_, _| false);

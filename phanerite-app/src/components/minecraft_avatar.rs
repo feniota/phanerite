@@ -1,7 +1,7 @@
 //! Avatar element for Minecraft player profiles and account identities.
 
-use gpui::{App, IntoElement};
-use gpui_component::avatar::Avatar;
+use gpui_kit::component::avatar::Avatar;
+use gpui_kit::{App, IntoElement};
 
 use crate::state::PlayerProfileSummary;
 

@@ -1,12 +1,12 @@
 //! Dialog for choosing and adding an account provider.
 
-use gpui::{App, AppContext as _, Entity, ParentElement as _, Styled as _, Window};
-use gpui_component::{
+use gpui_kit::component::{
     WindowExt as _,
     button::{Button, ButtonVariants as _},
     input::{Input, InputState},
     v_flex,
 };
+use gpui_kit::{App, AppContext as _, Entity, ParentElement as _, Styled as _, Window};
 
 use crate::state::{AccountType, AppState};
 
@@ -21,17 +21,17 @@ pub fn open(window: &mut Window, cx: &mut App, app: Entity<AppState>) {
                 content.child(
                     v_flex()
                         .gap_3()
-                        .child(gpui::div().text_sm().child("Offline account"))
+                        .child(gpui_kit::div().text_sm().child("Offline account"))
                         .child(Input::new(&name))
                         .child(
-                            gpui::div()
+                            gpui_kit::div()
                                 .text_sm()
                                 .child("Offline accounts work for single-player only."),
                         ),
                 )
             })
             .footer(
-                gpui_component::h_flex()
+                gpui_kit::component::h_flex()
                     .justify_end()
                     .gap_2()
                     .child(

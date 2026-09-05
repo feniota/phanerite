@@ -7,7 +7,7 @@ pub enum PhaIcon {
     Trash2,
 }
 
-impl From<PhaIcon> for gpui_component::Icon {
+impl From<PhaIcon> for gpui_kit::component::Icon {
     fn from(icon: PhaIcon) -> Self {
         match icon {
             PhaIcon::Flame => Self::default().path("icons/flame.svg"),

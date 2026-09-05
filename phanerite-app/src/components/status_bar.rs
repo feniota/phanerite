@@ -1,7 +1,7 @@
 //! Bottom status bar for low-frequency application status and actions.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, div};
-use gpui_component::{separator::Separator, status_bar::StatusBar};
+use gpui_kit::component::{separator::Separator, status_bar::StatusBar};
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, div};
 
 use crate::state::AppState;
 

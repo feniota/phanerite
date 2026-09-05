@@ -2,14 +2,14 @@
 
 use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{route::InstanceRef, state::AppState};
-use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
-use gpui_component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 pub fn render(
     reference: &InstanceRef,
     app: Entity<AppState>,
     _: &mut Window,
     cx: &App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     if !instance_exists(reference, &app, cx) {
         return missing_resource("instance", app).into_any_element();
     }

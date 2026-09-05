@@ -5,11 +5,11 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use gpui::{
+use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
     prelude::FluentBuilder as _, px,
 };
-use gpui_component::{h_flex, v_flex};
 
 use crate::{
     palette,
@@ -217,7 +217,11 @@ pub fn render(instance: &InstanceSummary, cx: &App) -> impl IntoElement {
 
 /// Renders the same responsive grid as the Svelte icon. At sizes above 23px,
 /// the one-pixel lattice gaps are visible; at 23px and below they collapse.
-pub fn render_sized(instance: &InstanceSummary, size: gpui::Pixels, _: &App) -> impl IntoElement {
+pub fn render_sized(
+    instance: &InstanceSummary,
+    size: gpui_kit::Pixels,
+    _: &App,
+) -> impl IntoElement {
     let cells = crystal(&instance.icon_seed, 9, 3);
     let colors = ramp(instance.loader);
     let show_gaps = size > px(23.);

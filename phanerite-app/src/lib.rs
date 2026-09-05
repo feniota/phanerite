@@ -14,12 +14,12 @@ pub mod state;
 pub mod theme;
 pub mod utils;
 
-use gpui::{
+use gpui_kit::base::{h_resizable, resizable_panel};
+use gpui_kit::component::{ActiveTheme as _, Root, scroll::ScrollableElement as _, v_flex};
+use gpui_kit::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, Styled as _, Window, div, px,
 };
-use gpui_base::{h_resizable, resizable_panel};
-use gpui_component::{ActiveTheme as _, Root, scroll::ScrollableElement as _, v_flex};
 use phanerite_core::storage::{Storage, StorageIdent, multi::MultiStorage};
 
 use crate::components::titlebar::TitleBar;
@@ -73,7 +73,7 @@ impl Phanerite {
                 let root = dirs::data_dir()
                     .unwrap_or_else(std::env::temp_dir)
                     .join("phanerite");
-                let storage = gpui::block_on(Storage::new(&root))
+                let storage = gpui_kit::block_on(Storage::new(&root))
                     .expect("failed to initialize Phanerite storage");
                 Some((StorageIdent::from(&storage), storage))
             }
@@ -85,7 +85,7 @@ impl Phanerite {
         let (storage_key, storages) = match storage {
             Some((key, storage)) => {
                 let storages = MultiStorage::new();
-                gpui::block_on(storages.insert(key.clone(), storage))
+                gpui_kit::block_on(storages.insert(key.clone(), storage))
                     .expect("failed to register Phanerite storage");
                 (Some(key), storages)
             }
@@ -127,7 +127,7 @@ impl Render for Phanerite {
             .bg(cx.theme().background)
             .child(
                 TitleBar::new().child(
-                    gpui_component::h_flex()
+                    gpui_kit::component::h_flex()
                         .items_center()
                         .gap_2()
                         .child(assets::phanerite_logo().size(px(18.)))

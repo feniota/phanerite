@@ -6,17 +6,17 @@ use crate::{
     state::{AppState, InstanceSummary},
 };
 use chrono::{Local, Timelike as _};
-use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
-};
-use gpui_base::motion::{Transition, transition};
-use gpui_component::{
+use gpui_kit::base::motion::{Transition, transition};
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     scroll::ScrollableElement as _,
     v_flex,
+};
+use gpui_kit::{
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 use std::time::Duration;
 
@@ -29,7 +29,7 @@ fn instance_card(
     app: Entity<AppState>,
     window: &mut Window,
     cx: &mut App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let reference = instance.reference();
     let sessions = app.read(cx).sessions.read(cx);
     let running = sessions.is_running(&reference);

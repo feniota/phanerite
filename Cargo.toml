@@ -26,3 +26,14 @@ tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.24", features = ["serde", "v7"] }
 zstd = "0.13.3"
+
+[profile.dev.package]
+gpui-pre = { opt-level = 3 }
+gpui-component = { opt-level = 3 }
+gpui-kit = { opt-level = 3 }
+gpui-kit-assets = { opt-level = 3 }
+gpui-pre-macros = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }

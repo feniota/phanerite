@@ -7,12 +7,12 @@ pub use icons::PhaIcon;
 pub use logo::render as phanerite_logo;
 
 use anyhow::anyhow;
-use gpui::{AssetSource, Result, SharedString};
+use gpui_kit::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use zstd::bulk::decompress as zstd_decompress;
 
-/// Application assets, with gpui-component's built-in assets as a fallback.
+/// Application assets, with GPUI Kit's built-in assets as a fallback.
 #[derive(RustEmbed)]
 #[folder = "assets"]
 #[include = "phanerite-logo.svg"]
@@ -28,13 +28,7 @@ impl AssetSource for Assets {
 
         let data = Self::get(path)
             .map(|file| Some(file.data))
-            .or_else(|| {
-                gpui_component_assets::Assets
-                    .load(path)
-                    .ok()
-                    .flatten()
-                    .map(Some)
-            })
+            .or_else(|| gpui_kit::assets::Assets.load(path).ok().flatten().map(Some))
             .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""));
 
         if !path.ends_with(".zst") {
@@ -55,7 +49,7 @@ impl AssetSource for Assets {
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let mut assets = gpui_component_assets::Assets.list(path)?;
+        let mut assets = gpui_kit::assets::Assets.list(path)?;
         assets
             .extend(Self::iter().filter_map(|asset| asset.starts_with(path).then(|| asset.into())));
         Ok(assets)

@@ -2,12 +2,12 @@
 
 use super::{page_shell, page_title};
 use crate::state::AppState;
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 pub fn render(app: Entity<AppState>, _window: &mut Window, cx: &App) -> impl IntoElement {
     let state = app.read(cx);
     let accounts_entity = state.accounts.clone();

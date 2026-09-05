@@ -1,12 +1,12 @@
 //! Native application entry point that initializes GPUI and opens the main window.
 
-use gpui::*;
-use gpui_component::{Root, TitleBar};
+use gpui_kit::component::{Root, TitleBar};
+use gpui_kit::*;
 use phanerite::Phanerite;
 use phanerite::assets::Assets;
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         let load_font = |path| {
@@ -22,16 +22,16 @@ fn main() {
             ])
             .expect("failed to register bundled fonts");
 
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
         phanerite::theme::install("emerald", None, cx);
         cx.refresh_windows();
 
         cx.spawn(async move |cx| {
             let window_options = cx.update(|cx| WindowOptions {
-                window_bounds: Some(gpui::WindowBounds::Windowed(
-                    gpui::Bounds::<Pixels>::centered(
+                window_bounds: Some(gpui_kit::WindowBounds::Windowed(
+                    gpui_kit::Bounds::<Pixels>::centered(
                         None,
-                        gpui::Size::new(Pixels::from(1200.0), Pixels::from(760.0)),
+                        gpui_kit::Size::new(Pixels::from(1200.0), Pixels::from(760.0)),
                         cx,
                     ),
                 )),

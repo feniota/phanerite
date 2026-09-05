@@ -2,16 +2,16 @@
 
 use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{route::InstanceRef, state::AppState};
-use gpui::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
-use gpui_component::button::ButtonVariants as _;
-use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex, v_flex};
+use gpui_kit::component::button::ButtonVariants as _;
+use gpui_kit::component::{ActiveTheme as _, StyledExt as _, h_flex, v_flex};
+use gpui_kit::{App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 
 pub fn render(
     reference: &InstanceRef,
     app: Entity<AppState>,
     _window: &mut Window,
     cx: &App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     if !instance_exists(reference, &app, cx) {
         return missing_resource("instance", app).into_any_element();
     }
@@ -57,7 +57,7 @@ pub fn render(
                     )
             })));
     let content = content.child(
-        gpui_component::button::Button::new("add-resource")
+        gpui_kit::component::button::Button::new("add-resource")
             .primary()
             .label("Add mods")
             .on_click({

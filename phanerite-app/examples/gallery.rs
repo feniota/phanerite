@@ -1,7 +1,7 @@
 //! Standalone gallery window for previewing the application UI with seeded data.
 
-use gpui::*;
-use gpui_component::{Root, TitleBar};
+use gpui_kit::component::{Root, TitleBar};
+use gpui_kit::*;
 use phanerite::{
     Phanerite,
     assets::Assets,
@@ -66,9 +66,9 @@ fn main() {
         return;
     }
     let route = route_from_args();
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
     app.run(move |cx| {
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
         phanerite::theme::install("emerald", None, cx);
         cx.spawn(async move |cx| {
             let options = cx.update(|cx| WindowOptions {

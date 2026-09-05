@@ -1,6 +1,6 @@
 //! Integration tests for theme and accent application behavior.
 
-use gpui_component::Theme;
+use gpui_kit::component::Theme;
 use phanerite::{palette, theme};
 
 #[test]

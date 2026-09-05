@@ -31,15 +31,8 @@ gallery = ["seed"]
 
 [dependencies]
 phanerite-core = { path = "../phanerite-core", features = ["moka"] }
-gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
-    "font-kit",
-    "wayland",
-    "x11",
-] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
-gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "c6ffd3e166abb43bff8845f0aa61711adb128dcf" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", tag = "v0.6.0" }
+
 anyhow = "1.0"
 async-trait = "0.1.92"
 chrono.workspace = true
@@ -55,5 +48,5 @@ concurrent-queue = "2.5.0"
 async-fs.workspace = true
 
 [dev-dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", tag = "v0.6.0", features = ["test-support"] }
 tempfile = "3"

@@ -1,11 +1,11 @@
 //! Dialog for importing resource packs and shader packs into an instance.
 
-use gpui::{App, Entity, ParentElement as _, Styled as _, Window};
-use gpui_component::{
+use gpui_kit::component::{
     WindowExt as _,
     button::{Button, ButtonVariants as _},
     v_flex,
 };
+use gpui_kit::{App, Entity, ParentElement as _, Styled as _, Window};
 
 use crate::state::AppState;
 
@@ -36,16 +36,16 @@ pub fn open(window: &mut Window, cx: &mut App, _: Entity<AppState>, mode: Resour
                         .items_center()
                         .gap_2()
                         .p_6()
-                        .child(gpui::div().text_lg().child("Drop files here"))
+                        .child(gpui_kit::div().text_lg().child("Drop files here"))
                         .child(
-                            gpui::div()
+                            gpui_kit::div()
                                 .text_sm()
                                 .child("or choose files from your computer."),
                         ),
                 )
             })
             .footer(
-                gpui_component::h_flex()
+                gpui_kit::component::h_flex()
                     .justify_end()
                     .gap_2()
                     .child(

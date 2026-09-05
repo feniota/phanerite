@@ -1,11 +1,11 @@
 //! Detail page for a selected Minecraft instance.
 
-use gpui::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use super::{back_button, instance_exists, missing_resource, page_shell, page_title};
 use crate::{

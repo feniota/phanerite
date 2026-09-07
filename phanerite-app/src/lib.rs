@@ -33,7 +33,7 @@ use crate::state::{
 /// Notation.
 ///
 /// PLEASE CHANGE THIS IF YOU DISTRIBUTE A MODIFIED VERSION OF PHANERITE.
-pub const APP_ID: &'static str = "app.phanerite";
+pub const APP_ID: &'static str = "org.feniota.phanerite";
 
 /// Root presentation entity. Launch and live-log entities remain outside this
 /// view so the sidebar and status bar cannot observe high-frequency updates.

@@ -13,7 +13,7 @@
 // - [`auth`]：用谁的身份启动
 // - [`runtime`]：用哪个 Java 启动
 // - [`mod_loader`]：怎么把模组加载器叠加到实例上
-// - [`mod_project`]：从哪里找模组
+// - [`mod_repo`]：从哪里找模组
 // - [`parsers`]：怎么读写游戏侧的文件和日志
 //
 // 一条从登录到启动的完整链路见 `examples/fullflow.rs`。
@@ -51,7 +51,7 @@
 //! - [`auth`]: whose identity the game is launched with
 //! - [`runtime`]: which Java launches it
 //! - [`mod_loader`]: how a mod loader is layered onto an instance
-//! - [`mod_project`]: where to find mods
+//! - [`mod_repo`]: where to find mods
 //! - [`parsers`]: how to read and write the game's own files and logs
 //!
 //! See `examples/fullflow.rs` for a complete chain from login to launch.
@@ -87,7 +87,7 @@ pub mod download;
 pub mod error;
 pub mod instance;
 pub mod mod_loader;
-pub mod mod_project;
+pub mod mod_repo;
 pub mod parsers;
 pub mod runtime;
 pub mod storage;

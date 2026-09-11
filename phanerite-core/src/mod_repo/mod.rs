@@ -60,6 +60,7 @@ pub trait ModsRepository: Default + Sized {
 pub type Enabled = bool;
 
 // 挂载到实例的模组仓库
+#[allow(async_fn_in_trait)]
 pub trait InstanceMods<R: ModsRepository> {
     // 根据关键词搜索模组
     fn search(&mut self, keyword: &str) -> impl Stream<Item = Result<ModItem>>;

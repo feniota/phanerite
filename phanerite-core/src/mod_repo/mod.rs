@@ -66,11 +66,11 @@ pub trait InstanceMods<R: ModsRepository> {
     // 列出当前实例的模组
     fn list(&mut self) -> impl Stream<Item = Result<(Enabled, ModVersion)>>;
     // 安装模组
-    fn install(&mut self, version: &ModVersion);
+    async fn install(&mut self, version: &ModVersion) -> Result<()>;
     // 移除模组
-    fn remove(&mut self, version: &ModVersion);
+    async fn remove(&mut self, version: &ModVersion) -> Result<()>;
     // 启用模组
-    fn enable(&mut self, version: &ModVersion);
+    async fn enable(&mut self, version: &ModVersion) -> Result<()>;
     // 禁用模组
-    fn disable(&mut self, version: &ModVersion);
+    async fn disable(&mut self, version: &ModVersion) -> Result<()>;
 }

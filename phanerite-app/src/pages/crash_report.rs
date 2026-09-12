@@ -3,7 +3,7 @@
 use super::{back_button, crash_exists, missing_resource, page_shell, page_title};
 use crate::{route::CrashRef, state::AppState};
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, StyledExt as _,
+    ActiveTheme as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
@@ -109,7 +109,7 @@ pub fn render(
                 .gap_2()
                 .child(
                     Button::new("crash-copy")
-                        .icon(IconName::Copy)
+                        .icon(crate::assets::PhaIcon::Copy)
                         .label("Copy redacted report"),
                 )
                 .child(Button::new("crash-retry").primary().label("Retry launch")),

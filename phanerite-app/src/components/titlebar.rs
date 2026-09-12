@@ -198,8 +198,7 @@ END OF TERMS AND CONDITIONS
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _,
-    h_flex,
+    ActiveTheme as _, Icon, InteractiveElementExt as _, Sizable as _, StyledExt as _, h_flex,
 };
 use gpui_kit::{
     AnyElement, App, Background, ClickEvent, Context, Decorations, Hsla, InteractiveElement as _,
@@ -209,6 +208,8 @@ use gpui_kit::{
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
+
+use crate::assets::PhaIcon;
 
 pub const TITLE_BAR_HEIGHT: Pixels = px(44.);
 #[cfg(target_os = "macos")]
@@ -340,12 +341,12 @@ impl ControlIcon {
         }
     }
 
-    fn icon(&self) -> IconName {
+    fn icon(&self) -> PhaIcon {
         match self {
-            Self::Minimize => IconName::WindowMinimize,
-            Self::Restore => IconName::WindowRestore,
-            Self::Maximize => IconName::WindowMaximize,
-            Self::Close { .. } => IconName::WindowClose,
+            Self::Minimize => PhaIcon::WindowMinimize,
+            Self::Restore => PhaIcon::WindowRestore,
+            Self::Maximize => PhaIcon::WindowMaximize,
+            Self::Close { .. } => PhaIcon::WindowClose,
         }
     }
 

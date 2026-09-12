@@ -2,7 +2,7 @@
 
 use gpui_kit::base::motion::{Transition, transition};
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Icon, IndexPath, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
@@ -102,20 +102,20 @@ fn instance_card(
         .child(
             h_flex()
                 .gap_2()
-                .child(Button::new(format!("instance-play-{}", instance.id)).icon(IconName::Play))
+                .child(Button::new(format!("instance-play-{}", instance.id)).icon(PhaIcon::Play))
                 .child(
                     Button::new(format!("instance-favorite-{}", instance.id))
-                        .icon(IconName::Star)
+                        .icon(PhaIcon::Star)
                         .ghost(),
                 )
                 .child(
                     Button::new(format!("instance-menu-{}", instance.id))
-                        .icon(IconName::EllipsisVertical)
+                        .icon(PhaIcon::EllipsisVertical)
                         .ghost()
                         .dropdown_menu(|menu, _window, _cx| {
-                            menu.item(PopupMenuItem::new("Launch").icon(IconName::Play))
+                            menu.item(PopupMenuItem::new("Launch").icon(PhaIcon::Play))
                                 .separator()
-                                .item(PopupMenuItem::new("Duplicate").icon(IconName::Copy))
+                                .item(PopupMenuItem::new("Duplicate").icon(PhaIcon::Copy))
                                 .item(PopupMenuItem::new("Export…"))
                                 .item(PopupMenuItem::new("Delete").icon(PhaIcon::Trash2))
                         }),
@@ -142,7 +142,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
             .child(
                 Button::new("create-instance-empty")
                     .primary()
-                    .icon(IconName::Plus)
+                    .icon(PhaIcon::Plus)
                     .label("Create instance"),
             )
             .into_any_element()
@@ -223,12 +223,12 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                     Input::new(&instance_search_input)
                         .min_w(px(224.))
                         .cleanable(true)
-                        .prefix(Icon::new(IconName::Search).small()),
+                        .prefix(Icon::new(PhaIcon::Search).small()),
                 )
                 .child(Select::new(&loader_select_state).w(px(128.)))
                 .child(
                     Button::new("instance-new_instance_button")
-                        .icon(Icon::new(IconName::Plus))
+                        .icon(Icon::new(PhaIcon::Plus))
                         .primary()
                         .compact()
                         .child(div().text_sm().child("New instance"))

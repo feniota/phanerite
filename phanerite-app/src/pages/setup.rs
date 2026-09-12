@@ -1,7 +1,7 @@
 //! Initial setup page for configuring the launcher environment.
 
 use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::{ActiveTheme as _, IconName, StyledExt as _, button::Button, v_flex};
+use gpui_kit::component::{ActiveTheme as _, StyledExt as _, button::Button, v_flex};
 use gpui_kit::{App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use crate::state::AppState;
@@ -29,7 +29,7 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
         .child(
             Button::new("setup-storage")
                 .primary()
-                .icon(IconName::FolderOpen)
+                .icon(crate::assets::PhaIcon::FolderOpen)
                 .label("Choose game directory")
                 .on_click(move |_, _, cx| {
                     app.update(cx, |state, cx| state.replace(crate::route::Route::Play, cx));

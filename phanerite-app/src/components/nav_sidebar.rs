@@ -1,7 +1,7 @@
 //! Primary navigation sidebar and its instance navigation entries.
 
 use gpui_kit::component::{
-    ActiveTheme as _, Collapsible, Icon, IconName, StyledExt as _,
+    ActiveTheme as _, Collapsible, Icon, StyledExt as _,
     button::ButtonVariants as _,
     sidebar::{Sidebar, SidebarFooter, SidebarItem},
     v_flex,
@@ -12,6 +12,7 @@ use gpui_kit::{
 };
 
 use crate::{
+    assets::PhaIcon,
     components::sidebar_instance_item::SidebarInstanceItem,
     route::Route,
     state::{AppState, InstanceSummary},
@@ -47,7 +48,7 @@ impl Collapsible for InstanceMenu {
 fn instance_section(
     id: &gpui_kit::ElementId,
     label: &str,
-    icon: IconName,
+    icon: PhaIcon,
     instances: &[InstanceSummary],
     current: &Route,
     running: &[crate::route::InstanceRef],
@@ -80,9 +81,9 @@ fn instance_section(
                 .child(div().flex_1().child(label.to_string()))
                 .child(div().child(instances.len().to_string()))
                 .child(Icon::new(if is_open {
-                    IconName::ChevronDown
+                    PhaIcon::ChevronDown
                 } else {
-                    IconName::ChevronRight
+                    PhaIcon::ChevronRight
                 }))
                 .on_click({
                     let app = app.clone();
@@ -159,14 +160,14 @@ impl SidebarItem for InstanceMenu {
                                 .text_color(cx.theme().sidebar_accent_foreground)
                         })
                     })
-                    .child(Icon::new(IconName::Play))
+                    .child(Icon::new(PhaIcon::Play))
                     .child("Play")
                     .on_click(activate(self.app.clone(), Route::Play)),
             )
             .child(instance_section(
                 &id,
                 "Favorites",
-                IconName::Star,
+                PhaIcon::Star,
                 &self.favorites,
                 &self.current,
                 &self.running,
@@ -179,7 +180,7 @@ impl SidebarItem for InstanceMenu {
             .child(instance_section(
                 &id,
                 "Instances",
-                IconName::Folder,
+                PhaIcon::Folder,
                 &self.local,
                 &self.current,
                 &self.running,
@@ -192,7 +193,7 @@ impl SidebarItem for InstanceMenu {
             .child(instance_section(
                 &id,
                 "Aphanite",
-                IconName::Folder,
+                PhaIcon::Folder,
                 &self.aphanite,
                 &self.current,
                 &self.running,
@@ -256,7 +257,7 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
                             .child(
                                 gpui_kit::component::button::Button::new("sidebar-settings")
                                     .ghost()
-                                    .icon(IconName::Settings)
+                                    .icon(PhaIcon::Settings)
                                     .label("Settings")
                                     .on_click(move |_, _, cx| {
                                         app.update(cx, |state, cx| state.push(Route::Settings, cx))

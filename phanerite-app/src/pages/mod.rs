@@ -121,13 +121,13 @@ pub(crate) fn route_button(
 
 pub(crate) fn back_button(app: Entity<AppState>) -> gpui_kit::component::button::Button {
     use gpui_kit::component::{
-        IconName, Sizable as _,
+        Sizable as _,
         button::{Button, ButtonVariants as _},
     };
     Button::new("page-back")
         .ghost()
         .xsmall()
-        .icon(IconName::ArrowLeft)
+        .icon(crate::assets::PhaIcon::ArrowLeft)
         .label("Back")
         .on_click(move |_, _, cx| app.update(cx, |state, cx| state.back(cx)))
 }

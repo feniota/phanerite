@@ -5858,6 +5858,7 @@ dependencies = [
  "phanerite-core",
  "rust-embed",
  "smallvec",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
  "turso",

@@ -1,8 +1,9 @@
 //! Shared confirmation dialog for destructive actions.
 
+use crate::assets::PhaIcon;
 use gpui_kit::App;
 use gpui_kit::Window;
-use gpui_kit::component::{Icon, IconName, WindowExt as _};
+use gpui_kit::component::{Icon, WindowExt as _};
 use std::rc::Rc;
 
 /// Opens the shared destructive confirmation pattern. The callback performs
@@ -21,7 +22,7 @@ pub fn open(
         let on_confirm = on_confirm.clone();
         alert
             .confirm()
-            .icon(Icon::new(IconName::TriangleAlert))
+            .icon(Icon::new(PhaIcon::TriangleAlert))
             .title(title.clone())
             .description(format!("{} This cannot be undone.", consequence))
             .on_ok(move |event, window, cx| on_confirm(event, window, cx))

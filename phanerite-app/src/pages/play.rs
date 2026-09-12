@@ -8,7 +8,7 @@ use crate::{
 use chrono::{Local, Timelike as _};
 use gpui_kit::base::motion::{Transition, transition};
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Icon, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     scroll::ScrollableElement as _,
@@ -136,7 +136,7 @@ fn instance_card(
             Button::new(format!("{scope}-play-open-{}", instance.id))
                 .mr_3()
                 .ghost()
-                .icon(IconName::Play)
+                .icon(PhaIcon::Play)
                 .on_click({
                     let app = app.clone();
                     move |_, _, cx| {
@@ -204,7 +204,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                                 .map(|item| item.username)
                                 .unwrap_or_else(|| "Offline".into()),
                         )
-                        .icon(IconName::ChevronRight)
+                        .icon(PhaIcon::ChevronRight)
                         .on_click({
                             let app = app.clone();
                             move |_, _, cx| {
@@ -404,7 +404,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                                 )
                                 .ghost()
                                 .xsmall()
-                                .icon(IconName::ArrowRight),
+                                .icon(PhaIcon::ArrowRight),
                             ),
                     )
                     .child(
@@ -444,7 +444,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                             route_button("play-manage", "Manage", Route::Instances, app.clone())
                                 .ghost()
                                 .xsmall()
-                                .icon(IconName::ArrowRight),
+                                .icon(PhaIcon::ArrowRight),
                         ),
                 )
                 .child(v_flex().gap_3().children(all.chunks(2).map(|row| {

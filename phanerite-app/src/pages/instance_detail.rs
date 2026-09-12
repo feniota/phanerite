@@ -1,7 +1,7 @@
 //! Detail page for a selected Minecraft instance.
 
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
@@ -49,7 +49,7 @@ pub fn render(
                 .child(
                     Button::new("detail-play")
                         .primary()
-                        .icon(IconName::Play)
+                        .icon(crate::assets::PhaIcon::Play)
                         .label(format!("Play {}", instance.name)),
                 ),
         )

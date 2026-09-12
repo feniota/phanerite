@@ -1,7 +1,7 @@
 //! Application settings page for preferences and appearance.
 
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, StyledExt as _,
+    ActiveTheme as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
@@ -72,7 +72,7 @@ pub fn render(app: Entity<AppState>, _: &mut Window, cx: &App) -> impl IntoEleme
                 .child(
                     Button::new("settings-accent")
                         .ghost()
-                        .icon(IconName::Palette)
+                        .icon(crate::assets::PhaIcon::Palette)
                         .label("Change accent"),
                 ),
             cx,

@@ -3,7 +3,7 @@
 use super::{page_shell, page_title};
 use crate::state::AppState;
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, StyledExt as _,
+    ActiveTheme as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
@@ -78,7 +78,7 @@ pub fn render(app: Entity<AppState>, _window: &mut Window, cx: &App) -> impl Int
         .child(
             Button::new("account-add")
                 .primary()
-                .icon(IconName::Plus)
+                .icon(crate::assets::PhaIcon::Plus)
                 .label("Add account")
                 .on_click({
                     let app = app.clone();

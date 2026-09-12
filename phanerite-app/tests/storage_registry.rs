@@ -29,7 +29,7 @@ async fn setup() -> (Database, tempfile::TempDir) {
 
 #[test]
 fn missing_entry_is_a_cache_miss() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
 
@@ -42,7 +42,7 @@ fn missing_entry_is_a_cache_miss() {
 
 #[test]
 fn inserted_entry_can_be_queried_with_the_same_key() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let storage = storage(root.path().join("storage"));
@@ -61,7 +61,7 @@ fn inserted_entry_can_be_queried_with_the_same_key() {
 
 #[test]
 fn query_and_increase_and_decrease_update_reference_count() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let storage = storage(root.path().join("storage"));
@@ -90,7 +90,7 @@ fn query_and_increase_and_decrease_update_reference_count() {
 
 #[test]
 fn storage_and_hash_are_both_part_of_the_key() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let storage_a = storage(root.path().join("a"));
@@ -141,7 +141,7 @@ fn storage_and_hash_are_both_part_of_the_key() {
 
 #[test]
 fn data_is_visible_through_a_new_registry_on_the_same_database() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let first = StorageReg::new(db.clone()).await;
         let storage = storage(root.path().join("storage"));
@@ -163,7 +163,7 @@ fn data_is_visible_through_a_new_registry_on_the_same_database() {
 
 #[test]
 fn duplicate_key_does_not_replace_the_existing_path() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let storage = storage(root.path().join("storage"));
@@ -186,7 +186,7 @@ fn duplicate_key_does_not_replace_the_existing_path() {
 
 #[test]
 fn duplicate_path_does_not_create_a_second_entry() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let path = root.path().join("share/shared.bin");
@@ -215,7 +215,7 @@ fn duplicate_path_does_not_create_a_second_entry() {
 
 #[test]
 fn concurrent_inserts_and_queries_keep_entries_isolated() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let (db, root) = setup().await;
         let registry = StorageReg::new(db).await;
         let entries: Vec<_> = (0..16_u8)
@@ -235,7 +235,7 @@ fn concurrent_inserts_and_queries_keep_entries_isolated() {
             for (key, value) in entries {
                 let registry = &registry;
                 scope.spawn(move || {
-                    gpui_kit::block_on(registry.insert((&key.0, key.1.clone()), value)).unwrap();
+                    crate::block_on(registry.insert((&key.0, key.1.clone()), value)).unwrap();
                 });
             }
         });

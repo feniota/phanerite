@@ -11,7 +11,7 @@ use phanerite_core::{
 
 #[test]
 fn database_path_override_persists_registry_entries() {
-    gpui_kit::block_on(async {
+    crate::block_on(async {
         let root = tempfile::tempdir().unwrap();
         let storage = StorageIdent {
             root_dir: root.path().join("storage"),

@@ -206,7 +206,7 @@ impl AppState {
     ) -> Option<StorageIdent> {
         let key = StorageIdent::from(&storage);
         if self.storages.contains(&key)
-            || gpui_kit::block_on(self.storages.insert(key.clone(), storage)).is_err()
+            || crate::block_on(self.storages.insert(key.clone(), storage)).is_err()
         {
             return None;
         }
@@ -241,7 +241,7 @@ impl AppState {
         } else if replacement.is_some() {
             return false;
         }
-        if !gpui_kit::block_on(self.storages.remove(storage)) {
+        if !crate::block_on(self.storages.remove(storage)) {
             return false;
         }
         if self.default_storage.as_ref() == Some(storage) {

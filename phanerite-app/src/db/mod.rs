@@ -73,7 +73,7 @@ impl Database {
 
     /// Create a new [`Database`] on the default path
     pub fn new() -> Self {
-        gpui_kit::block_on(async {
+        crate::block_on(async {
             #[cfg(debug_assertions)]
             let disk_path = {
                 let _ = dotenvy::dotenv();

@@ -14,6 +14,8 @@ pub mod state;
 pub mod theme;
 pub mod utils;
 
+pub(crate) use gpui_kit::block_on;
+
 use gpui_kit::base::{h_resizable, resizable_panel};
 use gpui_kit::component::{ActiveTheme as _, Root, scroll::ScrollableElement as _, v_flex};
 use gpui_kit::{
@@ -73,8 +75,8 @@ impl Phanerite {
                 let root = dirs::data_dir()
                     .unwrap_or_else(std::env::temp_dir)
                     .join("phanerite");
-                let storage = gpui_kit::block_on(Storage::new(&root))
-                    .expect("failed to initialize Phanerite storage");
+                let storage =
+                    block_on(Storage::new(&root)).expect("failed to initialize Phanerite storage");
                 Some((StorageIdent::from(&storage), storage))
             }
             #[cfg(not(feature = "seed"))]
@@ -85,7 +87,7 @@ impl Phanerite {
         let (storage_key, storages) = match storage {
             Some((key, storage)) => {
                 let storages = MultiStorage::new();
-                gpui_kit::block_on(storages.insert(key.clone(), storage))
+                block_on(storages.insert(key.clone(), storage))
                     .expect("failed to register Phanerite storage");
                 (Some(key), storages)
             }

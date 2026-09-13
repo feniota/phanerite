@@ -75,11 +75,7 @@ pub fn is_stable(version: &str) -> bool {
     // Minecraft snapshot:
     // 23w31a
     // 24w03b
-    if is_minecraft_snapshot(&lower) {
-        return false;
-    }
-
-    true
+    !is_minecraft_snapshot(&lower)
 }
 
 #[derive(Debug, PartialEq)]

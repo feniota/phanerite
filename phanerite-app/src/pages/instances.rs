@@ -18,9 +18,14 @@ use gpui_kit::{
 };
 use std::time::Duration;
 
-use crate::{assets::PhaIcon, route::Route, state::AppState};
+use crate::{
+    assets::PhaIcon,
+    components::{instance_actions, instance_create_dialog},
+    route::Route,
+    state::AppState,
+};
 
-use super::page_shell;
+use super::{page_shell, widgets::favorite_button};
 
 fn instance_card(
     instance: &crate::state::InstanceSummary,
@@ -29,6 +34,11 @@ fn instance_card(
     cx: &mut App,
 ) -> gpui_kit::AnyElement {
     let reference = instance.reference();
+    let running = app.read(cx).sessions.read(cx).is_running(&reference);
+    let play_reference = reference.clone();
+    let favorite_reference = reference.clone();
+    let menu_reference = reference.clone();
+    let instance_name = instance.name.clone();
     let card_id = format!("instance-card-{}", instance.id);
     let hovered = window.use_keyed_state(format!("{card_id}-hover"), cx, |_, _| false);
     let background = transition(
@@ -88,7 +98,7 @@ fn instance_card(
                 )
                 .child(
                     div()
-                        .text_sm()
+                        .text_xs()
                         .text_color(cx.theme().muted_foreground)
                         .child(format!(
                             "{} · MC {} · {} launches",
@@ -102,22 +112,115 @@ fn instance_card(
         .child(
             h_flex()
                 .gap_2()
-                .child(Button::new(format!("instance-play-{}", instance.id)).icon(PhaIcon::Play))
                 .child(
-                    Button::new(format!("instance-favorite-{}", instance.id))
-                        .icon(PhaIcon::Star)
-                        .ghost(),
+                    Button::new(format!("instance-play-{}", instance.id))
+                        .icon(if running {
+                            PhaIcon::Square
+                        } else {
+                            PhaIcon::Play
+                        })
+                        .tooltip(if running {
+                            "Stop instance"
+                        } else {
+                            "Play instance"
+                        })
+                        .accessibility_label(if running {
+                            "Stop instance"
+                        } else {
+                            "Play instance"
+                        })
+                        .on_click({
+                            let app = app.clone();
+                            move |_, window, cx| {
+                                cx.stop_propagation();
+                                instance_actions::play(&play_reference, &app, window, cx);
+                            }
+                        }),
+                )
+                .child(
+                    favorite_button(
+                        format!("instance-favorite-{}", instance.id),
+                        instance.favorite,
+                        cx,
+                    )
+                    .on_click({
+                        let app = app.clone();
+                        move |_, _, cx| {
+                            cx.stop_propagation();
+                            app.read(cx).instances.clone().update(cx, |store, cx| {
+                                if store.toggle_favorite(&favorite_reference) {
+                                    cx.notify();
+                                }
+                            });
+                        }
+                    }),
                 )
                 .child(
                     Button::new(format!("instance-menu-{}", instance.id))
                         .icon(PhaIcon::EllipsisVertical)
                         .ghost()
-                        .dropdown_menu(|menu, _window, _cx| {
-                            menu.item(PopupMenuItem::new("Launch").icon(PhaIcon::Play))
-                                .separator()
-                                .item(PopupMenuItem::new("Duplicate").icon(PhaIcon::Copy))
-                                .item(PopupMenuItem::new("Export…"))
-                                .item(PopupMenuItem::new("Delete").icon(PhaIcon::Trash2))
+                        .accessibility_label("Instance actions")
+                        .on_click(|_, _, cx| cx.stop_propagation())
+                        .dropdown_menu(move |menu, _window, _cx| {
+                            let launch = menu_reference.clone();
+                            let duplicate = menu_reference.clone();
+                            let logs = menu_reference.clone();
+                            let folder = menu_reference.clone();
+                            let delete = menu_reference.clone();
+                            let launch_app = app.clone();
+                            let duplicate_app = app.clone();
+                            let logs_app = app.clone();
+                            let delete_app = app.clone();
+                            let name = instance_name.clone();
+                            menu.item(
+                                PopupMenuItem::new(if running { "Stop" } else { "Launch" })
+                                    .icon(if running {
+                                        PhaIcon::Square
+                                    } else {
+                                        PhaIcon::Play
+                                    })
+                                    .on_click(move |_, window, cx| {
+                                        instance_actions::play(&launch, &launch_app, window, cx)
+                                    }),
+                            )
+                            .separator()
+                            .item(
+                                PopupMenuItem::new("Duplicate")
+                                    .icon(PhaIcon::Copy)
+                                    .on_click(move |_, _, cx| {
+                                        instance_actions::duplicate(&duplicate, &duplicate_app, cx)
+                                    }),
+                            )
+                            .item(
+                                PopupMenuItem::new("Open folder")
+                                    .icon(PhaIcon::FolderOpen)
+                                    .on_click(move |_, window, cx| {
+                                        instance_actions::open_folder(&folder, window, cx)
+                                    }),
+                            )
+                            .item(
+                                PopupMenuItem::new("Game logs")
+                                    .icon(PhaIcon::ScrollText)
+                                    .on_click(move |_, _, cx| {
+                                        logs_app.update(cx, |app, cx| {
+                                            app.push(Route::Logs(logs.clone()), cx)
+                                        })
+                                    }),
+                            )
+                            .separator()
+                            .item(
+                                PopupMenuItem::new("Delete…")
+                                    .icon(PhaIcon::Trash2)
+                                    .on_click(move |_, window, cx| {
+                                        instance_actions::delete(
+                                            delete.clone(),
+                                            name.clone(),
+                                            delete_app.clone(),
+                                            window,
+                                            cx,
+                                        )
+                                    }),
+                            )
                         }),
                 ),
         )
@@ -125,38 +228,6 @@ fn instance_card(
 }
 
 pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let instances = app.read(cx).instances.read(cx).all().to_vec();
-    let content = if instances.is_empty() {
-        v_flex()
-            .items_center()
-            .justify_center()
-            .h_full()
-            .gap_3()
-            .child(div().text_lg().font_semibold().child("No instances found"))
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Create your first instance to get started."),
-            )
-            .child(
-                Button::new("create-instance-empty")
-                    .primary()
-                    .icon(PhaIcon::Plus)
-                    .label("Create instance"),
-            )
-            .into_any_element()
-    } else {
-        v_flex()
-            .gap_2()
-            .children(
-                instances
-                    .iter()
-                    .map(|instance| instance_card(instance, app.clone(), window, cx)),
-            )
-            .into_any_element()
-    };
-    let content = v_flex().gap_3().child(content);
     let instance_search_input =
         window.use_keyed_state("instances-search-input", cx, |window, cx| {
             InputState::new(window, cx).placeholder("Search instances…")
@@ -170,7 +241,68 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                 cx,
             )
         });
-
+    let search = instance_search_input.read(cx).value().trim().to_lowercase();
+    let loader = loader_select_state
+        .read(cx)
+        .selected_value()
+        .copied()
+        .unwrap_or("All loaders");
+    let count = app.read(cx).instances.read(cx).len();
+    let instances: Vec<_> = app
+        .read(cx)
+        .instances
+        .read(cx)
+        .all()
+        .iter()
+        .filter(|instance| {
+            (search.is_empty() || instance.name.to_lowercase().contains(&search))
+                && (loader == "All loaders" || instance.loader.label() == loader)
+        })
+        .cloned()
+        .collect();
+    let content = if instances.is_empty() {
+        v_flex()
+            .items_center()
+            .justify_center()
+            .h_full()
+            .gap_3()
+            .child(div().text_lg().font_semibold().child(if count == 0 {
+                "No instances found"
+            } else {
+                "No matching instances"
+            }))
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if count == 0 {
+                        "Create your first instance to get started."
+                    } else {
+                        "Try a different search or loader filter."
+                    }),
+            )
+            .child(
+                Button::new("create-instance-empty")
+                    .primary()
+                    .icon(PhaIcon::Plus)
+                    .label("Create instance")
+                    .on_click({
+                        let app = app.clone();
+                        move |_, window, cx| instance_create_dialog::open(window, cx, app.clone())
+                    }),
+            )
+            .into_any_element()
+    } else {
+        v_flex()
+            .gap_2()
+            .children(
+                instances
+                    .iter()
+                    .map(|instance| instance_card(instance, app.clone(), window, cx)),
+            )
+            .into_any_element()
+    };
+    let content = v_flex().gap_3().child(content);
     let title = h_flex()
         .px_6()
         .pt_6()
@@ -199,7 +331,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                                 .xsmall()
                                 .rounded_full()
                                 .border_0()
-                                .child(format!("{}", instances.len())),
+                                .child(format!("{count}")),
                         ),
                 )
                 .child(
@@ -209,9 +341,7 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
                         .whitespace_normal()
-                        .child(text!(
-                            "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
-                        )),
+                        .child(text!("Your isolated Minecraft installations.")),
                 ),
         )
         .child(
@@ -225,14 +355,20 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                         .cleanable(true)
                         .prefix(Icon::new(PhaIcon::Search).small()),
                 )
-                .child(Select::new(&loader_select_state).w(px(128.)))
+                .child(
+                    super::widgets::control_slot(Select::new(&loader_select_state).w_full())
+                        .w(gpui_kit::rems(8.)),
+                )
                 .child(
                     Button::new("instance-new_instance_button")
                         .icon(Icon::new(PhaIcon::Plus))
                         .primary()
                         .compact()
                         .child(div().text_sm().child("New instance"))
-                        .text_sm(),
+                        .text_sm()
+                        .on_click(move |_, window, cx| {
+                            instance_create_dialog::open(window, cx, app.clone())
+                        }),
                 ),
         );
     page_shell(Some(title), content, cx)

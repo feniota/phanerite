@@ -138,6 +138,10 @@ pub struct AccountStore {
     accounts: MultiAccount,
     active_id: Option<AccountIdent>,
     revision: u64,
+    #[cfg(feature = "seed")]
+    preview_accounts: Vec<AccountSummary>,
+    #[cfg(feature = "seed")]
+    preview_active_id: Option<String>,
 }
 
 impl AccountStore {
@@ -158,15 +162,25 @@ impl AccountStore {
         self.accounts.for_each(|_, account| {
             accounts.push(AccountSummary::from_account(account));
         });
+        #[cfg(feature = "seed")]
+        accounts.extend(self.preview_accounts.iter().cloned());
+        accounts.sort_by(|left, right| {
+            left.username
+                .cmp(&right.username)
+                .then(left.id.cmp(&right.id))
+        });
         accounts
     }
 
     pub fn is_empty(&self) -> bool {
-        self.accounts.is_empty()
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {
-        self.accounts.len()
+        let count = self.accounts.len();
+        #[cfg(feature = "seed")]
+        let count = count + self.preview_accounts.len();
+        count
     }
 
     fn key_for_id(&self, id: &str) -> Option<AccountIdent> {
@@ -180,6 +194,14 @@ impl AccountStore {
     }
 
     pub fn get(&self, id: &str) -> Option<AccountSummary> {
+        #[cfg(feature = "seed")]
+        if let Some(account) = self
+            .preview_accounts
+            .iter()
+            .find(|account| account.id == id)
+        {
+            return Some(account.clone());
+        }
         let key = self.key_for_id(id)?;
         self.accounts
             .try_get(&key)
@@ -187,10 +209,18 @@ impl AccountStore {
     }
 
     pub fn active_id(&self) -> Option<String> {
+        #[cfg(feature = "seed")]
+        if self.preview_active_id.is_some() {
+            return self.preview_active_id.clone();
+        }
         self.active_id.as_ref().map(ToString::to_string)
     }
 
     pub fn active(&self) -> Option<AccountSummary> {
+        #[cfg(feature = "seed")]
+        if let Some(id) = &self.preview_active_id {
+            return self.get(id);
+        }
         let key = self.active_id.as_ref()?;
         self.accounts
             .try_get(key)
@@ -207,6 +237,16 @@ impl AccountStore {
     }
 
     pub fn set_active(&mut self, id: &str) -> bool {
+        #[cfg(feature = "seed")]
+        if self.preview_accounts.iter().any(|account| account.id == id) {
+            if self.preview_active_id.as_deref() == Some(id) {
+                return false;
+            }
+            self.preview_active_id = Some(id.to_owned());
+            self.active_id = None;
+            self.revision += 1;
+            return true;
+        }
         let Some(key) = self.key_for_id(id) else {
             return false;
         };
@@ -214,11 +254,31 @@ impl AccountStore {
             return false;
         }
         self.active_id = Some(key);
+        #[cfg(feature = "seed")]
+        {
+            self.preview_active_id = None;
+        }
         self.revision += 1;
         true
     }
 
     pub fn set_active_profile(&mut self, _id: &str, _profile: impl Into<String>) -> bool {
+        #[cfg(feature = "seed")]
+        if let Some(account) = self
+            .preview_accounts
+            .iter_mut()
+            .find(|account| account.id == _id)
+        {
+            let profile = _profile.into();
+            if account.active_profile_id == profile
+                || !account.profiles.iter().any(|item| item.id == profile)
+            {
+                return false;
+            }
+            account.active_profile_id = profile;
+            self.revision += 1;
+            return true;
+        }
         // Profile selection belongs to the core authentication object and is
         // asynchronous. The GUI currently only exposes the active profile.
         false
@@ -245,11 +305,27 @@ impl AccountStore {
             return None;
         }
         self.active_id = Some(key);
+        #[cfg(feature = "seed")]
+        {
+            self.preview_active_id = None;
+        }
         self.revision += 1;
         Some(id)
     }
 
     pub fn remove(&mut self, id: &str) -> bool {
+        #[cfg(feature = "seed")]
+        if self.preview_accounts.iter().any(|account| account.id == id) {
+            self.preview_accounts.retain(|account| account.id != id);
+            if self.preview_active_id.as_deref() == Some(id) {
+                self.preview_active_id = None;
+                if let Some(account) = self.all().first() {
+                    self.set_active(&account.id);
+                }
+            }
+            self.revision += 1;
+            return true;
+        }
         let Some(key) = self.key_for_id(id) else {
             return false;
         };
@@ -258,8 +334,51 @@ impl AccountStore {
         }
         if self.active_id.as_ref() == Some(&key) {
             self.active_id = None;
+            if let Some(account) = self.all().first() {
+                self.set_active(&account.id);
+            }
         }
         self.revision += 1;
         true
+    }
+
+    /// In-memory profiles for exercising provider UI without authentication.
+    /// These never enter the core credential store or launch requests.
+    #[cfg(feature = "seed")]
+    pub fn add_preview(
+        &mut self,
+        username: String,
+        account_type: AccountType,
+        auth_server: Option<String>,
+        profiles: Vec<PlayerProfileSummary>,
+        active_profile_id: String,
+    ) -> Option<String> {
+        if account_type == AccountType::Offline
+            || username.trim().is_empty()
+            || !profiles
+                .iter()
+                .any(|profile| profile.id == active_profile_id)
+        {
+            return None;
+        }
+        let id = format!(
+            "preview:{}:{}:{username}",
+            account_type.key(),
+            auth_server.as_deref().unwrap_or_default()
+        );
+        if self.get(&id).is_some() {
+            return None;
+        }
+        self.preview_accounts.push(AccountSummary {
+            id: id.clone(),
+            username,
+            account_type,
+            last_used: "just now".into(),
+            auth_server,
+            active_profile_id,
+            profiles,
+        });
+        self.set_active(&id);
+        Some(id)
     }
 }

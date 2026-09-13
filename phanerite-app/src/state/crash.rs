@@ -91,7 +91,7 @@ impl CrashReport {
 }
 
 /// Removes credentials and identifying home-directory segments from shareable
-/// diagnostics. Mirrors `design/src/lib/redact.ts`.
+/// diagnostics, including platform-specific home-directory layouts.
 pub fn redact(text: &str) -> String {
     let mut result = redact_credential_arguments(text);
     result = redact_home_paths(&result);
@@ -102,30 +102,33 @@ fn redact_credential_arguments(text: &str) -> String {
     const KEYS: [&str; 3] = ["--accessToken", "--clientToken", "--session"];
     let mut result = String::with_capacity(text.len());
     let mut rest = text;
-    'outer: while !rest.is_empty() {
-        for key in KEYS {
-            if let Some(start) = find_ignore_ascii_case(rest, key) {
-                let after_key = start + key.len();
-                let tail = &rest[after_key..];
-                let spaces = tail.len() - tail.trim_start_matches([' ', '\t']).len();
-                if spaces == 0 {
-                    continue;
-                }
-                let value_start = after_key + spaces;
-                let value = &rest[value_start..];
-                let value_len = quoted_or_bare_len(value);
-                if value_len == 0 {
-                    continue;
-                }
-                result.push_str(&rest[..value_start]);
-                result.push_str("<redacted>");
-                rest = &rest[value_start + value_len..];
-                continue 'outer;
-            }
+    while let Some((start, key)) = KEYS
+        .iter()
+        .filter_map(|key| find_ignore_ascii_case(rest, key).map(|start| (start, *key)))
+        .min_by_key(|(start, _)| *start)
+    {
+        let after_key = start + key.len();
+        let tail = &rest[after_key..];
+        let mut separator = tail.len() - tail.trim_start_matches([' ', '\t']).len();
+        if tail[separator..].starts_with('=') {
+            separator += 1;
+            let after_equals = &tail[separator..];
+            separator += after_equals.len() - after_equals.trim_start_matches([' ', '\t']).len();
         }
-        result.push_str(rest);
-        break;
+        if separator == 0 {
+            result.push_str(&rest[..after_key]);
+            rest = &rest[after_key..];
+            continue;
+        }
+        let value_start = after_key + separator;
+        let value_len = quoted_or_bare_len(&rest[value_start..]);
+        result.push_str(&rest[..value_start]);
+        if value_len > 0 {
+            result.push_str("<redacted>");
+        }
+        rest = &rest[value_start + value_len..];
     }
+    result.push_str(rest);
     result
 }
 
@@ -152,24 +155,42 @@ fn quoted_or_bare_len(value: &str) -> usize {
 }
 
 fn redact_home_paths(text: &str) -> String {
+    const PREFIXES: [&str; 4] = ["/var/home/", "/home/", "/Users/", "\\Users\\"];
     let mut result = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(index) = rest.find("/home/") {
-        result.push_str(&rest[..index]);
-        let after = &rest[index + "/home/".len()..];
+    while let Some((index, prefix)) = PREFIXES
+        .iter()
+        .filter_map(|prefix| find_ignore_ascii_case(rest, prefix).map(|index| (index, *prefix)))
+        .min_by_key(|(index, _)| *index)
+    {
+        let start = if index >= 2
+            && rest.as_bytes()[index - 1] == b':'
+            && rest.as_bytes()[index - 2].is_ascii_alphabetic()
+        {
+            index - 2
+        } else {
+            index
+        };
+        result.push_str(&rest[..start]);
+        let after = &rest[index + prefix.len()..];
         let name_len = after
             .find(|character: char| {
-                character == '/' || character == '\\' || character.is_whitespace()
+                matches!(character, '/' | '\\' | '"' | '\'') || character.is_whitespace()
             })
             .unwrap_or(after.len());
         let separator = after[name_len..].chars().next();
-        if name_len == 0 || !matches!(separator, Some('/') | Some('\\')) {
-            result.push_str("/home/");
+        if name_len == 0 {
+            result.push_str(&rest[start..index + prefix.len()]);
             rest = after;
             continue;
         }
-        result.push_str("~/");
-        rest = &after[name_len + 1..];
+        result.push('~');
+        if matches!(separator, Some('/') | Some('\\')) {
+            result.push('/');
+            rest = &after[name_len + 1..];
+        } else {
+            rest = &after[name_len..];
+        }
     }
     result.push_str(rest);
     result

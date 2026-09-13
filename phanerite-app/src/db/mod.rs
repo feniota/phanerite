@@ -22,6 +22,7 @@ pub struct Database {
 
 impl Database {
     async fn new_fs(path: Option<PathBuf>) -> anyhow::Result<Db> {
+        #[allow(clippy::needless_late_init)]
         let io: Arc<dyn turso_core::IO + 'static>;
         #[cfg(target_os = "linux")]
         match turso_core::UringIO::new() {

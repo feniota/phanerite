@@ -9,7 +9,9 @@ use phanerite::{
 
 #[test]
 fn references_include_storage_context() {
-    let storage = phanerite::seed::storage_ident(7);
+    let storage = phanerite_core::storage::StorageIdent {
+        root_dir: PathBuf::from("/storage-7"),
+    };
     assert_eq!(
         InstanceRef::new(storage.clone(), "instance").storage,
         storage
@@ -17,6 +19,7 @@ fn references_include_storage_context() {
     assert_eq!(CrashRef::new(storage.clone(), "crash").storage, storage);
 }
 
+#[cfg(feature = "seed")]
 #[test]
 fn seed_projections_are_deterministic_and_storage_scoped() {
     let storage = phanerite::seed::storage_ident(7);
@@ -61,4 +64,32 @@ fn crash_exports_redact_credentials_tokens_and_home_paths() {
     assert!(!redacted.contains("eyJhbGci"));
     assert!(!redacted.contains("/home/alice"));
     assert!(redacted.contains("~/.minecraft/logs/latest.log"));
+}
+
+#[test]
+fn crash_exports_redact_arguments_in_any_order_and_with_equals() {
+    let redacted = phanerite::state::redact(
+        "--session session-secret --clientToken='client secret' --accessToken access-secret --SESSION second-session",
+    );
+    for secret in [
+        "session-secret",
+        "client secret",
+        "access-secret",
+        "second-session",
+    ] {
+        assert!(!redacted.contains(secret), "credential leaked: {secret}");
+    }
+    assert_eq!(redacted.matches("<redacted>").count(), 4);
+}
+
+#[test]
+fn crash_exports_redact_home_paths_on_supported_desktops() {
+    let input =
+        "Linux /var/home/alice/.minecraft, macOS /Users/bob/game, Windows D:\\Users\\Carol\\game";
+    let redacted = phanerite::state::redact(input);
+    for name in ["alice", "bob", "Carol"] {
+        assert!(!redacted.contains(name));
+    }
+    assert!(!redacted.contains("/var~"));
+    assert!(redacted.contains("~/.minecraft"));
 }

@@ -99,6 +99,7 @@ pub struct InstanceSummary {
     pub java_runtime_id: String,
     pub created_at: String,
     pub last_played: Option<String>,
+    // FIXME: change this to play hours in float number
     pub play_count: u32,
     pub last_crash_id: Option<String>,
     pub launch_overrides: LaunchOverrides,

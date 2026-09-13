@@ -197,14 +197,22 @@ pub fn render(app: Entity<AppState>, window: &mut Window, cx: &mut App) -> impl 
                 )
                 .child(
                     Button::new("play-account")
+                        .debug_selector(|| "play-account".into())
                         .outline()
                         .small()
-                        .label(
-                            account
-                                .map(|item| item.username)
-                                .unwrap_or_else(|| "Offline".into()),
+                        .accessibility_label("Manage accounts")
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .when_some(account.as_ref().and_then(|account| account.active_profile()), |row, profile| {
+                                    row.child(crate::components::minecraft_avatar::render(Some(profile), cx)
+                                        .debug_selector(|| "play-account-avatar".into()).size_5())
+                                })
+                                .child(div().max_w(gpui_kit::rems(7.)).truncate().child(
+                                    account.as_ref().map(|account| account.username.clone()).unwrap_or_else(|| "Offline".into()),
+                                ))
+                                .child(Icon::new(PhaIcon::ChevronRight).size_3p5().text_color(cx.theme().muted_foreground)),
                         )
-                        .icon(PhaIcon::ChevronRight)
                         .on_click({
                             let app = app.clone();
                             move |_, _, cx| {

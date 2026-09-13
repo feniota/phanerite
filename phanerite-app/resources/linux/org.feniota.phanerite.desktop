@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Phanerite
+GenericName=Minecraft Launcher
+Comment=A preconfigured Minecraft launcher
+Exec=phanerite
+TryExec=phanerite
+Icon=org.feniota.phanerite
+Terminal=false
+Categories=Game;
+StartupWMClass=org.feniota.phanerite

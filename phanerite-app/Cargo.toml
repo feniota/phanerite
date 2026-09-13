@@ -12,6 +12,12 @@ keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
 
+[package.metadata.bundle]
+name = "Phanerite"
+identifier = "org.feniota.phanerite"
+icon = ["assets/app-icons/phanerite.icns"]
+osx_minimum_system_version = "10.15.7"
+
 [lib]
 path = "src/lib.rs"
 
@@ -47,6 +53,12 @@ turso_core = { git = "https://github.com/tursodatabase/turso", rev = "046e9cbf67
 tracing.workspace = true
 concurrent-queue = "2.5.0"
 async-fs.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+image = { workspace = true, features = ["png"] }
+
+[build-dependencies]
+embed-resource = "3.0"
 
 [dev-dependencies]
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", tag = "v0.6.0", features = ["test-support"] }

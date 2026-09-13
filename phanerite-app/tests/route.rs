@@ -2,6 +2,12 @@
 
 use phanerite::route::{CrashRef, InstanceRef, Navigation, Route};
 
+fn storage_ident(id: u8) -> phanerite_core::storage::StorageIdent {
+    phanerite_core::storage::StorageIdent {
+        root_dir: format!("/storage-{id}").into(),
+    }
+}
+
 #[test]
 fn back_from_root_stays_on_play() {
     let mut nav = Navigation::new(Route::Play);
@@ -38,14 +44,14 @@ fn replace_does_not_add_history() {
 
 #[test]
 fn equal_instance_ids_in_different_storage_are_distinct() {
-    let first = InstanceRef::for_test(phanerite::seed::storage_ident(1), "shared");
-    let second = InstanceRef::for_test(phanerite::seed::storage_ident(2), "shared");
+    let first = InstanceRef::for_test(storage_ident(1), "shared");
+    let second = InstanceRef::for_test(storage_ident(2), "shared");
     assert_ne!(first, second);
 }
 
 #[test]
 fn equal_crash_ids_in_different_storage_are_distinct() {
-    let first = CrashRef::for_test(phanerite::seed::storage_ident(1), "report");
-    let second = CrashRef::for_test(phanerite::seed::storage_ident(2), "report");
+    let first = CrashRef::for_test(storage_ident(1), "report");
+    let second = CrashRef::for_test(storage_ident(2), "report");
     assert_ne!(first, second);
 }

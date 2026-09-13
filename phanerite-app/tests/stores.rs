@@ -1,8 +1,10 @@
 //! Integration tests for application store mutation and notification behavior.
 
 use phanerite::state::*;
+#[cfg(feature = "seed")]
 use phanerite_core::storage::{Storage, StorageIdent as CoreStorageIdent, multi::MultiStorage};
 
+#[cfg(feature = "seed")]
 #[test]
 fn instance_equal_mutations_do_not_notify() {
     let id = phanerite::seed::storage_ident(1);
@@ -14,6 +16,7 @@ fn instance_equal_mutations_do_not_notify() {
     assert!(!store.set_mod_enabled(&reference, "m-sodium", false));
 }
 
+#[cfg(feature = "seed")]
 #[test]
 fn stale_storage_results_are_ignored() {
     let one = phanerite::seed::storage_ident(1);
@@ -40,6 +43,7 @@ fn settings_equal_values_do_not_notify() {
     assert!(!store.set_accent("gold"));
 }
 
+#[cfg(feature = "seed")]
 #[test]
 fn all_mutable_stores_ignore_equal_values() {
     let mut accounts = AccountStore::new(phanerite::seed::seed_accounts());
@@ -80,6 +84,7 @@ fn all_mutable_stores_ignore_equal_values() {
     assert_eq!(crashes.revision(), 0);
 }
 
+#[cfg(feature = "seed")]
 #[test]
 fn storage_registry_and_context_both_guard_late_results() {
     let root_a = tempfile::tempdir().unwrap();
@@ -112,4 +117,71 @@ fn storage_registry_and_context_both_guard_late_results() {
         phanerite::seed::seed_instances(b.clone())
     ));
     assert_eq!(store.all()[0].storage, b);
+}
+
+#[cfg(feature = "seed")]
+#[test]
+fn preview_and_offline_account_selection_survives_profile_changes_and_removal() {
+    let mut accounts = AccountStore::default();
+    let offline = accounts
+        .add("Steve", AccountType::Offline, None, vec![], None)
+        .unwrap();
+    let profile = |id: &str| PlayerProfileSummary {
+        id: id.into(),
+        name: id.into(),
+        skin_url: String::new(),
+        is_slim: false,
+    };
+    let preview = accounts
+        .add_preview(
+            "Player".into(),
+            AccountType::Aphanite,
+            Some("https://play.example.org".into()),
+            vec![profile("survival"), profile("builder")],
+            "survival".into(),
+        )
+        .unwrap();
+    assert_eq!(accounts.active_id().as_ref(), Some(&preview));
+    assert!(accounts.set_active_profile(&preview, "builder"));
+    assert_eq!(accounts.active_profile().unwrap().id, "builder");
+    let revision = accounts.revision();
+    assert!(!accounts.set_active_profile(&preview, "missing"));
+    assert_eq!(accounts.revision(), revision);
+
+    assert!(accounts.set_active(&offline));
+    assert_eq!(
+        accounts.active().unwrap().account_type,
+        AccountType::Offline
+    );
+    assert!(accounts.remove(&offline));
+    assert_eq!(accounts.active_id().as_ref(), Some(&preview));
+    assert!(accounts.remove(&preview));
+    assert!(accounts.active().is_none());
+    assert!(accounts.is_empty());
+}
+
+#[cfg(feature = "seed")]
+#[test]
+fn preview_accounts_are_scoped_to_the_authentication_server() {
+    let mut accounts = AccountStore::default();
+    let profile = PlayerProfileSummary {
+        id: "player".into(),
+        name: "Player".into(),
+        skin_url: String::new(),
+        is_slim: false,
+    };
+    let mut add = |server: &str| {
+        accounts.add_preview(
+            "Player".into(),
+            AccountType::Yggdrasil,
+            Some(server.into()),
+            vec![profile.clone()],
+            "player".into(),
+        )
+    };
+    let first = add("https://one.example.org").unwrap();
+    assert!(add("https://one.example.org").is_none());
+    let second = add("https://two.example.org").unwrap();
+    assert_ne!(first, second);
+    assert_eq!(accounts.len(), 2);
 }

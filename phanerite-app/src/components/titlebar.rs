@@ -391,7 +391,7 @@ impl ControlIcon {
 }
 
 impl RenderOnce for ControlIcon {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_linux = cfg!(target_os = "linux");
         let is_windows = cfg!(target_os = "windows");
         let hover_fg = self.hover_fg(cx);
@@ -415,6 +415,9 @@ impl RenderOnce for ControlIcon {
             .text_color(cx.theme().foreground)
             .hover(|style| style.bg(hover_bg).text_color(hover_fg))
             .active(|style| style.bg(active_bg).text_color(hover_fg))
+            .when(self.is_close(), |this| {
+                this.rounded_tr(crate::window::content_radii(window).top_right)
+            })
             .when(is_windows, |this| {
                 this.window_control_area(self.window_control_area())
             })
@@ -506,6 +509,7 @@ impl RenderOnce for TitleBar {
         let is_web = cfg!(target_family = "wasm");
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
+        let radii = crate::window::content_radii(window);
 
         let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
 
@@ -525,6 +529,8 @@ impl RenderOnce for TitleBar {
                     cx.theme().background,
                 ))
                 .refine_style(&self.style)
+                .rounded_tl(radii.top_left)
+                .rounded_tr(radii.top_right)
                 .when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())
                 })

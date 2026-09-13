@@ -1,14 +1,16 @@
-//! Primary navigation sidebar and its instance navigation entries.
+//! Primary navigation, flat instance groups, and independent account/settings controls.
 
 use gpui_kit::component::{
-    ActiveTheme as _, Collapsible, Icon, StyledExt as _,
-    button::ButtonVariants as _,
-    sidebar::{Sidebar, SidebarFooter, SidebarItem},
+    ActiveTheme as _, Icon, Selectable as _, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    menu::{DropdownMenu as _, PopupMenuItem},
+    scroll::ScrollableElement as _,
     v_flex,
 };
 use gpui_kit::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Styled as _,
+    Window, div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{
@@ -25,7 +27,22 @@ fn activate(
     move |_, _, cx| app.update(cx, |state, cx| state.push(route.clone(), cx))
 }
 
-#[derive(Clone)]
+fn navigation_button(id: &'static str, active: bool, cx: &App) -> Button {
+    Button::new(id)
+        .ghost()
+        .w_full()
+        .h_8()
+        .px_2p5()
+        .selected(active)
+        .text_color(if active {
+            cx.theme().sidebar_accent_foreground
+        } else {
+            cx.theme().muted_foreground
+        })
+        .when(active, |button| button.bg(cx.theme().sidebar_accent))
+}
+
+#[derive(IntoElement)]
 struct InstanceMenu {
     app: Entity<AppState>,
     current: Route,
@@ -35,174 +52,187 @@ struct InstanceMenu {
     running: Vec<crate::route::InstanceRef>,
 }
 
-impl Collapsible for InstanceMenu {
-    fn is_collapsed(&self) -> bool {
-        false
-    }
-
-    fn collapsed(self, _: bool) -> Self {
-        self
-    }
+#[derive(Clone, Copy)]
+enum Section {
+    Local,
+    Aphanite,
 }
 
-fn instance_section(
-    id: &gpui_kit::ElementId,
-    label: &str,
-    icon: PhaIcon,
-    instances: &[InstanceSummary],
-    current: &Route,
-    running: &[crate::route::InstanceRef],
-    app: Entity<AppState>,
-    open: Entity<bool>,
-    route: Option<Route>,
-    window: &mut Window,
-    cx: &mut App,
-) -> impl IntoElement {
-    let is_open = *open.read(cx);
-    v_flex()
-        .gap_1()
-        .child(
-            div()
-                .id(format!("{id}-{label}"))
-                .h_7()
-                .px_2()
-                .flex()
-                .items_center()
-                .gap_2()
-                .rounded(cx.theme().radius)
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .hover(|style| {
-                    style
-                        .bg(cx.theme().sidebar_accent.opacity(0.8))
-                        .text_color(cx.theme().sidebar_accent_foreground)
-                })
-                .child(Icon::new(icon))
-                .child(div().flex_1().child(label.to_string()))
-                .child(div().child(instances.len().to_string()))
-                .child(Icon::new(if is_open {
-                    PhaIcon::ChevronDown
-                } else {
-                    PhaIcon::ChevronRight
-                }))
-                .on_click({
-                    let app = app.clone();
-                    move |_, _, cx| {
-                        open.update(cx, |is_open, cx| {
-                            *is_open = !*is_open;
-                            cx.notify();
-                        });
-                        if let Some(route) = &route {
-                            app.update(cx, |state, cx| state.push(route.clone(), cx));
-                        }
-                    }
-                }),
-        )
-        .when(is_open, |section| {
-            section.child(
-                v_flex()
-                    .border_l_1()
-                    .border_color(cx.theme().sidebar_border)
-                    .ml_3p5()
-                    .pl_2p5()
-                    .py_0p5()
-                    .gap_1()
-                    .children(instances.iter().cloned().map(|instance| {
-                        let reference = instance.reference();
-                        SidebarInstanceItem::new(
-                            instance,
-                            current == &Route::InstanceDetail(reference.clone()),
-                            running.contains(&reference),
-                            app.clone(),
-                        )
-                        .render(window, cx)
-                        .into_any_element()
-                    })),
-            )
-        })
-}
-
-impl SidebarItem for InstanceMenu {
-    fn render(
-        self,
-        id: impl Into<gpui_kit::ElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        let id = id.into();
-        let favorites_open =
-            window.use_keyed_state(format!("{id}-favorites-open"), cx, |_, _| true);
-        let instances_open =
-            window.use_keyed_state(format!("{id}-instances-open"), cx, |_, _| false);
-        let aphanite_open = window.use_keyed_state(format!("{id}-aphanite-open"), cx, |_, _| false);
+impl InstanceMenu {
+    fn instance_rows(&self, instances: &[InstanceSummary]) -> impl IntoElement {
         v_flex()
-            .id(id.clone())
-            .gap_2()
+            .gap_0p5()
+            .children(instances.iter().cloned().map(|instance| {
+                let reference = instance.reference();
+                SidebarInstanceItem::new(
+                    instance,
+                    matches!(&self.current,
+                        Route::InstanceDetail(active) | Route::Mods(active) | Route::Packs(active)
+                        | Route::Shaders(active) | Route::Worlds(active) | Route::Logs(active)
+                        | Route::LaunchSettings(active) if active == &reference),
+                    self.running.contains(&reference),
+                    self.app.clone(),
+                )
+            }))
+    }
+
+    fn section(&self, section: Section, open: Entity<bool>, cx: &App) -> impl IntoElement {
+        let (id, label, icon, instances, route, toggle_id, toggle_label) = match section {
+            Section::Local => (
+                "sidebar-instances",
+                "Instances",
+                PhaIcon::Layers,
+                &self.local,
+                Route::Instances,
+                "sidebar-instances-toggle",
+                "local instances",
+            ),
+            Section::Aphanite => (
+                "sidebar-aphanite",
+                "Aphanite",
+                PhaIcon::Flame,
+                &self.aphanite,
+                Route::Aphanite,
+                "sidebar-aphanite-toggle",
+                "Aphanite instances",
+            ),
+        };
+        let is_open = *open.read(cx);
+        let active = self.current == route;
+        let disclosure = format!(
+            "{} {toggle_label}",
+            if is_open { "Collapse" } else { "Expand" }
+        );
+
+        v_flex()
+            .mt_3()
+            .gap_0p5()
             .child(
-                div()
-                    .id("sidebar-play")
-                    .h_7()
-                    .px_2()
-                    .flex()
-                    .items_center()
-                    .gap_2()
+                h_flex()
                     .rounded(cx.theme().radius)
-                    .text_sm()
-                    .when(matches!(self.current, Route::Play), |item| {
-                        item.bg(cx.theme().sidebar_accent)
-                            .text_color(cx.theme().sidebar_accent_foreground)
-                            .font_medium()
-                    })
-                    .when(!matches!(self.current, Route::Play), |item| {
-                        item.hover(|style| {
-                            style
-                                .bg(cx.theme().sidebar_accent.opacity(0.8))
-                                .text_color(cx.theme().sidebar_accent_foreground)
-                        })
-                    })
-                    .child(Icon::new(PhaIcon::Play))
-                    .child("Play")
+                    .when(active, |row| row.bg(cx.theme().sidebar_accent))
+                    .child(
+                        navigation_button(id, active, cx)
+                            .debug_selector(move || id.into())
+                            .w_auto()
+                            .flex_1()
+                            .min_w_0()
+                            .rounded_r(rems(0.))
+                            .accessibility_label(label)
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .gap_2p5()
+                                    .child(
+                                        Icon::new(icon)
+                                            .size_4()
+                                            .when(matches!(section, Section::Aphanite), |icon| {
+                                                icon.text_color(crate::theme::flame())
+                                            }),
+                                    )
+                                    .child(div().flex_1().text_left().text_sm().child(label))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(instances.len().to_string()),
+                                    ),
+                            )
+                            .on_click(activate(self.app.clone(), route)),
+                    )
+                    .child(
+                        Button::new(toggle_id)
+                            .debug_selector(move || toggle_id.into())
+                            .ghost()
+                            .size_8()
+                            .rounded_l(rems(0.))
+                            .text_color(cx.theme().muted_foreground)
+                            .icon(
+                                Icon::new(if is_open {
+                                    PhaIcon::ChevronDown
+                                } else {
+                                    PhaIcon::ChevronRight
+                                })
+                                .size_3p5(),
+                            )
+                            .tooltip(disclosure.clone())
+                            .accessibility_label(disclosure)
+                            .on_click(move |_, _, cx| {
+                                open.update(cx, |is_open, cx| {
+                                    *is_open = !*is_open;
+                                    cx.notify();
+                                });
+                            }),
+                    ),
+            )
+            .when(is_open, |section| {
+                section.child(self.instance_rows(instances))
+            })
+    }
+}
+
+impl RenderOnce for InstanceMenu {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let instances_open = window.use_keyed_state("sidebar-instances-open", cx, |_, _| true);
+        let aphanite_open = window.use_keyed_state("sidebar-aphanite-open", cx, |_, _| true);
+        v_flex()
+            .px_2()
+            .py_3()
+            .child(
+                navigation_button("sidebar-play", matches!(self.current, Route::Play), cx)
+                    .debug_selector(|| "sidebar-play".into())
+                    .accessibility_label("Quick Play")
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .gap_2p5()
+                            .child(Icon::new(PhaIcon::Play).size_4())
+                            .child(div().flex_1().text_left().text_sm().child("Quick Play"))
+                            .when(!self.running.is_empty(), |row| {
+                                row.child(
+                                    h_flex()
+                                        .gap_1()
+                                        .text_xs()
+                                        .text_color(cx.theme().primary)
+                                        .child(
+                                            div().size_1p5().rounded_full().bg(cx.theme().primary),
+                                        )
+                                        .child(self.running.len().to_string()),
+                                )
+                            }),
+                    )
                     .on_click(activate(self.app.clone(), Route::Play)),
             )
-            .child(instance_section(
-                &id,
-                "Favorites",
-                PhaIcon::Star,
-                &self.favorites,
-                &self.current,
-                &self.running,
-                self.app.clone(),
-                favorites_open,
-                None,
-                window,
-                cx,
-            ))
-            .child(instance_section(
-                &id,
-                "Instances",
-                PhaIcon::Folder,
-                &self.local,
-                &self.current,
-                &self.running,
-                self.app.clone(),
-                instances_open,
-                Some(Route::Instances),
-                window,
-                cx,
-            ))
-            .child(instance_section(
-                &id,
-                "Aphanite",
-                PhaIcon::Folder,
-                &self.aphanite,
-                &self.current,
-                &self.running,
-                self.app.clone(),
-                aphanite_open,
-                Some(Route::Aphanite),
-                window,
-                cx,
-            ))
+            .child(
+                v_flex()
+                    .mt_3()
+                    .gap_0p5()
+                    .child(
+                        h_flex()
+                            .h_7()
+                            .px_2p5()
+                            .gap_2()
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(Icon::new(PhaIcon::Star).size_3p5())
+                            .child(div().flex_1().child("FAVORITES"))
+                            .child(self.favorites.len().to_string()),
+                    )
+                    .when(self.favorites.is_empty(), |section| {
+                        section.child(
+                            div()
+                                .px_2p5()
+                                .py_1()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No favorites yet"),
+                        )
+                    })
+                    .child(self.instance_rows(&self.favorites)),
+            )
+            .child(self.section(Section::Local, instances_open, cx))
+            .child(self.section(Section::Aphanite, aphanite_open, cx))
     }
 }
 
@@ -210,11 +240,7 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
     let state = app.read(cx);
     let instances = state.instances.read(cx);
     let sessions = state.sessions.read(cx);
-    let account = state
-        .accounts
-        .read(cx)
-        .active()
-        .map(|item| item.username.clone());
+    let account = state.accounts.read(cx).active();
     let menu = InstanceMenu {
         app: app.clone(),
         current: state.route().clone(),
@@ -226,44 +252,124 @@ pub fn render(app: Entity<AppState>, cx: &App) -> impl IntoElement {
             .map(|session| session.instance.clone())
             .collect(),
     };
+    let account_app = app.clone();
 
     v_flex()
-        .h_full()
-        .w_full()
-        .flex_shrink_0()
-        .border_color(cx.theme().sidebar_border)
+        .size_full()
+        .bg(cx.theme().sidebar)
+        .text_color(cx.theme().sidebar_foreground)
+        .child(div().flex_1().min_h_0().overflow_y_scrollbar().child(menu))
         .child(
-            Sidebar::new("launcher-sidebar")
-                .border_0()
-                .w_full()
-                .child(menu)
-                .footer(
-                    SidebarFooter::new().child(
-                        v_flex()
-                            .gap_2()
-                            .child(
-                                gpui_kit::component::button::Button::new("sidebar-account")
-                                    .ghost()
-                                    .label(account.unwrap_or_else(|| "Offline".into()))
-                                    .on_click({
-                                        let app = app.clone();
-                                        move |_, _, cx| {
-                                            app.update(cx, |state, cx| {
-                                                state.push(Route::Accounts, cx)
-                                            })
-                                        }
-                                    }),
+            v_flex()
+                .flex_shrink_0()
+                .px_2()
+                .pb_2()
+                .gap_2()
+                .child(
+                    Button::new("sidebar-account")
+                        .debug_selector(|| "sidebar-account".into())
+                        .ghost()
+                        .w_full()
+                        .h(rems(3.5))
+                        .px_2p5()
+                        .py_2()
+                        .bg(crate::theme::sidebar_card())
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .accessibility_label("Switch account")
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .gap_2p5()
+                                .child(
+                                    super::minecraft_avatar::render(
+                                        account
+                                            .as_ref()
+                                            .and_then(|account| account.active_profile()),
+                                        cx,
+                                    )
+                                    .size_7(),
+                                )
+                                .child(
+                                    v_flex()
+                                        .min_w_0()
+                                        .flex_1()
+                                        .text_left()
+                                        .child(
+                                            div().text_sm().font_medium().truncate().child(
+                                                account
+                                                    .as_ref()
+                                                    .map(|account| account.username.clone())
+                                                    .unwrap_or_else(|| "Add an account".into()),
+                                            ),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .truncate()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(
+                                                    account
+                                                        .as_ref()
+                                                        .map(|account| {
+                                                            format!(
+                                                                "{} account",
+                                                                account.account_type.label()
+                                                            )
+                                                        })
+                                                        .unwrap_or_else(|| {
+                                                            "Choose a player profile".into()
+                                                        }),
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    Icon::new(PhaIcon::ChevronDown)
+                                        .size_3p5()
+                                        .text_color(cx.theme().muted_foreground),
+                                ),
+                        )
+                        .dropdown_menu(move |mut menu, _, cx| {
+                            let accounts = account_app.read(cx).accounts.clone();
+                            let active = accounts.read(cx).active_id();
+                            menu = menu.label("Switch account");
+                            for account in accounts.read(cx).all() {
+                                let accounts = accounts.clone();
+                                menu = menu.item(
+                                    PopupMenuItem::new(account.username)
+                                        .checked(active.as_ref() == Some(&account.id))
+                                        .on_click(move |_, _, cx| {
+                                            accounts.update(cx, |store, cx| {
+                                                if store.set_active(&account.id) {
+                                                    cx.notify();
+                                                }
+                                            });
+                                        }),
+                                );
+                            }
+                            menu.separator().item(
+                                PopupMenuItem::new("Manage accounts")
+                                    .icon(PhaIcon::Users)
+                                    .on_click(activate(account_app.clone(), Route::Accounts)),
                             )
-                            .child(
-                                gpui_kit::component::button::Button::new("sidebar-settings")
-                                    .ghost()
-                                    .icon(PhaIcon::Settings)
-                                    .label("Settings")
-                                    .on_click(move |_, _, cx| {
-                                        app.update(cx, |state, cx| state.push(Route::Settings, cx))
-                                    }),
-                            ),
-                    ),
+                        }),
+                )
+                .child(
+                    navigation_button(
+                        "sidebar-settings",
+                        matches!(state.route(), Route::Settings),
+                        cx,
+                    )
+                    .debug_selector(|| "sidebar-settings".into())
+                    .accessibility_label("Settings")
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .gap_2p5()
+                            .child(Icon::new(PhaIcon::Settings).size_4())
+                            .child(div().text_sm().child("Settings")),
+                    )
+                    .on_click(activate(app, Route::Settings)),
                 ),
         )
 }

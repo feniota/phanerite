@@ -5,12 +5,76 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "src/app_metadata.rs"]
+mod app_metadata;
+
 fn main() {
     println!("cargo::rerun-if-changed=migrations");
+    println!("cargo::rerun-if-changed=src/app_metadata.rs");
+    println!("cargo::rerun-if-changed=assets/app-icons/phanerite.ico");
 
     if let Err(error) = generate_migrations() {
         panic!("failed to generate migrations: {error}");
     }
+
+    // Build scripts run on the host; inspect the target so cross-compilation
+    // also embeds the resources.
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        compile_windows_resources().expect("failed to compile Windows application resources");
+    }
+}
+
+fn compile_windows_resources() -> io::Result<()> {
+    let icon = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap())
+        .join("assets/app-icons/phanerite.ico");
+    let icon = icon.to_string_lossy().replace('\\', "\\\\");
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let file_version = format!(
+        "{},{},{},0",
+        env::var("CARGO_PKG_VERSION_MAJOR").unwrap(),
+        env::var("CARGO_PKG_VERSION_MINOR").unwrap(),
+        env::var("CARGO_PKG_VERSION_PATCH").unwrap(),
+    );
+    let app_name = app_metadata::APP_NAME;
+    let app_title = app_metadata::APP_WINDOW_TITLE;
+    let app_id = app_metadata::APP_ID;
+    // GPUI's Windows backend loads the executable's icon with resource ID 1.
+    let resources = format!(
+        r#"1 ICON "{icon}"
+
+1 VERSIONINFO
+FILEVERSION {file_version}
+PRODUCTVERSION {file_version}
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "{app_title}\0"
+            VALUE "FileVersion", "{version}\0"
+            VALUE "ProductName", "{app_name}\0"
+            VALUE "ProductVersion", "{version}\0"
+            VALUE "InternalName", "{app_id}\0"
+            VALUE "OriginalFilename", "phanerite.exe\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
+"#,
+    );
+    let path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("phanerite.rc");
+    fs::write(&path, resources)?;
+    embed_resource::compile_for_everything(&path, embed_resource::NONE)
+        .manifest_required()
+        .map_err(io::Error::other)
 }
 
 fn generate_migrations() -> io::Result<()> {

@@ -1,7 +1,7 @@
 //! Theme application, typography scale, and shared visual constants.
 
 use gpui_kit::component::{Theme, ThemeMode};
-use gpui_kit::{App, Hsla, Window, px};
+use gpui_kit::{App, BoxShadow, Hsla, Pixels, Window, px};
 
 use crate::palette::{self, token};
 
@@ -28,13 +28,33 @@ pub mod text {
 /// Border radius of the general elements, matching `--radius`.
 pub const RADIUS: f32 = 6.0;
 
+/// Native window geometry stays independent of application text zoom.
+pub const WINDOW_RADIUS: Pixels = px(10.);
+
+pub(crate) fn window_shadows(active: bool) -> Vec<BoxShadow> {
+    let opacity = if active { 1. } else { 0.7 };
+    let color = palette::color_alpha(0x000000, 0.18 * opacity);
+    vec![
+        BoxShadow::new(px(0.), px(2.), color)
+            .blur_radius(px(10.))
+            .spread_radius(px(-1.)),
+        BoxShadow::new(px(0.), px(1.), color).blur_radius(px(3.)),
+    ]
+}
+
+pub(crate) fn window_overlay() -> Hsla {
+    palette::color_alpha(0x000000, 0.6)
+}
+
 /// Applies the complete Phanerite palette to a component theme. Dark only,
 /// like the prototype; the light configuration receives the same values so a
 /// system appearance change cannot leave the window half-styled.
 pub fn apply_palette(theme: &mut Theme) {
     let colors = &mut theme.colors;
 
-    let background = palette::color(token::BACKGROUND);
+    // The prototype's window inherits bg-card; --background is the darker
+    // surface outside the window and in its status bar.
+    let background = palette::color(token::CARD);
     let foreground = palette::color(token::FOREGROUND);
     let card = palette::color(token::CARD);
     let popover = palette::color(token::POPOVER);
@@ -60,7 +80,9 @@ pub fn apply_palette(theme: &mut Theme) {
     colors.caret = foreground;
     colors.drag_border = primary;
     colors.drop_target = palette::color_alpha(token::PRIMARY, 0.2);
-    colors.overlay = palette::color_alpha(0x000000, 0.6);
+    // The shell paints the dimmer with the window's rounded corners. Keep the
+    // toolkit backdrop transparent; it still owns modal input and dismissal.
+    colors.overlay = palette::color_alpha(0x000000, 0.0);
     colors.window_border = border;
 
     colors.popover = popover;
@@ -165,12 +187,12 @@ pub fn apply_palette(theme: &mut Theme) {
 
     colors.title_bar = card;
     colors.title_bar_border = border;
-    colors.status_bar = background;
+    colors.status_bar = palette::color(token::BACKGROUND);
     colors.status_bar_border = border;
     colors.tiles = background;
 
     colors.sidebar = sidebar;
-    colors.sidebar_foreground = muted_foreground;
+    colors.sidebar_foreground = foreground;
     colors.sidebar_accent = accent;
     colors.sidebar_accent_foreground = accent_foreground;
     colors.sidebar_border = border;
@@ -200,6 +222,31 @@ pub fn apply_palette(theme: &mut Theme) {
     theme.radius_lg = px(RADIUS + 2.0);
     theme.font_size = px(text::BASE);
     theme.shadow = false;
+}
+
+/// Product-specific roles that do not have a GPUI Component equivalent.
+pub fn sidebar_card() -> Hsla {
+    palette::color(token::SIDEBAR_CARD)
+}
+
+pub fn terminal() -> Hsla {
+    palette::color_alpha(token::TERMINAL, 0.4)
+}
+
+pub fn flame() -> Hsla {
+    palette::color(token::FLAME)
+}
+
+pub fn launch() -> Hsla {
+    palette::color(token::LAUNCH)
+}
+
+pub fn launch_foreground() -> Hsla {
+    palette::color(token::LAUNCH_FOREGROUND)
+}
+
+pub fn accent_swatch(name: &str) -> Hsla {
+    palette::color(palette::accent_swatch(name))
 }
 
 /// Apply the selected accent without replacing the existing neutral palette.

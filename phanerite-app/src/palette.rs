@@ -1,7 +1,8 @@
 //! Phanerite color tokens, accent presets, and GPUI color conversions.
 
 // Source values come from design/src/routes/layout.css. OKLCH is the source
-// of truth; these are offline OKLab -> linear sRGB -> gamma conversions.
+// of truth; these are offline OKLab -> linear sRGB -> gamma conversions,
+// except for the sidebar surfaces calibrated to the reviewed Web screenshot.
 pub mod token {
     pub const BACKGROUND: u32 = 0x090B09; // oklch(.145 .005 150)
     pub const FOREGROUND: u32 = 0xEFF1EF; // oklch(.955 .003 150)
@@ -18,7 +19,10 @@ pub mod token {
     pub const ACCENT: u32 = 0x212522; // oklch(.26 .009 150)
     pub const ACCENT_FOREGROUND: u32 = 0xF4F6F4; // oklch(.97 .003 150)
     pub const DESTRUCTIVE: u32 = 0xF05653; // oklch(.66 .19 25)
-    pub const SIDEBAR: u32 = 0x0F110F; // oklch(.175 .005 150)
+    // Match the visible Web reference. Its screenshot has brighter dark tones
+    // than the browser's raw sRGB conversion of the CSS sidebar/card colors.
+    pub const SIDEBAR: u32 = 0x161817;
+    pub const SIDEBAR_CARD: u32 = 0x191B19;
     pub const CHART_2: u32 = 0x979D98; // oklch(.69 .01 150)
     pub const CHART_3: u32 = 0x3A6343; // oklch(.46 .07 150)
     pub const CHART_4: u32 = 0xDCAF61; // oklch(.78 .11 80)
@@ -56,6 +60,21 @@ pub mod mc {
     pub const LAVA: u32 = 0xF3680F; // oklch(.68 .19 45)
     pub const END: u32 = 0x44374F; // oklch(.36 .045 310)
     pub const END_DARK: u32 = 0x281B32; // oklch(.25 .045 310)
+}
+
+/// Pixel colors for the default player artwork used when a skin is unavailable.
+/// These are image content, independent of the interface accent.
+pub mod skin {
+    pub const HAIR: u32 = 0x3B2B22;
+    pub const SKIN: u32 = 0xB8886B;
+    pub const SKIN_SHADE: u32 = 0x98694F;
+    pub const SHIRT: u32 = 0x239DA4;
+    pub const SHIRT_SHADE: u32 = 0x177C87;
+    pub const TROUSERS: u32 = 0x494B92;
+    pub const SHOES: u32 = 0x35353E;
+    pub const EYES: u32 = 0xD9DEE9;
+    pub const ALEX_HAIR: u32 = 0xA86435;
+    pub const ALEX_SHIRT: u32 = 0x738846;
 }
 
 /// Per-loader single-hue ramps, darkest first. Index 0..3 is the shading scale

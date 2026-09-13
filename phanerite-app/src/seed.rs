@@ -358,6 +358,26 @@ pub fn seed_accounts() -> Vec<phanerite_core::auth::Account> {
         .collect()
 }
 
+/// The provider presentation in the design, without fabricated credentials.
+pub fn seed_account_store() -> AccountStore {
+    let mut store = AccountStore::new(seed_accounts().into_iter().filter(|account| {
+        !matches!(account, phanerite_core::auth::Account::Offline(auth) if auth.nickname == "Enita_Nureya")
+    }).collect());
+    store.add_preview(
+        "Enita_Nureya".into(),
+        AccountType::Microsoft,
+        None,
+        vec![PlayerProfileSummary {
+            id: "profile-enita".into(),
+            name: "enita".into(),
+            skin_url: "https://mc-heads.net/skin/Enita_Nureya".into(),
+            is_slim: true,
+        }],
+        "profile-enita".into(),
+    );
+    store
+}
+
 pub fn seed_runtimes() -> Vec<JavaRuntimeSummary> {
     vec![
         JavaRuntimeSummary {

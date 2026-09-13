@@ -1,6 +1,5 @@
 //! Native application entry point that initializes GPUI and opens the main window.
 
-use gpui_kit::component::{Root, TitleBar};
 use gpui_kit::*;
 use phanerite::Phanerite;
 use phanerite::assets::Assets;
@@ -9,18 +8,8 @@ fn main() {
     let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
-        let load_font = |path| {
-            cx.asset_source()
-                .load(path)
-                .expect("failed to load bundled font")
-                .expect("bundled font is missing")
-        };
-        cx.text_system()
-            .add_fonts(vec![
-                load_font("fonts/SarasaAdwaitaUiSC-Regular.ttf.zst"),
-                load_font("fonts/AdwaitaMono-Regular.ttf.zst"),
-            ])
-            .expect("failed to register bundled fonts");
+        cx.set_app_identity(phanerite::APP_ID, phanerite::APP_NAME);
+        phanerite::assets::load_fonts(cx).expect("failed to register bundled fonts");
 
         gpui_kit::init(cx);
         phanerite::theme::install("emerald", None, cx);
@@ -28,6 +17,7 @@ fn main() {
 
         cx.spawn(async move |cx| {
             let window_options = cx.update(|cx| WindowOptions {
+                window_min_size: Some(size(px(900.), px(600.))),
                 window_bounds: Some(gpui_kit::WindowBounds::Windowed(
                     gpui_kit::Bounds::<Pixels>::centered(
                         None,
@@ -35,11 +25,11 @@ fn main() {
                         cx,
                     ),
                 )),
-                ..TitleBar::window_options()
+                ..phanerite::window::options()
             });
             cx.open_window(window_options, |window, cx| {
-                let view = cx.new(|cx| Phanerite::new(cx));
-                cx.new(|cx| Root::new(view, window, cx))
+                let view = cx.new(Phanerite::new);
+                cx.new(|cx| phanerite::window::root(view, window, cx))
             })
             .expect("Failed to open window");
         })

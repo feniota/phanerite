@@ -10,9 +10,11 @@ pub mod logs;
 pub mod mods;
 pub mod packs;
 pub mod play;
+pub(crate) mod resources;
 pub mod settings;
 pub mod setup;
 pub mod shaders;
+pub(crate) mod widgets;
 pub mod worlds;
 
 use gpui_kit::prelude::FluentBuilder as _;
@@ -20,10 +22,7 @@ use gpui_kit::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 
-use crate::{
-    route::{CrashRef, InstanceRef, Route},
-    state::AppState,
-};
+use crate::{route::Route, state::AppState};
 
 pub fn render(
     route: &Route,
@@ -64,28 +63,6 @@ pub fn render(
         })
 }
 
-pub(crate) fn page_title(
-    title: impl Into<gpui_kit::SharedString>,
-    description: impl Into<gpui_kit::SharedString>,
-    cx: &App,
-) -> impl IntoElement {
-    use gpui_kit::component::{ActiveTheme as _, StyledExt as _, v_flex};
-    v_flex()
-        .gap_1()
-        .px_6()
-        .pt_6()
-        .pb_4()
-        .border_b_1()
-        .border_color(cx.theme().border)
-        .child(div().text_lg().font_semibold().child(title.into()))
-        .child(
-            div()
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child(description.into()),
-        )
-}
-
 pub(crate) fn page_shell(
     title: Option<impl IntoElement>,
     content: impl IntoElement,
@@ -94,6 +71,7 @@ pub(crate) fn page_shell(
     use gpui_kit::component::{ActiveTheme as _, scroll::ScrollableElement as _, v_flex};
     v_flex()
         .size_full()
+        .min_w_0()
         .min_h_0()
         .bg(cx.theme().background)
         .when_some(title, |element, title| element.child(title))
@@ -101,9 +79,8 @@ pub(crate) fn page_shell(
             div()
                 .flex_1()
                 .min_h_0()
-                .p_6()
                 .overflow_y_scrollbar()
-                .child(content),
+                .child(div().min_w_0().p_6().child(content)),
         )
 }
 
@@ -114,9 +91,12 @@ pub(crate) fn route_button(
     app: Entity<AppState>,
 ) -> gpui_kit::component::button::Button {
     use gpui_kit::component::button::Button;
-    Button::new(id).label(label).on_click(move |_, _, cx| {
-        app.update(cx, |state, cx| state.push(route.clone(), cx));
-    })
+    let label = label.into();
+    Button::new(id)
+        .when(!label.is_empty(), |button| button.label(label))
+        .on_click(move |_, _, cx| {
+            app.update(cx, |state, cx| state.push(route.clone(), cx));
+        })
 }
 
 pub(crate) fn back_button(app: Entity<AppState>) -> gpui_kit::component::button::Button {
@@ -126,7 +106,7 @@ pub(crate) fn back_button(app: Entity<AppState>) -> gpui_kit::component::button:
     };
     Button::new("page-back")
         .ghost()
-        .xsmall()
+        .small()
         .icon(crate::assets::PhaIcon::ArrowLeft)
         .label("Back")
         .on_click(move |_, _, cx| app.update(cx, |state, cx| state.back(cx)))
@@ -150,12 +130,4 @@ pub(crate) fn missing_resource(label: &str, app: Entity<AppState>) -> impl IntoE
                 .label("Back")
                 .on_click(move |_, _, cx| app.update(cx, |state, cx| state.back(cx))),
         )
-}
-
-pub(crate) fn instance_exists(reference: &InstanceRef, app: &Entity<AppState>, cx: &App) -> bool {
-    app.read(cx).instances.read(cx).find(reference).is_some()
-}
-
-pub(crate) fn crash_exists(reference: &CrashRef, app: &Entity<AppState>, cx: &App) -> bool {
-    app.read(cx).crashes.read(cx).find(reference).is_some()
 }

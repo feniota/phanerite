@@ -3,7 +3,7 @@
 use crate::assets::PhaIcon;
 use gpui_kit::App;
 use gpui_kit::Window;
-use gpui_kit::component::{Icon, WindowExt as _};
+use gpui_kit::component::{Icon, WindowExt as _, button::ButtonVariant, dialog::DialogButtonProps};
 use std::rc::Rc;
 
 /// Opens the shared destructive confirmation pattern. The callback performs
@@ -22,6 +22,13 @@ pub fn open(
         let on_confirm = on_confirm.clone();
         alert
             .confirm()
+            .button_props(
+                DialogButtonProps::default()
+                    .show_cancel(true)
+                    .cancel_text("Cancel")
+                    .ok_text("Delete")
+                    .ok_variant(ButtonVariant::Danger),
+            )
             .icon(Icon::new(PhaIcon::TriangleAlert))
             .title(title.clone())
             .description(format!("{} This cannot be undone.", consequence))

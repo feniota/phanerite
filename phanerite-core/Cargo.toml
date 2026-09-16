@@ -70,6 +70,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 async-executor = "1.14"
+pollster = "1.0.1"
 dotenvy = "0.15"
 smol = "2.0"
 tracing-subscriber = "0.3"

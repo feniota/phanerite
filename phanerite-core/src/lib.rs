@@ -28,7 +28,7 @@
 //! ## Composable and Extensible by Default
 //!
 //! Nearly **everything** that needs to be passed around different modules
-//! in Phanerite Core is trait. Let's say the Downloaders. Whenever Phanerite
+//! in Phanerite Core is trait. For example, whenever Phanerite
 //! Core needs a Downloader, it calls for an *implementor* of the
 //! [`Downloader`](download::Downloader) trait, not a specific struct, so
 //! you may truly decide exactly what your code will do.
@@ -58,8 +58,8 @@
 //! ## Performance
 //!
 //! Phanerite Core has concurrency in mind by utilizing libraries like
-//! [`scc`](https://docs.rs/scc/latest/scc). Also, it tries to perform
-//! minimum copies and dispatch type parameters statically as much as
+//! [`scc`](https://docs.rs/scc/latest/scc). It also tries to perform
+//! minimum copies and dispatch type parameters as statically as
 //! possible.
 //!
 //! # Getting started

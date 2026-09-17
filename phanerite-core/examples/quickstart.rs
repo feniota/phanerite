@@ -43,7 +43,7 @@ fn main() -> Result<(), Error> {
             .for_each(|e| eprintln!("{e}"));
 
         // Create a local, unauthenticated account and launch the game.
-        let auth = offline::Authentication::new("Player");
+        let auth = offline::Authentication::new("Steve");
 
         // HTTP requests are sent by the Downloader
         auth.ready(&downloader).await?;

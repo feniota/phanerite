@@ -4,6 +4,9 @@ use gpui_kit::*;
 use phanerite::Phanerite;
 use phanerite::assets::Assets;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() {
     let app = gpui_kit::application().with_assets(Assets);
 

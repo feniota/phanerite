@@ -1,4 +1,0 @@
-{
-  "ignorePatterns": ["deno.jsonc"],
-  "svelte": true
-}

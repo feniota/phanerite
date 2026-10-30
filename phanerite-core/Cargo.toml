@@ -30,11 +30,14 @@ strum.workspace = true
 
 # networking / http
 http.workspace = true
-isahc = { version = "2.0", default-features = false, features = [
-    "http2",
-    "rustls-tls-webpki-roots",
-    "static-curl",
-] }
+trillium-cache = { version = "0.2", features = ["client", "smol"] }
+trillium-client = "0.9"
+trillium-client-retry = "0.1"
+trillium-compression = { version = "0.3", features = ["client"] }
+trillium-quinn = { version = "0.1", features = ["webpki-roots"] }
+trillium-redirect = { version = "0.3", features = ["client"] }
+trillium-rustls = "0.11"
+trillium-smol = "0.7"
 url.workspace = true
 
 # cryptography / encoding
@@ -51,8 +54,8 @@ bzip2 = "0.6"
 flate2 = "1.1"
 tar = "0.4"
 xz2 = "0.1"
-zip = "8.6"
-zstd = { version = "0.13", default-features = false }
+zip = "9.1"
+zstd = { version = "0.14", default-features = false }
 
 # database / data structures
 bytes.workspace = true

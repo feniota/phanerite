@@ -16,7 +16,10 @@ static VERSION_INDEX_URL: LazyLock<Url> = LazyLock::new(|| {
 
 impl VersionIndex {
     pub async fn sync(downloader: &impl Downloader) -> Result<Self> {
-        let body = downloader.fetch(VERSION_INDEX_URL.clone(), None).await?;
+        let body = downloader
+            .get(VERSION_INDEX_URL.clone(), http::HeaderMap::new())
+            .await?
+            .into_body();
         let json = serde_json::from_slice(&body)?;
         Ok(json)
     }

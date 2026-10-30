@@ -25,7 +25,6 @@ strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.24", features = ["serde", "v7"] }
-zstd = "0.13.3"
 
 [profile.dev.package]
 gpui-pre = { opt-level = 3 }

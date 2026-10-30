@@ -276,6 +276,24 @@ fn get_bearer(url: &Url, token: &str) -> Request<Vec<u8>> {
         .expect("building a request from a valid URL should never fail")
 }
 
+async fn post_request(
+    downloader: &impl Downloader,
+    request: Request<Vec<u8>>,
+) -> Result<Response<Bytes>> {
+    let (parts, body) = request.into_parts();
+    let url = parts.uri.to_string().parse::<Url>()?;
+    downloader.post(url, parts.headers, body).await
+}
+
+async fn get_request(
+    downloader: &impl Downloader,
+    request: Request<Vec<u8>>,
+) -> Result<Response<Bytes>> {
+    let (parts, _) = request.into_parts();
+    let url = parts.uri.to_string().parse::<Url>()?;
+    downloader.get(url, parts.headers).await
+}
+
 // 将秒数转换为 `TimeDelta`，超出范围时归零
 /// Converts seconds into a `TimeDelta`, falling back to zero when out of range
 fn seconds(secs: i64) -> TimeDelta {
@@ -389,7 +407,7 @@ impl<'a, D: Downloader> Login<'a, String, D> {
             &self.tenant.oauth("devicecode"),
             &[("client_id", &self.client_id), ("scope", &self.scope)],
         );
-        let res = self.downloader.send(req).await?.into_body();
+        let res = post_request(self.downloader, req).await?.into_body();
         let res =
             serde_json::from_slice::<OAuthResponse<ResponseDeviceCode>>(&res)?.into_result()?;
 
@@ -466,7 +484,7 @@ async fn refresh_grant(
             ("scope", scope),
         ],
     );
-    let res = downloader.send(req).await?.into_body();
+    let res = post_request(downloader, req).await?.into_body();
     serde_json::from_slice::<OAuthResponse<Token>>(&res)?.into_result()
 }
 
@@ -551,7 +569,7 @@ impl<D: Downloader> Pending<'_, D> {
                 ("device_code", self.device_code.expose_secret()),
             ],
         );
-        let res = self.downloader.send(req).await?.into_body();
+        let res = post_request(self.downloader, req).await?.into_body();
         let token = match serde_json::from_slice::<OAuthResponse<Token>>(&res)? {
             OAuthResponse::Success(v) => v,
             // 用户尚未完成授权不是错误
@@ -807,7 +825,7 @@ async fn check_entitlements(downloader: &impl Downloader, token: &SecretString) 
     }
 
     let req = get_bearer(&MINECRAFT_ENTITLEMENTS, token.expose_secret());
-    let res = downloader.send(req).await?;
+    let res = get_request(downloader, req).await?;
     if !res.status().is_success() {
         return Err(service_error("Minecraft entitlements", &res));
     }
@@ -827,7 +845,7 @@ async fn check_entitlements(downloader: &impl Downloader, token: &SecretString) 
 /// Fetches the player profile
 async fn fetch_profile(downloader: &impl Downloader, token: &SecretString) -> Result<Profile> {
     let req = get_bearer(&MINECRAFT_PROFILE, token.expose_secret());
-    let res = downloader.send(req).await?;
+    let res = get_request(downloader, req).await?;
     // 拥有游戏但还没有创建角色时返回 404
     if res.status() == 404 {
         return Err(MicrosoftError::NoProfile.into());

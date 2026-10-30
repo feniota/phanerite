@@ -33,7 +33,10 @@ impl LoaderInstall for Fabric {
             .unwrap()
             .extend(["v2", "versions", "loader", version.as_ref()]);
 
-        let body = downloader.fetch(url, None).await?;
+        let body = downloader
+            .get(url, http::HeaderMap::new())
+            .await?
+            .into_body();
         let json = serde_json::from_slice::<Vec<MetaData>>(&body)?;
 
         Ok(Fabric { list: json })
@@ -60,7 +63,10 @@ impl LoaderInstall for Fabric {
             "json",
         ]);
 
-        let body = downloader.fetch(url, None).await?;
+        let body = downloader
+            .get(url, http::HeaderMap::new())
+            .await?
+            .into_body();
         let json = serde_json::from_slice::<OverlayManifest>(&body)?;
         raw.manifest.merge_overlay(json, 30000);
         Ok(())

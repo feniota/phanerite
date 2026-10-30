@@ -12,7 +12,7 @@ use std::collections::HashMap;
 impl Version {
     pub async fn get_manifest(&self, downloader: &impl Downloader) -> Result<VersionManifest> {
         let body = downloader
-            .fetch(self.url.clone(), Some(self.sha1.clone().into()))
+            .get_check(self.url.clone(), self.sha1.clone().into())
             .await?;
         let json = serde_json::from_slice(&body)?;
         Ok(json)

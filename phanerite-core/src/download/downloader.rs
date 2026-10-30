@@ -6,14 +6,21 @@ use crate::utils::Hash;
 use async_channel::{Receiver, Sender};
 use bytes::Bytes;
 use futures::{AsyncReadExt, AsyncWriteExt};
-use http::{Request, Response};
-use isahc::config::{Configurable, RedirectPolicy};
-use isahc::{AsyncReadResponseExt, HttpClient};
+use http::{HeaderMap, Response};
 use std::mem::forget;
 use std::num::NonZeroU8;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use tracing::{debug, error, warn};
+use trillium_cache::InMemoryStorage;
+use trillium_cache::client::Cache;
+use trillium_client::Client;
+use trillium_client_retry::RetryHandler;
+use trillium_compression::client::Compression;
+use trillium_quinn::ClientQuicConfig;
+use trillium_redirect::client::FollowRedirects;
+use trillium_rustls::RustlsConfig;
+use trillium_smol::ClientConfig;
 use url::Url;
 
 pub struct DownloaderBuilder {
@@ -133,15 +140,21 @@ impl DownloaderBuilder {
             retries: self.retries,
             concurrency: self.concurrency,
             threshold: self.threshold,
-            client: HttpClient::builder()
-                .default_header("User-Agent", self.user_agent)
-                .redirect_policy(RedirectPolicy::Limit(10))
-                .tcp_keepalive(Duration::from_secs(60))
-                .low_speed_timeout(1024, Duration::from_secs(30))
-                .dns_cache(Duration::from_secs(300))
-                .connection_cache_size(self.concurrency * 2)
-                .tcp_nodelay()
-                .build()?,
+            client: Client::new_with_quic(
+                RustlsConfig::<ClientConfig>::default(),
+                ClientQuicConfig::with_webpki_roots(),
+            )
+            .with_handler((
+                FollowRedirects::new().with_max_redirects(10),
+                Compression::new(),
+                Cache::new(InMemoryStorage::default()).shared(),
+                RetryHandler::new()
+                    .with_exponential_backoff(Duration::from_millis(100))
+                    .with_max_attempts(5)
+                    .with_max_elapsed(Duration::from_secs(10)),
+            ))
+            .with_default_header("User-Agent", self.user_agent)
+            .with_default_header("Accept-Encoding", "zstd, br;q=0.9, gzip;q=0.8"),
             large_tx,
             large_rx,
             small_tx,
@@ -157,7 +170,7 @@ pub struct RawDownloader {
 
     // HTTP 客户端
     /// HTTP client
-    client: HttpClient,
+    client: Client,
     // 获取大缓冲
     /// Acquires a large buffer
     large_rx: Receiver<Vec<u8>>,
@@ -173,41 +186,68 @@ pub struct RawDownloader {
 }
 
 impl Downloader for RawDownloader {
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
-        for _ in 0..self.retries {
-            let res = self.client.get_async(url.as_str()).await?.bytes().await?;
-            if let Some(h) = &hash {
-                let mut hasher = h.hasher();
-                hasher.update(&res);
-                let digest = hasher.finalize();
-                if digest != *h {
-                    error!("hash mismatch");
-                    continue;
-                }
-            }
-            return Ok(Bytes::from(res));
+    async fn get(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.get(url.as_str()), headers);
+        Self::collect_response(conn).await
+    }
+    async fn get_check(&self, url: Url, hash: Hash) -> Result<Bytes> {
+        if hash.is_empty() {
+            return Err(Error::other("get_check requires a non-empty hash"));
         }
-        Err(Error::other("download failed after retries"))
+
+        for attempt in 0..=self.retries {
+            let response = self.get(url.clone(), HeaderMap::new()).await?;
+            if !response.status().is_success() {
+                return Err(Error::other(format!(
+                    "GET {url} returned {}",
+                    response.status()
+                )));
+            }
+
+            let body = response.into_body();
+            let mut hasher = hash.hasher();
+            hasher.update(&body);
+            if hasher.finalize() == hash {
+                return Ok(body);
+            }
+
+            error!(
+                %url,
+                attempt = attempt + 1,
+                retrying = attempt < self.retries,
+                "download hash mismatch"
+            );
+        }
+
+        Err(Error::other(format!(
+            "GET {url} failed hash verification after {} attempts",
+            self.retries + 1
+        )))
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
-        let req = Request::post(url.as_str())
-            .header("Content-Type", "application/json")
-            .body(body.as_ref().as_bytes().to_vec())
-            .expect("building a request from a valid URL should never fail");
-        self.send(req).await
+    async fn post(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.post(url.as_str()).with_body(body), headers);
+        Self::collect_response(conn).await
     }
-    async fn head(&self, url: Url) -> Result<Response<()>> {
-        let req = Request::head(url.as_str())
-            .body(Vec::new())
-            .expect("building a request from a valid URL should never fail");
-        let (parts, _) = self.send(req).await?.into_parts();
+    async fn put(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.put(url.as_str()).with_body(body), headers);
+        Self::collect_response(conn).await
+    }
+    async fn patch(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.patch(url.as_str()).with_body(body), headers);
+        Self::collect_response(conn).await
+    }
+    async fn delete(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.delete(url.as_str()).with_body(body), headers);
+        Self::collect_response(conn).await
+    }
+    async fn head(&self, url: Url, headers: HeaderMap) -> Result<Response<()>> {
+        let conn = Self::with_headers(self.client.build_conn("HEAD", url.as_str()), headers);
+        let (parts, _) = Self::collect_response(conn).await?.into_parts();
         Ok(Response::from_parts(parts, ()))
     }
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
-        let mut res = self.client.send_async(req).await?;
-        let body = res.bytes().await?;
-        let (parts, _) = res.into_parts();
-        Ok(Response::from_parts(parts, Bytes::from(body)))
+    async fn options(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
+        let conn = Self::with_headers(self.client.build_conn("OPTIONS", url.as_str()), headers);
+        Self::collect_response(conn).await
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         // 用于发送失败信号
@@ -261,8 +301,31 @@ impl Downloader for RawDownloader {
 }
 
 impl RawDownloader {
+    async fn collect_response(conn: trillium_client::Conn) -> Result<Response<Bytes>> {
+        let mut conn = conn.await?;
+
+        let status = conn.status().unwrap().code();
+        let mut builder = Response::builder().status(status);
+
+        for (name, values) in conn.response_headers().iter() {
+            for value in values {
+                builder = builder.header(name.to_string(), value.as_ref());
+            }
+        }
+
+        let body = Bytes::from(conn.response_body().read_bytes().await?);
+
+        Ok(builder.body(body).unwrap())
+    }
     pub fn builder() -> DownloaderBuilder {
         DownloaderBuilder::default()
+    }
+
+    fn with_headers(mut conn: trillium_client::Conn, headers: HeaderMap) -> trillium_client::Conn {
+        for (name, value) in headers.iter() {
+            conn = conn.with_request_header(name.as_str().to_owned(), value.as_bytes().to_vec());
+        }
+        conn
     }
 
     // 重试体
@@ -283,13 +346,13 @@ impl RawDownloader {
 
         // 构造和发送请求
         let uri = task.url.as_str();
-        let mut res = self.client.get_async(uri).await?;
+        let mut res = self.client.get(uri).await?;
 
         // 补充文件大小（如果不存在）
         if let Ok(len) = res
-            .headers()
+            .response_headers()
             .get("content-length")
-            .and_then(|t| t.to_str().ok())
+            .and_then(|values| values.as_str())
             .unwrap_or_default()
             .parse()
         {
@@ -298,7 +361,7 @@ impl RawDownloader {
 
         // 创建文件
         let mut file = async_fs::File::create(&cache).await?;
-        let reader = res.body_mut();
+        let mut reader = res.response_body();
         let mut hasher = task.file_hash.hasher();
 
         // 申请缓存并等待
@@ -323,6 +386,7 @@ impl RawDownloader {
         }
         file.flush().await?;
         drop(buf);
+        drop(reader);
         drop(res);
         drop(file);
 

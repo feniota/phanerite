@@ -10,7 +10,7 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("HTTP error: {0}")]
-    Http(#[from] isahc::Error),
+    Http(#[from] trillium_client::Error),
     #[error("Serde JSON error: {0}")]
     SerdeJson(#[from] serde_json::Error),
     #[error("Serde Xml error: {0}")]

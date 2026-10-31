@@ -122,7 +122,7 @@ fn unzip(
     let mut entries: Vec<String> = Vec::with_capacity(reader.len());
     for i in 0..reader.len() {
         let entry = reader.by_index(i)?;
-        let name = entry.name().to_owned();
+        let name = entry.name()?.to_string();
         if entry.is_dir() || entry.name_raw().ends_with(b"/") {
             continue;
         }

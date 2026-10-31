@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::utils::Hash;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use http::{Request, Response};
+use http::{HeaderMap, Response};
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -31,17 +31,29 @@ struct MonitorInner {
 }
 
 impl<D: Downloader, B: Borrow<D> + Send + Sync> Downloader for DownloadGroup<D, B> {
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes> {
-        self.downloader.borrow().fetch(url, hash).await
+    async fn get(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
+        self.downloader.borrow().get(url, headers).await
     }
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
-        self.downloader.borrow().post_json(url, body).await
+    async fn get_check(&self, url: Url, hash: Hash) -> Result<Bytes> {
+        self.downloader.borrow().get_check(url, hash).await
     }
-    async fn head(&self, url: Url) -> Result<Response<()>> {
-        self.downloader.borrow().head(url).await
+    async fn post(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        self.downloader.borrow().post(url, headers, body).await
     }
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
-        self.downloader.borrow().send(req).await
+    async fn put(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        self.downloader.borrow().put(url, headers, body).await
+    }
+    async fn patch(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        self.downloader.borrow().patch(url, headers, body).await
+    }
+    async fn delete(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>> {
+        self.downloader.borrow().delete(url, headers, body).await
+    }
+    async fn head(&self, url: Url, headers: HeaderMap) -> Result<Response<()>> {
+        self.downloader.borrow().head(url, headers).await
+    }
+    async fn options(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
+        self.downloader.borrow().options(url, headers).await
     }
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()> {
         self.monitor.push_async(task.process.clone()).await;

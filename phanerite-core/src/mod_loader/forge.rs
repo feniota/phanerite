@@ -45,7 +45,10 @@ impl LoaderInstall for Forge {
     type MetaInfo = ForgeVersion;
     type MetaList = std::vec::IntoIter<Self::MetaInfo>;
     async fn from_version(version: &Version, downloader: &Downloader) -> Result<Self> {
-        let body = downloader.fetch(&FORGE_META, None).await?;
+        let body = downloader
+            .get((*FORGE_META).clone(), http::HeaderMap::new())
+            .await?
+            .into_body();
         let reader = std::io::Cursor::new(body);
         let xml = serde_xml_rs::from_reader::<MetaData<ForgeVersion>, _>(reader)?;
         let filter = xml
@@ -82,7 +85,10 @@ impl LoaderInstall for Forge {
 
         debug!("Downloading Forge Installer: {url}");
 
-        let body = downloader.fetch(&url, None).await?;
+        let body = downloader
+            .get(url.clone(), http::HeaderMap::new())
+            .await?
+            .into_body();
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(body))?;
         let mut manifest = Vec::new();
         let mut file = archive.by_name("version.json")?;

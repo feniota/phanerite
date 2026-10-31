@@ -7,7 +7,7 @@
 //
 // ```text
 // RawDownloader              连接池、重试、缓冲池、流式落盘
-//   └ with_cache()           GET 结果的内存缓存；共享桶命中则直接链接，不发请求
+//   └ with_cache()           已验哈希 GET 结果的内存缓存；共享桶命中则直接链接，不发请求
 //       └ with_mirror()      按镜像规则改写 URL
 //           └ with_group()   把任务登记进 Monitor，用于读进度
 // ```
@@ -48,8 +48,8 @@
 //!
 //! ```text
 //! RawDownloader            connection pool, retries, buffer pool, streaming to disk
-//!   └ with_cache()         in-memory cache of GET results; a share-bucket hit links
-//!                          directly and sends no request
+//!   └ with_cache()         in-memory cache of hash-verified GET results; a share-bucket
+//!                          hit links directly and sends no request
 //!       └ with_mirror()    rewrites URLs according to the mirror's rules
 //!           └ with_group() registers tasks with a Monitor so progress can be read
 //! ```
@@ -98,7 +98,7 @@ use crate::error::Result;
 use crate::utils::Hash;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use http::{Request, Response};
+use http::{HeaderMap, Response};
 use url::Url;
 
 pub mod authlib_injector;
@@ -114,25 +114,33 @@ pub mod vanilla;
 
 #[allow(async_fn_in_trait)]
 pub trait Downloader: Send + Sync {
-    // 下载到内存（GET）
-    /// Downloads into memory (GET)
-    async fn fetch(&self, url: Url, hash: Option<Hash>) -> Result<Bytes>;
-    // 封装 POST
-    /// Wraps POST
-    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>>;
-    // 封装 HEAD，仅保证响应头与状态码有效
-    /// Wraps HEAD; only the response headers and status code are guaranteed to
-    /// be meaningful
-    async fn head(&self, url: Url) -> Result<Response<()>>;
-    // 发送自定义请求，用于需要额外请求头或表单编码的 API
-    //
-    // 优先使用 `fetch()`/`post_json()`/`head()`，仅在它们无法表达请求时使用
-    /// Sends a custom request, for APIs that need extra headers or form
-    /// encoding
-    ///
-    /// Prefer `fetch()`/`post_json()`/`head()`; use this only when they cannot
-    /// express the request
-    async fn send(&self, req: Request<Vec<u8>>) -> Result<Response<Bytes>>;
+    /// Sends a GET request and returns the response, including its status and headers.
+    async fn get(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>>;
+    /// Downloads a GET response, verifies its hash, and retries hash mismatches.
+    async fn get_check(&self, url: Url, hash: Hash) -> Result<Bytes>;
+    /// Sends a POST request with caller-provided headers and body.
+    async fn post(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>>;
+    /// Sends a PUT request with caller-provided headers and body.
+    async fn put(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>>;
+    /// Sends a PATCH request with caller-provided headers and body.
+    async fn patch(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>>;
+    /// Sends a DELETE request with caller-provided headers and body.
+    async fn delete(&self, url: Url, headers: HeaderMap, body: Vec<u8>) -> Result<Response<Bytes>>;
+    /// Sends a HEAD request; only its status and headers are returned.
+    async fn head(&self, url: Url, headers: HeaderMap) -> Result<Response<()>>;
+    /// Sends an OPTIONS request and returns the response.
+    async fn options(&self, url: Url, headers: HeaderMap) -> Result<Response<Bytes>>;
+
+    /// Sends a JSON POST request.
+    async fn post_json(&self, url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
+        self.post(url, headers, body.as_ref().as_bytes().to_vec())
+            .await
+    }
     // 下载文件到储存
     /// Downloads a file into storage
     async fn download<'cx>(&self, task: DownloadTask<'cx>) -> Result<()>;

@@ -44,7 +44,10 @@ impl JavaDownload for Zulu {
             .append_pair("latest", "true")
             .finish();
 
-        let body = downloader.fetch(url, None).await?;
+        let body = downloader
+            .get(url, http::HeaderMap::new())
+            .await?
+            .into_body();
         let json: Vec<ZuluPackage> = serde_json::from_slice(&body)?;
 
         let choice = json

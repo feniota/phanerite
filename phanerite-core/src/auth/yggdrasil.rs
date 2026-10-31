@@ -535,12 +535,21 @@ async fn refresh_request(
     };
     let req = serde_json::to_string(&req)?;
 
-    let res = downloader
-        .post_json(endpoint(server, "refresh")?, req)
-        .await?
-        .into_body();
+    let url = endpoint(server, "refresh")?;
+    let response = downloader.post_json(url.clone(), req).await?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .map(|value| value.to_str().unwrap_or_default().to_owned());
+    let res = response.into_body();
+    tracing::debug!(%url, status = %status, ?content_type, body_len = res.len(), "Yggdrasil refresh response");
 
-    serde_json::from_slice::<Response<ResponseRefresh>>(&res)?.into_result()
+    let parsed = serde_json::from_slice::<Response<ResponseRefresh>>(&res).map_err(|error| {
+        tracing::error!(%url, status = %status, body_len = res.len(), %error, "Failed to deserialize Yggdrasil refresh response");
+        error
+    })?;
+    parsed.into_result()
 }
 
 #[derive(Deserialize)]
@@ -656,7 +665,11 @@ impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
     }
     /// API Location Indication
     async fn get_ali(&self, url: Url) -> Url {
-        let response = match self.downloader.head(url.clone()).await {
+        let response = match self
+            .downloader
+            .head(url.clone(), http::HeaderMap::new())
+            .await
+        {
             Ok(v) => v,
             Err(_) => return url,
         };
@@ -670,8 +683,16 @@ impl<'a, U, P, D: Downloader> Login<'a, NotReady, U, P, D> {
     // 必须执行的操作，否则会 `unwrap()`
     /// This has to be run, otherwise there will be an `unwrap()`
     async fn update_meta(&mut self, url: &Url) -> Result<()> {
-        let res = self.downloader.fetch(url.clone(), None).await?;
-        let res = serde_json::from_slice::<Response<FullMeta>>(&res)?.into_result()?;
+        let res = self
+            .downloader
+            .get(url.clone(), http::HeaderMap::new())
+            .await?
+            .into_body();
+        let parsed = serde_json::from_slice::<Response<FullMeta>>(&res).map_err(|error| {
+            tracing::error!(%error, "Failed to deserialize Yggdrasil metadata response");
+            error
+        })?;
+        let res = parsed.into_result()?;
 
         self.skin_domains = res.skin_domains;
         self.signature_publickey = Some(res.signature_publickey);
@@ -860,9 +881,28 @@ async fn authenticate(
         .map_err(|_| Error::other("cannot-be-a-base URL"))?
         .pop_if_empty()
         .extend(["authserver", "authenticate"]);
-    let res = downloader.post_json(server, &req).await?.into_body();
+    let response = downloader.post_json(server.clone(), &req).await?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .map(|value| value.to_str().unwrap_or_default().to_owned());
+    let res = response.into_body();
+    tracing::debug!(%server, status = %status, ?content_type, body_len = res.len(), "Yggdrasil login response");
+    if !status.is_success() {
+        tracing::error!(
+            %server,
+            status = %status,
+            body = %String::from_utf8_lossy(&res),
+            "Yggdrasil login returned a non-success status"
+        );
+    }
 
-    serde_json::from_slice::<Response<ResponseLogin>>(&res)?.into_result()
+    let parsed = serde_json::from_slice::<Response<ResponseLogin>>(&res).map_err(|error| {
+        tracing::error!(%server, status = %status, body_len = res.len(), %error, "Failed to deserialize Yggdrasil login response");
+        error
+    })?;
+    parsed.into_result()
 }
 
 async fn signout(

@@ -70,9 +70,9 @@ impl<'a> AuthlibInjector<'a> {
         match self.find_latest().await {
             Ok(v) => {
                 let res = downloader
-                    .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
+                    .get(AUTHLIB_INJECTOR_LATEST_META.clone(), http::HeaderMap::new())
                     .await?;
-                let res = serde_json::from_slice::<Artifact>(&res)?;
+                let res = serde_json::from_slice::<Artifact>(res.body())?;
                 if res.build_number > v {
                     downloader
                         .download(self.install_latest(downloader).await?)
@@ -117,9 +117,9 @@ impl<'a> AuthlibInjector<'a> {
 
     async fn install_latest(&self, downloader: &impl Downloader) -> Result<DownloadTask<'_>> {
         let res = downloader
-            .fetch(AUTHLIB_INJECTOR_LATEST_META.clone(), None)
+            .get(AUTHLIB_INJECTOR_LATEST_META.clone(), http::HeaderMap::new())
             .await?;
-        let res = serde_json::from_slice::<Artifact>(&res)?;
+        let res = serde_json::from_slice::<Artifact>(res.body())?;
 
         let Some(download) = res.download_url else {
             return Err(Error::other("No download url"));

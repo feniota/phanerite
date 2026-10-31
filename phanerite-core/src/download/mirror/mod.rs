@@ -13,10 +13,10 @@ pub use granodiorite::Granodiorite;
 
 use crate::download::Downloader;
 use crate::download::task::DownloadTask;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::utils::Hash;
 use futures::Stream;
-use http::{Request, Response};
+use http::{HeaderMap, Response};
 use url::Url;
 
 pub trait Mirror: Send + Sync {
@@ -67,26 +67,57 @@ impl<D: Downloader, B: Borrow<D> + Send + Sync, M: Mirror> DownloaderWithMirror<
 impl<D: Downloader, B: Borrow<D> + Send + Sync, M: Mirror> Downloader
     for DownloaderWithMirror<D, B, M>
 {
-    async fn fetch(&self, mut url: Url, hash: Option<Hash>) -> Result<Bytes> {
+    async fn get(&self, mut url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
         self.mirror.resolve(&mut url);
-        self.downloader.borrow().fetch(url, hash).await
+        self.downloader.borrow().get(url, headers).await
     }
-    async fn post_json(&self, mut url: Url, body: impl AsRef<str>) -> Result<Response<Bytes>> {
+    async fn get_check(&self, mut url: Url, hash: Hash) -> Result<Bytes> {
         self.mirror.resolve(&mut url);
-        self.downloader.borrow().post_json(url, body).await
+        self.downloader.borrow().get_check(url, hash).await
     }
-    async fn head(&self, mut url: Url) -> Result<Response<()>> {
+    async fn post(
+        &self,
+        mut url: Url,
+        headers: HeaderMap,
+        body: Vec<u8>,
+    ) -> Result<Response<Bytes>> {
         self.mirror.resolve(&mut url);
-        self.downloader.borrow().head(url).await
+        self.downloader.borrow().post(url, headers, body).await
     }
-    async fn send(&self, mut req: Request<Vec<u8>>) -> Result<Response<Bytes>> {
-        let mut url: Url = req.uri().to_string().parse()?;
+    async fn put(
+        &self,
+        mut url: Url,
+        headers: HeaderMap,
+        body: Vec<u8>,
+    ) -> Result<Response<Bytes>> {
         self.mirror.resolve(&mut url);
-        *req.uri_mut() = url
-            .as_str()
-            .parse()
-            .map_err(|e| Error::other(format!("mirror resolved to an invalid URI: {e}")))?;
-        self.downloader.borrow().send(req).await
+        self.downloader.borrow().put(url, headers, body).await
+    }
+    async fn patch(
+        &self,
+        mut url: Url,
+        headers: HeaderMap,
+        body: Vec<u8>,
+    ) -> Result<Response<Bytes>> {
+        self.mirror.resolve(&mut url);
+        self.downloader.borrow().patch(url, headers, body).await
+    }
+    async fn delete(
+        &self,
+        mut url: Url,
+        headers: HeaderMap,
+        body: Vec<u8>,
+    ) -> Result<Response<Bytes>> {
+        self.mirror.resolve(&mut url);
+        self.downloader.borrow().delete(url, headers, body).await
+    }
+    async fn head(&self, mut url: Url, headers: HeaderMap) -> Result<Response<()>> {
+        self.mirror.resolve(&mut url);
+        self.downloader.borrow().head(url, headers).await
+    }
+    async fn options(&self, mut url: Url, headers: HeaderMap) -> Result<Response<Bytes>> {
+        self.mirror.resolve(&mut url);
+        self.downloader.borrow().options(url, headers).await
     }
     async fn download<'cx>(&self, mut task: DownloadTask<'cx>) -> Result<()> {
         self.mirror.resolve_task(&mut task);

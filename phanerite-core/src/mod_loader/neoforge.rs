@@ -65,7 +65,10 @@ impl LoaderInstall for NeoForge {
     type MetaInfo = NeoForgeVersion;
     type MetaList = Vec<NeoForgeVersion>;
     async fn from_version(version: impl AsRef<str>, downloader: &impl Downloader) -> Result<Self> {
-        let body = downloader.fetch(NEOFORGE_META.clone(), None).await?;
+        let body = downloader
+            .get(NEOFORGE_META.clone(), http::HeaderMap::new())
+            .await?
+            .into_body();
         let reader = std::io::Cursor::new(body);
         let xml = serde_xml_rs::from_reader::<MetaData<NeoForgeVersion>, _>(reader)?;
         let filter = xml
@@ -107,7 +110,10 @@ impl LoaderInstall for NeoForge {
         };
         let url = maven.url(&NEOFORGE_MAVEN)?;
         let hash_url = maven.sha256_url(&NEOFORGE_MAVEN)?;
-        let hash = downloader.fetch(hash_url, None).await?;
+        let hash = downloader
+            .get(hash_url, http::HeaderMap::new())
+            .await?
+            .into_body();
         let hash = String::from_utf8_lossy(&hash);
         let hash = hash.parse::<Sha256Hash>()?;
 

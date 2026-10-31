@@ -1,6 +1,7 @@
 use async_executor::Executor;
 use taao::EventLoopBlockOn;
 use tao::event_loop::EventLoopBuilder;
+use wgpu::Instance;
 
 use crate::utils::exit::exit_guard;
 
@@ -8,6 +9,7 @@ use crate::utils::exit::exit_guard;
 pub struct Application<'ex> {
     builder: EventLoopBuilder<()>,
     executor: Executor<'ex>,
+    instance: Instance,
 }
 
 impl Application<'_> {
@@ -21,8 +23,8 @@ impl Application<'_> {
         event_loop.block_on_with_events(async |event| {
             self.executor
                 .spawn(async {
-                    let _ = guard;
                     let _ = event;
+                    guard.exit()
                 })
                 .detach();
 

@@ -1,5 +1,5 @@
 [package]
-name = "phanerite-window"
+name = "phanerite-executor"
 version = "0.1.0-dev"
 license = "MIT OR Apache-2.0"
 
@@ -17,3 +17,4 @@ async-channel = "2.5"
 futures-lite = "2.6"
 tao = "0.37"
 taao = { version = "0.1", features = ["event", "tracing"] }
+wgpu = "30.0"

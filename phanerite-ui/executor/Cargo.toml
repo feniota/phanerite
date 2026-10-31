@@ -12,9 +12,15 @@ keywords.workspace = true
 categories = ["development-tools"]
 
 [dependencies]
-async-executor = "1.14"
-async-channel = "2.5"
-futures-lite = "2.6"
+
+# Window / Event
 tao = "0.37"
 taao = { version = "0.1", features = ["event", "tracing"] }
+
+# GPU / Render
 wgpu = "30.0"
+
+# Async / Executor
+async-executor = { version = "1.14", features = ["static"] }
+async-channel = "2.5"
+futures-lite = "2.6"

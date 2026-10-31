@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["phanerite-app", "phanerite-core", "phanerite-ui"]
+members = ["phanerite-app", "phanerite-core"]
 
 [workspace.package]
 authors = ["Enita <enitanureya@outlook.com>", "Tuxium <ursusfeline07@gmail.com>"]

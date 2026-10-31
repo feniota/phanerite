@@ -10,3 +10,10 @@ description.workspace = true
 edition.workspace = true
 keywords.workspace = true
 categories = ["development-tools"]
+
+[dependencies]
+async-executor = "1.14"
+async-channel = "2.5"
+futures-lite = "2.6"
+tao = "0.37"
+taao = { version = "0.1", features = ["event", "tracing"] }

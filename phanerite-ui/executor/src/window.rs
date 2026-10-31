@@ -1,5 +1,6 @@
 use crate::app::Context;
 use std::sync::Arc;
+use taao::event::Submitter;
 use tao::window::{Window as TaoWindow, WindowBuilder as TaoWindowBuilder};
 use wgpu::{
     Adapter, Device, DeviceDescriptor, Queue, RequestAdapterOptions, RequestAdapterOptionsBase,
@@ -92,7 +93,7 @@ impl WindowBuilder {
     pub async fn build(self, cx: &Context) -> Result<Window, taao::event::SubmitError> {
         // Create window
         let window = cx
-            .event
+            .submitter
             .submit(|event, _| self.window.build(event))
             .await?
             .expect("OS Error: failed to create window");

@@ -2598,14 +2598,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "phanerite-event-macros"
+version = "0.1.0-dev"
+dependencies = [
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "phanerite-executor"
 version = "0.1.0-dev"
 dependencies = [
  "async-channel",
  "async-executor",
  "futures-lite",
+ "phanerite-event-macros",
  "taao",
  "tao",
+ "tracing",
+ "url",
  "wgpu",
 ]
 
@@ -3560,9 +3571,9 @@ dependencies = [
 
 [[package]]
 name = "taao"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97fe4ce30a7e2d7b8f21654c4d6dd58f4c81b63ca253867e8c259c57e1d08a01"
+checksum = "1f0d88183eba69f83365bd2e5d7f35822f055d7cbeb8b5112d98d0d2285121dd"
 dependencies = [
  "async-channel",
  "futures-lite",
@@ -4995,9 +5006,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.1.3"
+version = "9.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1156b39d142a34b999c2310a50455e0cb3760bf7efad0122f796d813bee26ccb"
+checksum = "3f5b58784007ff6e5f280ec82c8596686a3b9b5dd5836c63288d4479f84728b9"
 dependencies = [
  "aes",
  "bzip2",

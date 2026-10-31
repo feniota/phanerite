@@ -1,22 +1,29 @@
 use async_executor::Executor;
 use std::sync::Arc;
 use taao::EventLoopBlockOn;
-use taao::event::Event;
+use taao::event::EventSubmitter;
 use tao::event_loop::EventLoopBuilder;
 use wgpu::{Instance, InstanceDescriptor};
 
+use crate::event::{EventDispatcher, EventHandle, EventSource};
 use crate::utils::exit::exit_guard;
-use crate::window::Window;
 
 pub struct Application {
     event_loop: EventLoopBuilder<()>,
     gpu_instance: InstanceDescriptor,
+    events: EventDispatcher,
+    event_source: EventSource,
+    event_handle: EventHandle,
 }
 
 impl Default for Application {
     fn default() -> Self {
+        let (events, event_source, event_handle) = EventDispatcher::channel(256);
         Self {
             event_loop: Default::default(),
+            events,
+            event_source,
+            event_handle,
             gpu_instance: InstanceDescriptor {
                 backends: Default::default(),
                 flags: Default::default(),
@@ -29,7 +36,8 @@ impl Default for Application {
 }
 
 pub struct Context {
-    pub event: Event,
+    pub submitter: EventSubmitter,
+    pub events: EventHandle,
     pub instance: Instance,
 }
 
@@ -37,6 +45,16 @@ impl Application {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn event_handle(&self) -> EventHandle {
+        self.event_handle.clone()
+    }
+
+    /// Registers application observers before entering the event loop.
+    pub fn event_dispatcher_mut(&mut self) -> &mut EventDispatcher {
+        &mut self.events
+    }
+
     pub fn run(mut self) -> Result<(), taao::BlockOnError> {
         let mut event_loop = self.event_loop.build();
         let instance = Instance::new(self.gpu_instance);
@@ -44,20 +62,23 @@ impl Application {
         let (guard, exit) = exit_guard();
 
         event_loop.block_on_with_events(async move |event| {
-            let cx = Context { event, instance };
+            let cx = Context {
+                submitter: event.submitter(),
+                events: self.event_handle,
+                instance,
+            };
             let cx = Arc::new(cx);
 
-            let cx = cx.clone();
-            let exit_clone = exit.clone();
             executor
                 .spawn(async move {
-                    let _w = Window::builder().build(&cx).await.unwrap();
-                    exit_clone.await;
-                    // guard.exit()
+                    let _ = cx;
                 })
                 .detach();
 
-            executor.run(exit).await
+            let source = self.event_source.with_taao(event);
+            executor
+                .run(futures_lite::future::race(self.events.pump(source), exit))
+                .await;
         })
     }
 }

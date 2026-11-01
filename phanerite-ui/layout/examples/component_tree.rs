@@ -1,6 +1,6 @@
 //! Plain Rust equivalent of the component data a Gabbro entry point can generate.
 
-use phanerite_layout::{Component, NodeId, NodeKind, TreeResult, Window, taffy::Style};
+use phanerite_layout::{Component, LayoutNodeKind, LayoutTree, NodeId, TreeResult, taffy::Style};
 
 #[derive(Debug)]
 struct CounterContext {
@@ -30,10 +30,10 @@ enum Components {
 impl Component for Components {}
 
 fn main() -> TreeResult<()> {
-    let mut ui = Window::<Components>::new(800.0, 600.0)?;
+    let mut ui = LayoutTree::<Components>::new(800.0, 600.0)?;
     let root = ui.root_node();
-    let counter = ui.create_node(NodeKind::Div, Style::default(), Some(root))?;
-    let label = ui.create_node(NodeKind::Text, Style::default(), Some(counter))?;
+    let counter = ui.create_node(LayoutNodeKind::Box, Style::default(), Some(root))?;
+    let label = ui.create_node(LayoutNodeKind::Text, Style::default(), Some(counter))?;
     ui.insert_component(
         counter,
         Components::Counter(CounterInstance {

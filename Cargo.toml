@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["phanerite-core", "phanerite-ui/executor", "phanerite-ui/layout"]
+members = ["phanerite-core", "phanerite-ui/executor", "phanerite-ui/layout", "phanerite-ui/render"]
 
 [workspace.package]
 authors = ["Enita <enitanureya@outlook.com>", "Tuxium <ursusfeline07@gmail.com>"]
@@ -25,6 +25,7 @@ strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1.44"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.24", features = ["serde", "v7"] }
+wgpu = "30.0"
 
 [profile.dev.package]
 gpui-pre = { opt-level = 3 }

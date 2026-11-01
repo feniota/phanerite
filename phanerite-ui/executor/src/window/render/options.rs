@@ -18,7 +18,7 @@ impl WindowRenderOptions {
     /// Creates persistent drawing resources after the device and format are known.
     pub fn with_content<F, C>(mut self, factory: F) -> Self
     where
-        F: FnOnce(&Device, &Queue, &SurfaceConfiguration) -> C + Send + 'static,
+        F: FnOnce(&Device, &Queue, &SurfaceConfiguration) -> C + 'static,
         C: RenderContent + 'static,
     {
         self.content =

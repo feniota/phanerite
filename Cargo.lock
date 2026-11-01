@@ -2607,6 +2607,7 @@ dependencies = [
  "phanerite-ui-macro",
  "taao",
  "tao",
+ "thiserror 2.0.21",
  "tracing",
  "url",
  "wgpu",

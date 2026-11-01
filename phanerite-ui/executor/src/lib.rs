@@ -1,5 +1,7 @@
 //! Application runtime, generic event dispatch, and Tao platform integration.
 
+#![recursion_limit = "256"]
+
 extern crate self as phanerite_executor;
 mod app;
 pub mod event;

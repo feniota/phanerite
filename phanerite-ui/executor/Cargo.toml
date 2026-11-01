@@ -30,4 +30,5 @@ futures-lite = "2.6"
 url.workspace = true
 
 # Logging / Debug
+thiserror = "2.0"
 tracing.workspace = true

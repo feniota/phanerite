@@ -12,7 +12,7 @@ keywords.workspace = true
 categories = ["development-tools"]
 
 [dependencies]
-phanerite-event-macros = { path = "event-macros" }
+phanerite-ui-macro = { path = "macro" }
 
 # Window / Event
 tao = "0.37"
@@ -26,6 +26,8 @@ async-executor = { version = "1.14", features = ["static"] }
 async-channel = "2.5"
 futures-lite = "2.6"
 
+# Serialization / Data format
+url.workspace = true
+
 # Logging / Debug
 tracing.workspace = true
-url.workspace = true

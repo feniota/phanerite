@@ -110,13 +110,13 @@ fn mailbox_applies_backpressure_broadcasts_and_drains_on_close() {
     block_on(async {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<EventHandle>();
-        let (mut events, source, sender) = EventDispatcher::channel(1);
+        let (mut events, receiver, sender) = EventDispatcher::channel(1);
         let received = Rc::new(RefCell::new(Vec::new()));
         let sink = received.clone();
         events.observe(move |event: On<TestEvent>| sink.borrow_mut().push(event.0));
         sender.try_emit(TestEvent(1)).unwrap();
         assert_eq!(sender.try_emit(Other), Err(EmitError::Full));
-        zip(events.pump(source), async {
+        zip(events.pump(receiver), async {
             sender.emit(TestEvent(2)).await.unwrap();
             sender.close();
             assert_eq!(sender.emit(Other).await, Err(EmitError::Closed));
@@ -127,15 +127,15 @@ fn mailbox_applies_backpressure_broadcasts_and_drains_on_close() {
 }
 
 #[test]
-fn source_finishes_when_producers_drop_and_rejects_after_source_drops() {
+fn receiver_finishes_when_producers_drop_and_rejects_after_receiver_drops() {
     block_on(async {
-        let (events, source, sender) = EventDispatcher::channel(256);
+        let (events, receiver, sender) = EventDispatcher::channel(256);
         sender.try_emit(Other).unwrap();
         drop(sender);
-        events.pump(source).await;
+        events.pump(receiver).await;
 
-        let (_events, source, sender) = EventDispatcher::channel(256);
-        drop(source);
+        let (_events, receiver, sender) = EventDispatcher::channel(256);
+        drop(receiver);
         assert_eq!(sender.try_emit(Other), Err(EmitError::Closed));
     });
 }
@@ -143,7 +143,7 @@ fn source_finishes_when_producers_drop_and_rejects_after_source_drops() {
 #[test]
 fn observer_can_enqueue_follow_up_without_recursive_dispatch() {
     block_on(async {
-        let (mut events, source, sender) = EventDispatcher::channel(256);
+        let (mut events, receiver, sender) = EventDispatcher::channel(256);
         let received = Rc::new(RefCell::new(Vec::new()));
         let sink = received.clone();
         events.observe(move |event: On<TestEvent>| {
@@ -156,7 +156,7 @@ fn observer_can_enqueue_follow_up_without_recursive_dispatch() {
         });
         events.trigger(TestEvent(1)).await;
         assert_eq!(*received.borrow(), [1]);
-        events.pump(source).await;
+        events.pump(receiver).await;
         assert_eq!(*received.borrow(), [1, 2]);
     });
 }
@@ -180,12 +180,12 @@ fn commands_wake_idle_pump_and_apply_without_an_event() {
     }
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<phanerite_executor::event::EventHandle>();
-    let (dispatcher, source, sender) = EventDispatcher::channel(4);
+    let (dispatcher, receiver, sender) = EventDispatcher::channel(4);
     let commands = sender.clone();
     let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
     let waker = Waker::from(wakes.clone());
     let mut cx = Context::from_waker(&waker);
-    let mut pump = std::pin::pin!(dispatcher.pump(source));
+    let mut pump = std::pin::pin!(dispatcher.pump(receiver));
     assert!(pump.as_mut().poll(&mut cx).is_pending());
     assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
     let capture = Arc::new(());
@@ -220,7 +220,7 @@ fn commands_wake_idle_pump_and_apply_without_an_event() {
 fn observer_commands_change_next_event_and_preserve_current_observers() {
     use std::sync::Mutex;
     block_on(async {
-        let (mut dispatcher, source, sender) = EventDispatcher::channel(4);
+        let (mut dispatcher, receiver, sender) = EventDispatcher::channel(4);
         let commands = sender.clone();
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink = seen.clone();
@@ -241,7 +241,7 @@ fn observer_commands_change_next_event_and_preserve_current_observers() {
         sender.try_emit(TestEvent(1)).unwrap();
         sender.try_emit(TestEvent(2)).unwrap();
         sender.close();
-        dispatcher.pump(source).await;
+        dispatcher.pump(receiver).await;
         assert_eq!(
             *seen.lock().unwrap(),
             [("old", 1), ("other", 1), ("other", 2), ("new", 2)]
@@ -287,11 +287,11 @@ fn command_ids_share_namespace_and_dropping_dispatcher_releases_pending_callback
 fn one_handle_registers_emits_and_removes_while_pump_runs() {
     use std::sync::atomic::{AtomicU32, Ordering};
     block_on(async {
-        let (dispatcher, source, handle) = EventDispatcher::channel(4);
+        let (dispatcher, receiver, handle) = EventDispatcher::channel(4);
         let seen = Arc::new(AtomicU32::new(0));
         let sink = seen.clone();
         let observer_handle = handle.clone();
-        zip(dispatcher.pump(source), async move {
+        zip(dispatcher.pump(receiver), async move {
             handle
                 .observe(move |event: On<TestEvent>| {
                     sink.fetch_add(event.0, Ordering::Relaxed);

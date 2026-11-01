@@ -2598,26 +2598,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "phanerite-event-macros"
-version = "0.1.0-dev"
-dependencies = [
- "quote",
- "syn 3.0.9",
-]
-
-[[package]]
 name = "phanerite-executor"
 version = "0.1.0-dev"
 dependencies = [
  "async-channel",
  "async-executor",
  "futures-lite",
- "phanerite-event-macros",
+ "phanerite-ui-macro",
  "taao",
  "tao",
  "tracing",
  "url",
  "wgpu",
+]
+
+[[package]]
+name = "phanerite-ui-macro"
+version = "0.1.0-dev"
+dependencies = [
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]

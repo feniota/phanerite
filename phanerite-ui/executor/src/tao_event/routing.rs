@@ -1,21 +1,14 @@
-//! Typed routing of Taao/Tao events, without interpreting UI interactions.
-//!
-//! Observers register normally using `On<window::MouseInput>`,
-//! `On<window::Resized>`, or `On<device::MouseMotion>`.
-//! Each backend input dispatches its original `taao::event::EventKind` first,
-//! followed by its typed event, before processing the next input.
-//! Custom `emit` events pass through unchanged and are not routed again.
+//! Conversion of backend events into owned, typed event payloads.
 
-pub mod device;
-pub mod lifecycle;
-pub mod window;
-
+use super::{device, lifecycle, window};
 use taao::event::EventKind;
 use tao::event::{DeviceEvent, Event as TaoEvent, WindowEvent};
 
-use crate::event::ErasedEvent;
+use crate::event::{ErasedEvent, Event};
 
-pub(crate) fn route(event: &EventKind) -> Option<ErasedEvent> {
+impl Event for EventKind {}
+
+pub(super) fn route(event: &EventKind) -> Option<ErasedEvent> {
     Some(match event {
         EventKind::Tao(event) => match event {
             TaoEvent::WindowEvent {

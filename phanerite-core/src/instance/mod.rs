@@ -78,13 +78,13 @@
 //! [`Instance::install_less`] is the variant that skips files that already
 //! exist.
 //!
-//! Download tasks that a mod loader brings along and that cannot be derived
+//! Download tasks that a tao_event loader brings along and that cannot be derived
 //! from the standard manifest go through
 //! [`LoaderInstall::extra_downloads`](crate::mod_loader::LoaderInstall::extra_downloads).
 //!
 //! # Manifest and patches
 //!
-//! A mod loader does not rewrite the version manifest. It appends an
+//! A tao_event loader does not rewrite the version manifest. It appends an
 //! [`overlay::Patch`] to
 //! [`InstanceManifest::patches`](manifest::InstanceManifest::patches), and
 //! [`InstanceManifest::resolve`](InstanceManifest::resolve) then
@@ -104,14 +104,14 @@
 //! must stay alive until the process has been spawned.
 
 use crate::auth::Authentication;
-use crate::download::Downloader;
-use crate::download::task::{DownloadTask, filter_existed, filter_hash};
+use crate::download::task::{filter_existed, filter_hash, DownloadTask};
 use crate::download::vanilla::assets::AssetIndexList;
+use crate::download::Downloader;
 use crate::error::{Error, Result};
 use crate::instance::manifest::InstanceManifest;
 use crate::runtime::java::JavaRuntime;
-use crate::storage::Storage;
 use crate::storage::temp::TempGuard;
+use crate::storage::Storage;
 use crate::utils::state::{NotReady, Ready};
 use futures::{AsyncReadExt, AsyncWriteExt};
 use futures::{Stream, StreamExt};

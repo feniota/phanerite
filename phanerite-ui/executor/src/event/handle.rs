@@ -1,7 +1,8 @@
 //! Unified submission handle for events and deferred observer changes.
 
 use super::{
-    Event, ObserverCallback, ObserverId, observer::erase_send_observer, registry::ObserverRegistry,
+    EmitError, Event, ObserveError, ObserverCallback, ObserverId, observer::erase_send_observer,
+    registry::ObserverRegistry,
 };
 use std::sync::{
     Arc,
@@ -23,23 +24,6 @@ pub struct EventHandle {
     pub(super) registry: u64,
     pub(super) next_observer: Arc<AtomicU64>,
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ObserveError {
-    DispatcherDropped,
-    WrongDispatcher,
-}
-
-impl std::fmt::Display for ObserveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::DispatcherDropped => "event dispatcher has been dropped",
-            Self::WrongDispatcher => "observer belongs to another dispatcher",
-        })
-    }
-}
-
-impl std::error::Error for ObserveError {}
 
 impl EventHandle {
     /// Reserves an ID immediately and queues registration in FIFO order.
@@ -80,24 +64,6 @@ impl EventHandle {
     }
 }
 
-/// Failure to enqueue an event. The rejected event is dropped.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EmitError {
-    Full,
-    Closed,
-}
-
-impl std::fmt::Display for EmitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Full => "event queue is full",
-            Self::Closed => "event queue is closed",
-        })
-    }
-}
-
-impl std::error::Error for EmitError {}
-
 use super::payload::ErasedEvent;
 use async_channel::TrySendError;
 impl EventHandle {
@@ -106,10 +72,11 @@ impl EventHandle {
     /// Inside this dispatcher's observers use `try_emit`: waiting for capacity
     /// would deadlock if their own dispatcher queue is full.
     pub async fn emit<E: Event>(&self, event: E) -> Result<(), EmitError> {
-        self.sender
-            .send(ErasedEvent::new(event))
-            .await
-            .map_err(|_| EmitError::Closed)
+        self.emit_erased(ErasedEvent::new(event)).await
+    }
+
+    pub(crate) async fn emit_erased(&self, event: ErasedEvent) -> Result<(), EmitError> {
+        self.sender.send(event).await.map_err(|_| EmitError::Closed)
     }
 
     /// Enqueues without waiting, including from inside an observer.
@@ -122,7 +89,7 @@ impl EventHandle {
             })
     }
 
-    /// Closes custom input. Queued events drain; Taao input remains active.
+    /// Closes event input for every producer. Queued events drain before pump ends.
     pub fn close(&self) {
         self.sender.close();
     }

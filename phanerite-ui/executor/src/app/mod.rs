@@ -1,30 +1,39 @@
+//! Application initialization and runtime orchestration.
+
+mod context;
+mod shutdown;
+
+pub use context::Context;
+
 use async_executor::Executor;
 use std::sync::Arc;
 use taao::EventLoopBlockOn;
-use taao::event::EventSubmitter;
 use tao::event_loop::EventLoopBuilder;
 use wgpu::{Instance, InstanceDescriptor};
 
-use crate::event::{EventDispatcher, EventHandle, EventSource};
-use crate::utils::exit::exit_guard;
+use self::shutdown::exit_guard;
+use crate::event::{EventDispatcher, EventHandle, EventReceiver, On};
+use crate::tao_event::TaaoEventSource;
+use crate::tao_event::window::CloseRequested;
+use crate::window::Window;
 
 pub struct Application {
     event_loop: EventLoopBuilder<()>,
-    gpu_instance: InstanceDescriptor,
+    instance_descriptor: InstanceDescriptor,
     events: EventDispatcher,
-    event_source: EventSource,
+    event_receiver: EventReceiver,
     event_handle: EventHandle,
 }
 
 impl Default for Application {
     fn default() -> Self {
-        let (events, event_source, event_handle) = EventDispatcher::channel(256);
+        let (events, event_receiver, event_handle) = EventDispatcher::channel(256);
         Self {
             event_loop: Default::default(),
             events,
-            event_source,
+            event_receiver,
             event_handle,
-            gpu_instance: InstanceDescriptor {
+            instance_descriptor: InstanceDescriptor {
                 backends: Default::default(),
                 flags: Default::default(),
                 memory_budget_thresholds: Default::default(),
@@ -33,12 +42,6 @@ impl Default for Application {
             },
         }
     }
-}
-
-pub struct Context {
-    pub submitter: EventSubmitter,
-    pub events: EventHandle,
-    pub instance: Instance,
 }
 
 impl Application {
@@ -50,14 +53,9 @@ impl Application {
         self.event_handle.clone()
     }
 
-    /// Registers application observers before entering the event loop.
-    pub fn event_dispatcher_mut(&mut self) -> &mut EventDispatcher {
-        &mut self.events
-    }
-
     pub fn run(mut self) -> Result<(), taao::BlockOnError> {
         let mut event_loop = self.event_loop.build();
-        let instance = Instance::new(self.gpu_instance);
+        let instance = Instance::new(self.instance_descriptor);
         let executor = Executor::new();
         let (guard, exit) = exit_guard();
 
@@ -68,16 +66,30 @@ impl Application {
                 instance,
             };
             let cx = Arc::new(cx);
+            let taao_source = TaaoEventSource::new(event, &cx);
 
+            let window_cx = cx.clone();
+            let window_exit = exit.clone();
             executor
                 .spawn(async move {
-                    let _ = cx;
+                    let _window = Window::builder().build(&window_cx).await.unwrap();
+                    let mut guard = Some(guard);
+                    cx.events
+                        .observe(move |_: On<CloseRequested>| {
+                            drop(guard.take());
+                        })
+                        .expect("event dispatcher dropped during window initialization");
+                    window_exit.await;
                 })
                 .detach();
 
-            let source = self.event_source.with_taao(event);
+            executor.spawn(taao_source.run()).detach();
+
             executor
-                .run(futures_lite::future::race(self.events.pump(source), exit))
+                .run(futures_lite::future::race(
+                    self.events.pump(self.event_receiver),
+                    exit,
+                ))
                 .await;
         })
     }

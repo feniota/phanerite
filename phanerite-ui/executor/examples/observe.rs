@@ -7,7 +7,7 @@ struct ExampleEvent {
 
 fn main() {
     futures_lite::future::block_on(async {
-        let (mut events, source, handle) = EventDispatcher::channel(256);
+        let (mut events, receiver, handle) = EventDispatcher::channel(256);
         events
             .register_event::<ExampleEvent>()
             .observe(|event: On<ExampleEvent>| {
@@ -31,6 +31,6 @@ fn main() {
             .unwrap();
         handle.emit(ExampleEvent { value: 2 }).await.unwrap();
         handle.close();
-        events.pump(source).await;
+        events.pump(receiver).await;
     });
 }

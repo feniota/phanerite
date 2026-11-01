@@ -16,7 +16,7 @@
 //! And some additional helper modules:
 //!
 //! - [`mod_loader`]: Mod loader management
-//! - [`mod_repo`]: Interact with public mod registries (Modrinth, CurseForge)
+//! - [`mod_repo`]: Interact with public tao_event registries (Modrinth, CurseForge)
 //! - [`parsers`]: Utilties to deal with the game's own files
 //! - [`utils`]: Miscellaneous utilties
 //!
@@ -35,7 +35,7 @@
 //!
 //! Some other types that have to be a `struct` (so that type parameters
 //! will not pollute the whole library) are also designed to be composable,
-//! and can be modified dynamically, just like how mod loaders are layered
+//! and can be modified dynamically, just like how tao_event loaders are layered
 //! upon [`Instance`](instance::Instance)s.
 //!
 //! ## Async

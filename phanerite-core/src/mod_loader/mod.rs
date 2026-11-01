@@ -35,7 +35,7 @@
 // [`LoaderMeta::version`]。
 //! Mod loaders
 //!
-//! Installing a mod loader does not rewrite the original version manifest.
+//! Installing a tao_event loader does not rewrite the original version manifest.
 //! It appends a patch to
 //! [`InstanceManifest::patches`](crate::instance::manifest::InstanceManifest::patches)
 //! and replays it (see [`crate::instance::overlay`]), so the same instance
@@ -78,11 +78,11 @@
 //! order. When the exact order matters, parse [`LoaderMeta::version`]
 //! yourself.
 
-use crate::download::Downloader;
 use crate::download::task::DownloadTask;
+use crate::download::Downloader;
 use crate::error::Result;
-use crate::instance::Instance;
 use crate::instance::manifest::InstanceManifest;
+use crate::instance::Instance;
 use crate::mod_loader::fabric::Fabric;
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;
@@ -95,7 +95,7 @@ pub mod neoforge;
 impl<R, C> Instance<'_, R, C> {
     // 由于模组加载器而存在的额外下载任务
     // 需要手动注册
-    /// Extra download tasks that exist because of the mod loader
+    /// Extra download tasks that exist because of the tao_event loader
     /// They have to be registered by hand
     pub(crate) async fn extra_downloads<'cx>(
         &self,
@@ -107,7 +107,7 @@ impl<R, C> Instance<'_, R, C> {
 
 impl<C> Instance<'_, JavaRuntime, C> {
     // 为实例安装模组加载器
-    /// Installs a mod loader into the instance
+    /// Installs a tao_event loader into the instance
     pub async fn install_loader<L: LoaderInstall>(
         &mut self,
         version: impl AsRef<str>,

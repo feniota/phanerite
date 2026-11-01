@@ -1,17 +1,20 @@
-use crate::app::Context;
+//! Native window creation and per-window GPU initialization.
+
 use std::sync::Arc;
 use taao::event::Submitter;
-use tao::window::{Window as TaoWindow, WindowBuilder as TaoWindowBuilder};
+use tao::window::WindowBuilder as TaoWindowBuilder;
 use wgpu::{
-    Adapter, Device, DeviceDescriptor, Queue, RequestAdapterOptions, RequestAdapterOptionsBase,
-    Surface, SurfaceConfiguration,
+    DeviceDescriptor, RequestAdapterOptions, RequestAdapterOptionsBase, SurfaceConfiguration,
 };
+
+use super::{SurfaceOptions, Window};
+use crate::Context;
 
 pub struct WindowBuilder {
     window: TaoWindowBuilder,
     adapter: RequestAdapterOptionsBase<()>,
     device: DeviceDescriptor<'static>,
-    surface: SurfaceConfigBase,
+    surface: SurfaceOptions,
 }
 
 impl Default for WindowBuilder {
@@ -26,11 +29,10 @@ impl Default for WindowBuilder {
             },
             device: DeviceDescriptor {
                 required_features: wgpu::Features::empty(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                #[cfg(target_arch = "wasm32")]
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                #[cfg(not(target_arch = "wasm32"))]
+                required_limits: wgpu::Limits::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 label: Some("PhaneriteUI GPU Device"),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
@@ -41,52 +43,22 @@ impl Default for WindowBuilder {
     }
 }
 
-pub struct SurfaceConfigBase {
-    usage: wgpu::TextureUsages,
-    color_space: wgpu::SurfaceColorSpace,
-    present_mode: wgpu::PresentMode,
-    view_formats: Vec<wgpu::TextureFormat>,
-    desired_maximum_frame_latency: u32,
-}
-
-impl Default for SurfaceConfigBase {
-    fn default() -> Self {
-        Self {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            color_space: wgpu::SurfaceColorSpace::Auto,
-            present_mode: wgpu::PresentMode::AutoVsync,
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        }
-    }
-}
-
-pub struct Window {
-    window: Arc<TaoWindow>,
-    surface: Surface<'static>,
-    adapter: Adapter,
-    device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
-    config_base: SurfaceConfigBase,
-}
-
 impl WindowBuilder {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn config_window<F>(mut self, op: F) -> Self
+    pub fn with_window_builder<F>(mut self, op: F) -> Self
     where
         F: FnOnce(TaoWindowBuilder) -> TaoWindowBuilder,
     {
         self.window = op(self.window);
         self
     }
-    pub fn config_adapter(mut self, config: RequestAdapterOptionsBase<()>) -> Self {
+    pub fn with_adapter_options(mut self, config: RequestAdapterOptionsBase<()>) -> Self {
         self.adapter = config;
         self
     }
-    pub fn config_device(mut self, config: DeviceDescriptor<'static>) -> Self {
+    pub fn with_device_descriptor(mut self, config: DeviceDescriptor<'static>) -> Self {
         self.device = config;
         self
     }
@@ -145,32 +117,8 @@ impl WindowBuilder {
             adapter,
             device,
             queue,
-            config,
-            config_base: self.surface,
+            surface_config: config,
+            surface_options: self.surface,
         })
-    }
-}
-
-impl Window {
-    pub fn builder() -> WindowBuilder {
-        Default::default()
-    }
-    pub fn configure(&mut self, config: SurfaceConfigBase) {
-        self.config_base = config;
-
-        let caps = self.surface.get_capabilities(&self.adapter);
-        let size = self.window.inner_size();
-        let config = SurfaceConfiguration {
-            usage: self.config.usage,
-            format: caps.formats[0],
-            color_space: self.config.color_space,
-            width: size.width.max(1),
-            height: size.height.max(1),
-            present_mode: self.config.present_mode,
-            alpha_mode: caps.alpha_modes[0],
-            view_formats: self.config.view_formats.clone(),
-            desired_maximum_frame_latency: self.config.desired_maximum_frame_latency,
-        };
-        self.surface.configure(&self.device, &config);
     }
 }

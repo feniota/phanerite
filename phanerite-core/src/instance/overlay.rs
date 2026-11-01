@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 /// Deserialize a `DateTime<FixedOffset>` that may lack a timezone suffix
-/// (some mod-loaders emit bare timestamps). Missing offset → UTC.
+/// (some tao_event-loaders emit bare timestamps). Missing offset → UTC.
 pub fn deser_datetime_opt<'de, D: Deserializer<'de>>(
     d: D,
 ) -> Result<Option<DateTime<FixedOffset>>, D::Error> {

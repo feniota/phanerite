@@ -4,7 +4,7 @@ use futures_lite::Stream;
 use std::{pin::Pin, task::Poll};
 
 use super::{
-    Event, EventSource, ObserverCallback, ObserverId,
+    Event, EventReceiver, ObserverCallback, ObserverId,
     handle::{EventHandle, ObserverCommand},
     payload::ErasedEvent,
     registry::ObserverRegistry,
@@ -36,9 +36,9 @@ impl EventDispatcher {
         Self::default()
     }
 
-    /// Creates a dispatcher, its input source, and one unified submission handle.
+    /// Creates a dispatcher, its input receiver, and one unified submission handle.
     /// Panics if capacity is zero. The handle does not keep either consumer alive.
-    pub fn channel(capacity: usize) -> (Self, EventSource, EventHandle) {
+    pub fn channel(capacity: usize) -> (Self, EventReceiver, EventHandle) {
         let mut dispatcher = Self::new();
         let (commands, changes) = async_channel::unbounded();
         let (sender, events) = async_channel::bounded(capacity);
@@ -49,8 +49,8 @@ impl EventDispatcher {
             registry: dispatcher.registry.id,
             next_observer: dispatcher.registry.next_observer.clone(),
         };
-        let source = EventSource::from_receiver(events, dispatcher.registry.id);
-        (dispatcher, source, handle)
+        let receiver = EventReceiver::from_receiver(events, dispatcher.registry.id);
+        (dispatcher, receiver, handle)
     }
 
     fn apply_commands(&mut self) {
@@ -103,14 +103,13 @@ impl EventDispatcher {
         self.apply_commands();
     }
 
-    /// Waits for input or observer commands until the event source ends.
-    /// Each raw event and its typed route share a stable observer configuration.
+    /// Waits for input or observer commands until the event receiver ends.
     /// Applies up to 64 commands before polling the next input for fairness.
     /// No input means Pending; no timer or polling loop is used to wait for work.
-    pub async fn pump(mut self, mut source: EventSource) {
+    pub async fn pump(mut self, mut receiver: EventReceiver) {
         assert_eq!(
-            source.registry, self.registry.id,
-            "event source belongs to another dispatcher"
+            receiver.registry, self.registry.id,
+            "event receiver belongs to another dispatcher"
         );
         let mut processed = 0;
         loop {
@@ -126,7 +125,7 @@ impl EventDispatcher {
                         _ => break,
                     }
                 }
-                match Pin::new(&mut source).poll_next(cx) {
+                match Pin::new(&mut receiver).poll_next(cx) {
                     Poll::Ready(event) => Poll::Ready(Some(event)),
                     Poll::Pending if changed => Poll::Ready(None),
                     Poll::Pending => Poll::Pending,
@@ -142,9 +141,6 @@ impl EventDispatcher {
                 }
             };
             self.registry.dispatch(event.event).await;
-            if let Some(routed) = event.routed {
-                self.registry.dispatch(routed).await;
-            }
             processed += 1;
             // Cooperate under sustained traffic, never self-wake while idle.
             if processed == 64 {

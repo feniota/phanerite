@@ -22,7 +22,7 @@ taao = { version = "0.1", features = ["event", "tracing"] }
 wgpu = "30.0"
 
 # Async / Executor
-async-executor = { version = "1.14", features = ["static"] }
+async-executor = "1.14"
 async-channel = "2.5"
 futures-lite = "2.6"
 

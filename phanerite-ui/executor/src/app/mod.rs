@@ -3,15 +3,13 @@
 mod context;
 mod shutdown;
 
-pub use context::Context;
-pub use shutdown::Shutdown;
-use std::rc::Rc;
-
-use self::shutdown::exit_guard;
-use crate::app::shutdown::Exit;
+use crate::app::shutdown::{Exit, exit_guard};
 use crate::event::{EventDispatcher, EventHandle, EventReceiver, On};
 use crate::tao_event::TaaoEventSource;
 use async_executor::LocalExecutor;
+pub use context::Context;
+pub use shutdown::Shutdown;
+use std::rc::Rc;
 use taao::EventLoopBlockOn;
 use tao::event_loop::EventLoopBuilder;
 use wgpu::{Instance, InstanceDescriptor};

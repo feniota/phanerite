@@ -20,7 +20,7 @@ pub(super) type ObserverCommand = Box<dyn FnOnce(&mut ObserverRegistry)>;
 #[derive(Clone)]
 pub struct EventHandle {
     pub(super) commands: async_channel::Sender<ObserverCommand>,
-    pub(super) sender: async_channel::Sender<super::payload::ErasedEvent>,
+    pub(super) sender: async_channel::Sender<ErasedEvent>,
     pub(super) registry: u64,
     pub(super) next_observer: Arc<AtomicU64>,
 }

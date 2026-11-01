@@ -1,4 +1,5 @@
-/// A coherent physical render extent and its logical-to-physical scale.
+/// A coherent physical render extent and its logical-to-physical scale,
+/// independent of any native window type.
 ///
 /// Layout uses fractional logical pixels. Surface dimensions are physical
 /// pixels; system scaling is applied once, by the renderer.

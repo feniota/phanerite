@@ -2,10 +2,20 @@
 
 PhaUI (**Pha**nerite **UI**) is a rather simple Rust UI library.
 
-`phanerite-executor` owns native windows, platform events and GPU rendering.
+`phanerite-executor` owns native windows, platform events and the window GPU
+lifecycle: surface acquisition, command submission and presentation.
 `phanerite-layout` provides `LayoutTree`, a retained box-layout tree for a logical
 viewport, and `LayoutNodeKind::{Box, Text, Replaced}`. The layout tree is separate
 from the executor's native `window::Window`.
+`phanerite-render` defines `RenderContent` and `RenderViewport`, and draws owned
+layout snapshots using wgpu. It does not depend on the executor, Tao or GTK;
+the same drawing code works with a window target or an offscreen texture.
+
+The render crate's default `layout-debug` feature supplies `LayoutDebugRenderer`
+and its layout dependency. The executor disables that feature and only uses the
+shared drawing interface and viewport; its library does not depend on Taffy or
+layout trees. The layout example enables the feature and composes all three
+crates. GPU readback tests live in `phanerite-render`.
 
 `Text` reserves a text flow rather than an individual source `span`.
 `Replaced` identifies externally rendered content such as an image, SVG or 3D
@@ -65,8 +75,8 @@ parent-before-child and clipped only to the viewport.
 Scoped verification (the render test and smoke test require a GPU adapter):
 
 ```sh
-toolbox run -c rust cargo test -p phanerite-layout -p phanerite-executor
-toolbox run -c rust cargo test -p phanerite-executor --test layout_render -- --ignored --nocapture
+toolbox run -c rust cargo test -p phanerite-layout -p phanerite-render -p phanerite-executor
+toolbox run -c rust cargo test -p phanerite-render --test layout_render -- --ignored --nocapture
 toolbox run -c rust cargo run -p phanerite-executor --example layout -- --smoke-test
 ```
 

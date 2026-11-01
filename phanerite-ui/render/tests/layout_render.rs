@@ -1,8 +1,6 @@
 use futures_lite::future::block_on;
-use phanerite_executor::window::{
-    LayoutDebugRenderer, LayoutRenderError, RenderContent, RenderViewport,
-};
 use phanerite_layout::{LayoutNodeKind, LayoutSnapshot, LayoutTree, taffy::prelude::*};
+use phanerite_render::{LayoutDebugRenderer, LayoutRenderError, RenderContent, RenderViewport};
 
 // Explicitly opt in on machines with a native GPU or software Vulkan adapter.
 #[test]

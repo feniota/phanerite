@@ -5,11 +5,10 @@ use std::{cell::Cell, rc::Rc};
 use phanerite_executor::event::On;
 use phanerite_executor::tao_event::lifecycle::RedrawRequested;
 use phanerite_executor::tao_event::window::CloseRequested;
-use phanerite_executor::window::{
-    LayoutDebugRenderer, RenderContent, RenderViewport, Window, WindowRender, WindowRenderOptions,
-};
+use phanerite_executor::window::{Window, WindowRender, WindowRenderOptions};
 use phanerite_executor::{Application, Shutdown};
 use phanerite_layout::{LayoutNodeKind, LayoutTree, taffy::prelude::*};
+use phanerite_render::{LayoutDebugRenderer, RenderContent, RenderViewport};
 
 struct LayoutDemo {
     tree: LayoutTree,

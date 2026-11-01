@@ -2603,11 +2603,11 @@ version = "0.1.0-dev"
 dependencies = [
  "async-channel",
  "async-executor",
- "bytemuck",
  "futures-lite",
  "gdkwayland-sys",
  "gtk",
  "phanerite-layout",
+ "phanerite-render",
  "phanerite-ui-macro",
  "taao",
  "tao",
@@ -2623,6 +2623,17 @@ version = "0.1.0-dev"
 dependencies = [
  "slotmap",
  "taffy",
+]
+
+[[package]]
+name = "phanerite-render"
+version = "0.1.0-dev"
+dependencies = [
+ "bytemuck",
+ "futures-lite",
+ "phanerite-layout",
+ "thiserror 2.0.21",
+ "wgpu",
 ]
 
 [[package]]

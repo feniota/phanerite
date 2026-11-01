@@ -1,22 +1,33 @@
 Phanerite
 Copyright (c) 2026 The Feniota Team
 
-This repository contains two separately licensed software components:
+This repository contains three separately licensed software components:
 
 1. The `phanerite-core` component, including the files contained in
-   `phanerite-core/` unless a file states otherwise, is dual-licensed,
-   at the licensee's option, under either:
+   `phanerite-core/` unless a file states otherwise, is dual-licensed, at the
+   licensee's option, under either:
 
    (a) the Apache License, Version 2.0; or
    (b) the MIT License.
 
-   The complete texts of these licenses are provided in
-   `phanerite-core/LICENSE-APACHE` and `phanerite-core/LICENSE-MIT`,
-   respectively. A licensee may elect either license for each
-   applicable copy or derivative work, subject to the terms and
-   conditions of the selected license.
+   The complete texts of these licenses are provided in `phanerite-core
+   /LICENSE-APACHE` and `phanerite-core/LICENSE-MIT`, respectively. A licensee
+   may elect either license for each applicable copy or derivative work,
+   subject to the terms and conditions of the selected license.
 
-2. The `phanerite-app` component, including the files contained in
+2. The PhaUI component, which is a collection of the UI framework-related
+   components, including the files contained in `phanerite-ui/`, unless a file
+   states otherwise, is dual-licensed, at the licensee's option, under either:
+
+   (a) the Apache License, Version 2.0; or
+   (b) the MIT License.
+
+   The complete texts of these licenses are provided in `LICENSE-APACHE` and
+   `LICENSE-MIT` respectively in each sub-components' directories. A licensee
+   may elect either license for each applicable copy or derivative work,
+   subject to the terms and conditions of the selected license.
+
+3. The `phanerite-app` component, including the files contained in
    `phanerite-app/` unless a file states otherwise, is licensed under
    the GNU General Public License, Version 3, as published by the Free
    Software Foundation, or, at the licensee's option, any later version
@@ -29,9 +40,9 @@ This repository contains two separately licensed software components:
 The foregoing component-specific licenses are independent. No license
 is granted to any component under a different license merely because
 that component is distributed in this repository. In particular, the
-Apache-2.0/MIT dual license for `phanerite-core` does not relicense
+Apache-2.0/MIT dual license for `phanerite-core` and PhaUI does not relicense
 `phanerite-app`, and the GPL applicable to `phanerite-app` does not
-relicense `phanerite-core`.
+relicense `phanerite-core` or PhaUI.
 
 Where the components are linked, combined, or distributed together,
 the resulting distribution must comply with all applicable license
@@ -65,7 +76,7 @@ indirect, incidental, special, exemplary, or consequential damages
 arising from or relating to the use of, or inability to use, the
 repository or its contents.
 
-----------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 Phanerite
 
@@ -83,7 +94,16 @@ Phanerite
    phanerite-core/LICENSE-MIT。被许可方可就每一适用的副本或改编作品选择适用任一许可证，
    但须遵守所选许可证的条款和条件。
 
-2. phanerite-app 组件‌，包括 phanerite-app/ 目录中包含的文件（除非该文件另有声明），
+2. PhaUI 组件‌，包含各项和 UI 有关的子组件，囊括 phanerite-ui/ 目录中包含的文件
+   （除非另有声明），采用双重许可方式，被许可方可自行选择适用以下任一许可：
+
+   (a) Apache 许可证，第 2.0 版；或
+   (b) MIT 许可证。
+
+   上述许可证的完整文本分别载于各子组件文件夹内的 LICENSE-APACHE 和 LICENSE-MIT 文件。
+   被许可方可就每一适用的副本或改编作品选择适用任一许可证，但须遵守所选许可证的条款和条件。
+
+3. phanerite-app 组件‌，包括 phanerite-app/ 目录中包含的文件（除非该文件另有声明），
    适用由自由软件基金会发布的 GNU 通用公共许可证第 3 版，或由被许可方自行选择的任何后续版
    本（以下简称"GPL"）。
 
@@ -91,8 +111,9 @@ Phanerite
    进行复制、修改和分发。
 
 上述各组件的许可相互独立。仅因某一组件与本代码仓库一并分发，并不意味该组件在不同于其自身许可
-的条件下获得授权。特别是，phanerite-core 的 Apache-2.0/MIT 双重许可并不对 phanerite-app
-构成再许可，而适用于 phanerite-app 的 GPL 亦不对 phanerite-core 构成再许可。
+的条件下获得授权。特别是，phanerite-core 和 PhaUI 的 Apache-2.0/MIT 双重许可并不对
+phanerite-app 构成再许可，而适用于 phanerite-app 的 GPL 亦不对 phanerite-core 或
+PhaUI 构成再许可。
 
 在各组件被链接、合并或一并分发的情况下，由此产生的整体分发必须符合所有适用的许可条款，包括适
 用于 phanerite-app 组件的 GPL 要求以及适用于整体作品的要求。本声明中的任何内容均不超出适

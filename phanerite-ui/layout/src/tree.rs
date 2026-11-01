@@ -246,6 +246,7 @@ impl<C: Component> Window<C> {
         Ok(RemovedSubtree { nodes, components })
     }
 
+    /// Check if a node exists in the tree and is valid
     fn require_node(&self, node: NodeId) -> TreeResult<()> {
         self.metadata(node).map(|_| ())
     }

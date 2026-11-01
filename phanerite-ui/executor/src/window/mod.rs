@@ -12,13 +12,13 @@ use tao::window::Window as TaoWindow;
 use wgpu::{Adapter, Device, Queue, Surface, SurfaceConfiguration};
 
 pub struct Window {
-    window: Arc<TaoWindow>,
-    surface: Surface<'static>,
-    adapter: Adapter,
-    device: Device,
-    queue: Queue,
-    surface_config: SurfaceConfiguration,
-    surface_options: SurfaceOptions,
+    pub window: Arc<TaoWindow>,
+    pub surface: Surface<'static>,
+    pub adapter: Adapter,
+    pub device: Device,
+    pub queue: Queue,
+    pub surface_config: SurfaceConfiguration,
+    pub surface_options: SurfaceOptions,
 }
 
 impl Window {

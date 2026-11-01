@@ -78,11 +78,11 @@
 //! order. When the exact order matters, parse [`LoaderMeta::version`]
 //! yourself.
 
-use crate::download::task::DownloadTask;
 use crate::download::Downloader;
+use crate::download::task::DownloadTask;
 use crate::error::Result;
-use crate::instance::manifest::InstanceManifest;
 use crate::instance::Instance;
+use crate::instance::manifest::InstanceManifest;
 use crate::mod_loader::fabric::Fabric;
 use crate::runtime::java::JavaRuntime;
 use crate::storage::Storage;

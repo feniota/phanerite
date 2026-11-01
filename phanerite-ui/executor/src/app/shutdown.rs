@@ -6,17 +6,23 @@ use std::{
 
 use futures_lite::Stream;
 
-pub(crate) struct ExitGuard {
+use crate::event::Event;
+
+/// Requests application shutdown.
+#[derive(Event, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Shutdown;
+
+pub struct ExitGuard {
     _tx: async_channel::Sender<()>,
 }
 
 #[derive(Clone)]
-pub(crate) struct Exit {
+pub struct Exit {
     rx: Pin<Box<async_channel::Receiver<()>>>,
 }
 
 impl ExitGuard {
-    pub(crate) fn exit(self) {}
+    pub fn exit(self) {}
 }
 
 impl Future for Exit {
@@ -27,7 +33,33 @@ impl Future for Exit {
     }
 }
 
-pub(crate) fn exit_guard() -> (ExitGuard, Exit) {
+pub fn exit_guard() -> (ExitGuard, Exit) {
     let (_tx, rx) = async_channel::bounded(1);
     (ExitGuard { _tx }, Exit { rx: Box::pin(rx) })
+}
+
+impl Exit {
+    pub async fn race<F>(self, future: F)
+    where
+        F: Future,
+    {
+        futures_lite::future::race(self, async {
+            future.await;
+        })
+        .await
+    }
+
+    // pub async fn race_with_return<F, R>(self, future: F) -> Option<R>
+    // where
+    //     F: Future<Output = R>,
+    // {
+    //     futures_lite::future::race(
+    //         async {
+    //             self.await;
+    //             None
+    //         },
+    //         async { Some(future.await) },
+    //     )
+    //     .await
+    // }
 }

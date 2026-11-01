@@ -4,6 +4,6 @@ extern crate self as phanerite_executor;
 mod app;
 pub mod event;
 pub mod tao_event;
-mod window;
+pub mod window;
 
-pub use app::{Application, Context};
+pub use app::{Application, Context, Shutdown};

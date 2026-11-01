@@ -2614,6 +2614,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "phanerite-layout"
+version = "0.1.0-dev"
+dependencies = [
+ "slotmap",
+ "taffy",
+]
+
+[[package]]
 name = "phanerite-ui-macro"
 version = "0.1.0-dev"
 dependencies = [
@@ -3580,6 +3588,17 @@ dependencies = [
  "futures-lite",
  "tao",
  "tracing",
+]
+
+[[package]]
+name = "taffy"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f7bd2d97198df05186f93a3a3c306845f40e8b3c22bf9279cdd7e5cf5fea7d"
+dependencies = [
+ "serde",
+ "slotmap",
+ "smallvec",
 ]
 
 [[package]]

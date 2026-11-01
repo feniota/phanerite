@@ -94,18 +94,3 @@ where
         marker: PhantomData::<fn(E, M)>,
     })
 }
-
-pub(super) fn erase_send_observer<E, F, M: 'static>(
-    id: ObserverId,
-    callback: F,
-) -> Box<dyn ErasedObserver + Send>
-where
-    E: Event,
-    F: ObserverCallback<E, M> + Send,
-{
-    Box::new(TypedObserver {
-        id,
-        callback,
-        marker: PhantomData::<fn(E, M)>,
-    })
-}

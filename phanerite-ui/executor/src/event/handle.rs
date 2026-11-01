@@ -1,7 +1,7 @@
 //! Unified submission handle for events and deferred observer changes.
 
 use super::{
-    EmitError, Event, ObserveError, ObserverCallback, ObserverId, observer::erase_send_observer,
+    EmitError, Event, ObserveError, ObserverCallback, ObserverId, observer::erase_observer,
     registry::ObserverRegistry,
 };
 use std::sync::{
@@ -9,11 +9,11 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-pub(super) type ObserverCommand = Box<dyn FnOnce(&mut ObserverRegistry) + Send>;
+pub(super) type ObserverCommand = Box<dyn FnOnce(&mut ObserverRegistry)>;
 
-/// Cloneable, thread-safe handle for event emission and observer registration.
+/// Cloneable, thread-local handle for event emission and observer registration.
 /// Observer changes take effect between event dispatches.
-/// Queued callbacks must be Send; their asynchronous futures need not be Send.
+/// Queued callbacks and their asynchronous futures need not be `Send`.
 /// Submission success means queued, not yet applied. Commands are FIFO, but
 /// event input uses a separate queue; there is no total order across both.
 /// Observer commands use an unbounded queue; custom events use a bounded queue.
@@ -30,7 +30,7 @@ impl EventHandle {
     pub fn observe<E, F, M: 'static>(&self, callback: F) -> Result<ObserverId, ObserveError>
     where
         E: Event,
-        F: ObserverCallback<E, M> + Send,
+        F: ObserverCallback<E, M>,
     {
         let sequence = self
             .next_observer
@@ -40,7 +40,7 @@ impl EventHandle {
             registry: self.registry,
             sequence,
         };
-        let observer = erase_send_observer(id, callback);
+        let observer = erase_observer(id, callback);
         self.send(Box::new(move |registry| {
             registry.insert_erased(std::any::TypeId::of::<E>(), observer)
         }))?;

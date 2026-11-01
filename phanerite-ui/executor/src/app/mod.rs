@@ -10,7 +10,7 @@ use self::shutdown::exit_guard;
 use crate::app::shutdown::Exit;
 use crate::event::{EventDispatcher, EventHandle, EventReceiver, On};
 use crate::tao_event::TaaoEventSource;
-use async_executor::Executor;
+use async_executor::LocalExecutor;
 use std::sync::Arc;
 use taao::EventLoopBlockOn;
 use tao::event_loop::EventLoopBuilder;
@@ -57,14 +57,13 @@ impl Application {
         self.event_handle.clone()
     }
 
-    pub fn run<F, Fut>(mut self, init: F) -> Result<(), taao::BlockOnError>
+    pub fn run<F>(mut self, init: F) -> Result<(), taao::BlockOnError>
     where
-        F: FnOnce(Arc<Context>, Exit) -> Fut,
-        Fut: Future<Output = ()> + Send,
+        F: AsyncFnOnce(Arc<Context>, Exit),
     {
         let mut event_loop = self.event_loop.build();
         let instance = Instance::new(self.instance_descriptor);
-        let executor = Executor::new();
+        let executor = LocalExecutor::new();
         let (guard, exit) = exit_guard();
 
         event_loop.block_on_with_events(async move |event| {

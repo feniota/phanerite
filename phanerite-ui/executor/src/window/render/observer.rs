@@ -19,7 +19,7 @@ impl WindowRender {
 fn register_redraw(
     events: &EventHandle,
     window_id: WindowId,
-    mut render: impl FnMut() + Send + 'static,
+    mut render: impl FnMut() + 'static,
 ) -> Result<(), ObserveError> {
     let redraw = events.observe(move |event: On<RedrawRequested>| {
         if event.window_id == window_id {

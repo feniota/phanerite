@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use futures_lite::future::{block_on, yield_now, zip};
-use phanerite_executor::event::{EmitError, Event, EventDispatcher, EventHandle, On};
+use phanerite_executor::event::{EmitError, Event, EventDispatcher, On};
 
 #[derive(Event)]
 struct TestEvent(u32);
@@ -108,8 +108,6 @@ fn handles_are_scoped_to_dispatcher_and_not_reused() {
 #[test]
 fn mailbox_applies_backpressure_broadcasts_and_drains_on_close() {
     block_on(async {
-        fn assert_send_sync<T: Send + Sync>() {}
-        assert_send_sync::<EventHandle>();
         let (mut events, receiver, sender) = EventDispatcher::channel(1);
         let received = Rc::new(RefCell::new(Vec::new()));
         let sink = received.clone();
@@ -178,8 +176,6 @@ fn commands_wake_idle_pump_and_apply_without_an_event() {
             self.0.fetch_add(1, Ordering::Relaxed);
         }
     }
-    fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<phanerite_executor::event::EventHandle>();
     let (dispatcher, receiver, sender) = EventDispatcher::channel(4);
     let commands = sender.clone();
     let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
@@ -188,25 +184,19 @@ fn commands_wake_idle_pump_and_apply_without_an_event() {
     let mut pump = std::pin::pin!(dispatcher.pump(receiver));
     assert!(pump.as_mut().poll(&mut cx).is_pending());
     assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
-    let capture = Arc::new(());
+    let capture = Rc::new(());
     let state = capture.clone();
-    let id = std::thread::spawn(move || {
-        let id = commands
-            .observe(move |_: On<TestEvent>| {
-                let _ = &state;
-            })
-            .unwrap();
-        (commands, id)
-    })
-    .join()
-    .unwrap();
-    let (commands, id) = id;
+    let id = commands
+        .observe(move |_: On<TestEvent>| {
+            let _ = &state;
+        })
+        .unwrap();
     assert!(wakes.0.load(Ordering::Relaxed) > 0);
     block_on(futures_lite::future::poll_once(pump.as_mut()));
-    assert_eq!(Arc::strong_count(&capture), 2);
+    assert_eq!(Rc::strong_count(&capture), 2);
     commands.remove_observer(id).unwrap();
     block_on(futures_lite::future::poll_once(pump.as_mut()));
-    assert_eq!(Arc::strong_count(&capture), 1);
+    assert_eq!(Rc::strong_count(&capture), 1);
     // Finish the cooperative yield; an idle pump must then stop waking itself.
     block_on(futures_lite::future::poll_once(pump.as_mut()));
     let before = wakes.0.load(Ordering::Relaxed);
@@ -285,16 +275,16 @@ fn command_ids_share_namespace_and_dropping_dispatcher_releases_pending_callback
 
 #[test]
 fn one_handle_registers_emits_and_removes_while_pump_runs() {
-    use std::sync::atomic::{AtomicU32, Ordering};
     block_on(async {
         let (dispatcher, receiver, handle) = EventDispatcher::channel(4);
-        let seen = Arc::new(AtomicU32::new(0));
+        let seen = Rc::new(RefCell::new(0));
         let sink = seen.clone();
         let observer_handle = handle.clone();
         zip(dispatcher.pump(receiver), async move {
             handle
-                .observe(move |event: On<TestEvent>| {
-                    sink.fetch_add(event.0, Ordering::Relaxed);
+                .observe(async move |event: On<TestEvent>| {
+                    yield_now().await;
+                    *sink.borrow_mut() += event.0;
                     observer_handle.remove_observer(event.observer()).unwrap();
                     observer_handle.try_emit(TestEvent(100)).unwrap();
                     observer_handle.close();
@@ -303,6 +293,6 @@ fn one_handle_registers_emits_and_removes_while_pump_runs() {
             handle.emit(TestEvent(1)).await.unwrap();
         })
         .await;
-        assert_eq!(seen.load(Ordering::Relaxed), 1);
+        assert_eq!(*seen.borrow(), 1);
     });
 }

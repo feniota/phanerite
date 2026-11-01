@@ -2603,7 +2603,11 @@ version = "0.1.0-dev"
 dependencies = [
  "async-channel",
  "async-executor",
+ "bytemuck",
  "futures-lite",
+ "gdkwayland-sys",
+ "gtk",
+ "phanerite-layout",
  "phanerite-ui-macro",
  "taao",
  "tao",

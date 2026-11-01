@@ -1,17 +1,19 @@
-//! Retained UI data structures for PhaUI.
+//! Retained layout data structures for PhaUI.
 //!
-//! Taffy owns node identity, topology and layout data. Components are concrete
-//! Rust values associated with their root nodes in a sparse secondary map.
+//! Taffy owns node identity, topology and box-layout data. Components are
+//! concrete Rust values associated with their root nodes in a sparse secondary map.
 //! This crate does not create OS windows or implement rendering, events,
 //! reactive scheduling or component lifecycle callbacks.
 
 mod error;
 mod node;
+mod snapshot;
 mod tree;
 
 pub use error::{TreeError, TreeResult};
-pub use node::{NodeKind, NodeMetadata};
-pub use tree::{NoComponents, RemovedSubtree, Window};
+pub use node::{LayoutNodeKind, NodeMetadata};
+pub use snapshot::{LayoutSnapshot, NodeLayout};
+pub use tree::{LayoutTree, NoComponents, RemovedSubtree};
 
 pub use taffy;
 pub use taffy::NodeId;

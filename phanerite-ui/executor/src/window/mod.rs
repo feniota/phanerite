@@ -5,8 +5,8 @@ pub mod render;
 
 pub use builder::WindowBuilder;
 pub use render::{
-    RenderContent, RenderContentFactory, SurfaceOptions, WindowRender, WindowRenderError,
-    WindowRenderOptions,
+    LayoutDebugRenderer, LayoutRenderError, RenderContent, RenderContentFactory, RenderViewport,
+    SurfaceOptions, WindowRender, WindowRenderError, WindowRenderOptions,
 };
 
 use std::sync::Arc;

@@ -5,13 +5,13 @@ mod shutdown;
 
 pub use context::Context;
 pub use shutdown::Shutdown;
+use std::rc::Rc;
 
 use self::shutdown::exit_guard;
 use crate::app::shutdown::Exit;
 use crate::event::{EventDispatcher, EventHandle, EventReceiver, On};
 use crate::tao_event::TaaoEventSource;
 use async_executor::LocalExecutor;
-use std::sync::Arc;
 use taao::EventLoopBlockOn;
 use tao::event_loop::EventLoopBuilder;
 use wgpu::{Instance, InstanceDescriptor};
@@ -59,7 +59,7 @@ impl Application {
 
     pub fn run<F>(mut self, init: F) -> Result<(), taao::BlockOnError>
     where
-        F: AsyncFnOnce(Arc<Context>, Exit),
+        F: AsyncFnOnce(Rc<Context>, Exit),
     {
         let mut event_loop = self.event_loop.build();
         let instance = Instance::new(self.instance_descriptor);
@@ -72,7 +72,7 @@ impl Application {
                 events: self.event_handle,
                 instance,
             };
-            let cx = Arc::new(cx);
+            let cx = Rc::new(cx);
 
             let mut guard = Some(guard);
             cx.events

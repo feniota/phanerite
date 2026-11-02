@@ -35,7 +35,7 @@ downloaders, rather than by passing a large number of configuration options.
 
 **Type-driven guidance through the workflow.** The build state of an object is recorded in its type parameters, and each
 state exposes only the operations that are legal at that point. Your IDE's LSP completion therefore becomes part of the
-workflow itself: from the value in front of you, you can see what can be done right now and what the next step may be,
+workflow itself: from the VALUE in front of you, you can see what can be done right now and what the next step may be,
 without having to memorise the whole API. `launch()`, for instance, only appears in the completion list once both the
 Java runtime and the files are ready. Illegal states not only fail to compile, they never show up on the normal path
 through the API.

@@ -54,9 +54,11 @@ tao_event::TaaoEventSource::run
 EventHandle → EventReceiver → EventDispatcher::pump → On<E> 监听器
 ```
 
-`event` 模块只处理事件队列和监听器，不依赖 Taao/Tao。`Application` 并发驱动 `TaaoEventSource::run()` 和 dispatcher 的 `pump()`；前者等待平台输入，通过 `emit` 转发，队列满时等待容量。
+`event` 模块只处理事件队列和监听器，不依赖 Taao/Tao。`Application` 并发驱动 `TaaoEventSource::run()` 和 dispatcher 的
+`pump()`；前者等待平台输入，通过 `emit` 转发，队列满时等待容量。
 
-对于同一条平台输入，原始 `EventKind` 先入队，对应的类型化事件随后入队。它们是两条独立事件，其他生产者的事件可以插入其间，监听器增删也可以在两次分发之间生效。没有对应类型的事件仍可通过原始 `EventKind` 监听。
+对于同一条平台输入，原始 `EventKind` 先入队，对应的类型化事件随后入队。它们是两条独立事件，其他生产者的事件可以插入其间，监听器增删也可以在两次分发之间生效。没有对应类型的事件仍可通过原始
+`EventKind` 监听。
 
 同一事件的监听器按实际注册顺序依次执行，每个异步回调完成后才执行下一个。回调长时间等待时，后续事件和监听器变更也会等待。
 
@@ -106,7 +108,7 @@ Tao 路由。
 | `MouseWheel`       | `device_id: DeviceId`、`delta: MouseScrollDelta`、`phase: TouchPhase`、`modifiers: ModifiersState` | 鼠标滚轮或触控板滚动          |
 | `MouseInput`       | `device_id: DeviceId`、`state: ElementState`、`button: MouseButton`、`modifiers: ModifiersState`   | 鼠标按钮按下或释放           |
 | `TouchpadPressure` | `device_id: DeviceId`、`pressure: f32`、`stage: i64`                                              | 触控板压力变化             |
-| `AxisMotion`       | `device_id: DeviceId`、`axis: AxisId`、`value: f64`                                               | 窗口收到设备轴输入           |
+| `AxisMotion`       | `device_id: DeviceId`、`axis: AxisId`、`VALUE: f64`                                               | 窗口收到设备轴输入           |
 | `Touch`            | `touch: tao::event::Touch`                                                                      | 触摸点状态、位置等数据         |
 
 `ModifiersState` 来自 `tao::keyboard`，其余表内的非基础输入类型来自 `tao::event`。
@@ -127,7 +129,7 @@ Tao 路由。
 | `Removed`     | —                                        | 输入设备移除               |
 | `MouseMotion` | `delta: (f64, f64)`                      | 原始鼠标相对移动量，不是窗口内的光标位置 |
 | `MouseWheel`  | `delta: MouseScrollDelta`                | 原始滚轮输入               |
-| `Motion`      | `axis: AxisId`、`value: f64`              | 原始设备轴输入              |
+| `Motion`      | `axis: AxisId`、`VALUE: f64`              | 原始设备轴输入              |
 | `Button`      | `button: ButtonId`、`state: ElementState` | 原始设备按钮输入             |
 | `Key`         | `event: RawKeyEvent`                     | 原始键盘输入               |
 | `Text`        | `codepoint: char`                        | 原始文本字符               |
@@ -228,7 +230,8 @@ events.emit(RefreshRequested).await?;
 `emit` 会等待自定义事件队列容量，`try_emit` 立即返回，队列满时返回 `EmitError::Full`。在同一 dispatcher 的回调内提交后续事件应使用
 `try_emit`，避免队列满时等待自身消费而死锁。即便手动提交的是 Tao 类型或原始 `EventKind`，也只按提交的类型分发，不会再次路由。
 
-`EventHandle::close()` 关闭统一事件队列，包含 Taao 转发在内的所有生产者都无法再提交；已排队事件排空后 `pump` 返回。转发器下一次提交时返回 `EmitError::Closed`，不会主动关闭 Tao 窗口。`Application` 在 `pump` 返回时结束运行，也会取消仍在等待平台输入的转发器。
+`EventHandle::close()` 关闭统一事件队列，包含 Taao 转发在内的所有生产者都无法再提交；已排队事件排空后 `pump`
+返回。转发器下一次提交时返回 `EmitError::Closed`，不会主动关闭 Tao 窗口。`Application` 在 `pump` 返回时结束运行，也会取消仍在等待平台输入的转发器。
 
 Taao 事件流自然结束只释放转发器持有的句柄，不关闭其他生产者。丢弃全部句柄也会使事件队列结束；回调捕获的句柄和转发器持有的句柄都属于生产者。
 

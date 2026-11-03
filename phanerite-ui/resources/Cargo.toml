@@ -1,17 +1,16 @@
 [package]
 name = "phanerite-resources"
-version = "0.1.0"
+version = "0.1.0-dev"
+license = "MIT OR Apache-2.0"
+
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
 edition.workspace = true
+categories = ["development-tools"]
 
 [dependencies]
-async-channel = "2.5"
-async-executor = "1.14"
-async-task = "4.7"
-futures-lite = "2.6"
+async-channel.workspace = true
+async-executor.workspace = true
+async-task.workspace = true
+futures-lite.workspace = true

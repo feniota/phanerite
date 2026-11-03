@@ -6,9 +6,7 @@ license = "MIT OR Apache-2.0"
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 edition.workspace = true
-keywords.workspace = true
 categories = ["development-tools"]
 
 [dependencies]
@@ -23,15 +21,15 @@ taao = { version = "0.1", features = ["event", "tracing"] }
 wgpu.workspace = true
 
 # Async / Executor
-async-executor = "1.14"
-async-channel = "2.5"
-futures-lite = "2.6"
+async-executor.workspace = true
+async-channel.workspace = true
+futures-lite.workspace = true
 
 # Serialization / Data format
 url.workspace = true
 
 # Logging / Debug
-thiserror = "2.0"
+thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

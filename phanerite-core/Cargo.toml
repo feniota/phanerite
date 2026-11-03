@@ -2,11 +2,11 @@
 name = "phanerite-core"
 version = "0.1.1"
 license = "MIT OR Apache-2.0"
+description = "A Minecraft launcher core library written in Rust"
 
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 edition.workspace = true
 readme = "README.md"
 keywords.workspace = true
@@ -15,11 +15,11 @@ categories = ["development-tools"]
 [dependencies]
 
 # async runtime / async utilities
-async-channel = "2.5"
-async-fs = "2.2"
-async-lock = "3.4"
-async-process = "2.5"
-event-listener = "5.4"
+async-channel.workspace = true
+async-fs.workspace = true
+async-lock.workspace = true
+async-process.workspace = true
+event-listener.workspace = true
 futures.workspace = true
 
 # serialization / data format
@@ -68,7 +68,7 @@ chrono.workspace = true
 uuid.workspace = true
 
 # logging / diagnostics
-thiserror = "2.0"
+thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

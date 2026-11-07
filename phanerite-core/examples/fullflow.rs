@@ -54,7 +54,7 @@ fn main() {
                 .inject(&storage)
                 .await?
                 // 自定义 Yggdrasil 地址
-                .custom("https://aphanite.enita.cn/api/yggdrasil".parse::<url::Url>()?)
+                .custom("https://aphanite.feniota.org/api/yggdrasil".parse::<url::Url>()?)
                 .await?
                 // 用户名（一般为邮箱，服务器支持则可以为游戏角色名）
                 .username(

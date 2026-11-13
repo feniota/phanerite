@@ -19,7 +19,7 @@ pub use handle::EventHandle;
 pub use observer::{ObserverCallback, ObserverFuture, ObserverId};
 pub use on::On;
 pub use payload::Event;
-pub use phanerite_ui_macro::Event;
+pub use phanerite_ui_macros::Event;
 pub use receiver::{EventReceiver, QueuedEvent};
 
 pub(crate) use payload::ErasedEvent;

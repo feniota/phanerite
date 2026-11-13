@@ -1,26 +1,29 @@
-//! Retained UI data structures for PhaUI.
-//!
-//! Taffy owns node identity, topology and layout data. Components are concrete
-//! Rust values associated with their root nodes in a sparse secondary map.
-//! This crate does not create OS windows or implement rendering, events,
-//! reactive scheduling or component lifecycle callbacks.
+#![deny(clippy::unused_trait_names)]
 
-mod error;
+// Lets `::phanerite_layout::…` paths emitted by our derive macros resolve inside this crate.
+extern crate self as phanerite_layout;
+
+mod aspect;
+mod batch;
+mod commands;
+mod context;
 mod node;
-mod tree;
+mod resources;
+mod system;
+mod world;
 
-pub use error::{TreeError, TreeResult};
-pub use node::{NodeKind, NodeMetadata};
-pub use tree::{NoComponents, RemovedSubtree, Window};
+pub use aspect::{AnyStorage, Aspect, Storage, StorageIterator};
+pub use batch::{Batch, Bundle};
+pub use commands::Commands;
+pub use context::{Context, SharedContext};
+pub use node::NodeMetadata;
+pub use phanerite_ui_macros::Aspect;
+pub use system::{AspectSet, System, SystemKey};
+pub use world::World;
 
 pub use taffy;
-pub use taffy::NodeId;
 
-/// Marker contract implemented by a compiler-generated closed component set.
-///
-/// The generated enum remains an ordinary, statically typed Rust value. This
-/// trait gives the component store a stable bound to extend when lifecycle
-/// dispatch is designed; it does not imply dynamic dispatch or type erasure.
-pub trait Component {}
+pub use World as LayoutWindow;
 
-impl Component for NoComponents {}
+#[cfg(test)]
+mod tests;

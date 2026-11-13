@@ -12,5 +12,8 @@ keywords.workspace = true
 categories = ["development-tools"]
 
 [dependencies]
+phanerite-ui-macros = { path = "../macros" }
+tracing.workspace = true
 slotmap = "1.1.1"
 taffy = "0.15.1"
+pastey = "0.2.3"

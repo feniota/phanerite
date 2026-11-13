@@ -1,17 +1,14 @@
-/// The three kinds of nodes understood by the box-layout tree.
+/// The three kinds of actual UI nodes.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum LayoutNodeKind {
-    /// A rectangular box. Only box nodes may have children in this tree.
+pub enum NodeKind {
+    /// A rectangular container. Only div nodes may have children.
     #[default]
-    Box,
-    /// A measured text-flow leaf in the box-layout tree, not one source `text`
-    /// or `span` element. Rich-text runs, inline-box placement, measurement and
-    /// rendering belong to a future text-layout integration.
+    Div,
+    /// A text leaf. Text measurement and rendering are separate integrations.
     Text,
-    /// A leaf whose content is supplied by an external renderer, such as an
-    /// image, SVG or 3D scene. This discriminator does not allocate resources
-    /// or determine whether the leaf participates in block or inline flow.
-    Replaced,
+    /// An external visual leaf, such as an image, SVG or 3D scene.
+    /// This discriminator does not allocate any GPU resources.
+    Glyph,
 }
 
 /// Fixed node metadata stored in Taffy's node context.
@@ -21,19 +18,19 @@ pub enum LayoutNodeKind {
 /// concrete component types supplied by generated Rust code.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct NodeMetadata {
-    kind: LayoutNodeKind,
+    kind: NodeKind,
 }
 
 impl NodeMetadata {
-    /// Creates metadata for a box, text or replaced node.
+    /// Creates metadata for a div, text or glyph node.
     #[must_use]
-    pub const fn new(kind: LayoutNodeKind) -> Self {
+    pub const fn new(kind: NodeKind) -> Self {
         Self { kind }
     }
 
     /// Returns the node's kind.
     #[must_use]
-    pub const fn kind(&self) -> LayoutNodeKind {
+    pub const fn kind(&self) -> NodeKind {
         self.kind
     }
 }

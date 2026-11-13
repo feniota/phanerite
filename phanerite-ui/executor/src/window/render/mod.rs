@@ -2,18 +2,12 @@
 
 mod content;
 mod error;
-mod layout;
 mod observer;
 mod options;
-mod viewport;
-#[cfg(target_os = "linux")]
-mod wayland;
 
 pub use content::{RenderContent, RenderContentFactory};
 pub use error::WindowRenderError;
-pub use layout::{LayoutDebugRenderer, LayoutRenderError};
 pub use options::{SurfaceOptions, WindowRenderOptions};
-pub use viewport::RenderViewport;
 
 use super::Window;
 use crate::Context;
@@ -31,10 +25,7 @@ use wgpu::{
 /// drawing, and presentation in the event dispatcher. `render` can also be used
 /// directly with a caller-provided texture view.
 pub struct WindowRender {
-    surface: Surface<'static>,
-    // Field order matters: the GPU surface must be destroyed before its target.
-    #[cfg(target_os = "linux")]
-    wayland_target: Option<wayland::WaylandTarget>,
+    pub surface: Surface<'static>,
     pub adapter: Adapter,
     pub device: Device,
     pub queue: Queue,
@@ -58,17 +49,6 @@ impl WindowRender {
         cx: &Context,
         options: WindowRenderOptions,
     ) -> Result<Self, WindowRenderError> {
-        #[cfg(target_os = "linux")]
-        let wayland_target = wayland::WaylandTarget::new(&window.window)?;
-        #[cfg(target_os = "linux")]
-        let surface = if let Some(target) = &wayland_target {
-            // SAFETY: the local renderer retains the native target, keeps the
-            // wgpu surface private, and destroys it before the target.
-            unsafe { cx.instance.create_surface_unsafe(target.raw_target()?)? }
-        } else {
-            cx.instance.create_surface(window.window.clone())?
-        };
-        #[cfg(not(target_os = "linux"))]
         let surface = cx.instance.create_surface(window.window.clone())?;
         let adapter = cx
             .instance
@@ -80,18 +60,12 @@ impl WindowRender {
             })
             .await?;
         let (device, queue) = adapter.request_device(&options.device).await?;
-        let size = window.window.inner_size();
-        #[cfg(target_os = "linux")]
-        let size = wayland_target
-            .as_ref()
-            .map_or(size, |target| target.physical_size());
-        let surface_config = Self::configuration(&surface, &adapter, size, &options.surface)?;
+        let surface_config =
+            Self::configuration(&surface, &adapter, &window.window, &options.surface);
         surface.configure(&device, &surface_config);
         let content = (options.content)(&device, &queue, &surface_config);
         Ok(Self {
             surface,
-            #[cfg(target_os = "linux")]
-            wayland_target,
             adapter,
             device,
             queue,
@@ -105,57 +79,38 @@ impl WindowRender {
     }
 
     /// Applies the renderer's surface options and current physical window size.
-    pub fn configure(&mut self) -> Result<(), WindowRenderError> {
+    pub fn configure(&mut self) {
         let config = Self::configuration(
             &self.surface,
             &self.adapter,
-            self.physical_size(),
+            &self.window,
             &self.surface_options,
-        )?;
+        );
         self.surface.configure(&self.device, &config);
         self.surface_config = config;
         self.content
             .configure(&self.device, &self.queue, &self.surface_config);
-        Ok(())
-    }
-
-    /// The GPU presentation surface, whose native target remains renderer-owned.
-    pub fn surface(&self) -> &Surface<'_> {
-        &self.surface
-    }
-
-    fn physical_size(&self) -> tao::dpi::PhysicalSize<u32> {
-        #[cfg(target_os = "linux")]
-        if let Some(target) = &self.wayland_target {
-            return target.physical_size();
-        }
-        self.window.inner_size()
     }
 
     fn configuration(
         surface: &Surface<'_>,
         adapter: &Adapter,
-        size: tao::dpi::PhysicalSize<u32>,
+        window: &TaoWindow,
         options: &SurfaceOptions,
-    ) -> Result<SurfaceConfiguration, WindowRenderError> {
+    ) -> SurfaceConfiguration {
         let caps = surface.get_capabilities(adapter);
-        Ok(SurfaceConfiguration {
+        let size = window.inner_size();
+        SurfaceConfiguration {
             usage: options.usage,
-            format: *caps
-                .formats
-                .first()
-                .ok_or(WindowRenderError::UnsupportedSurface)?,
+            format: caps.formats[0],
             color_space: options.color_space,
             width: size.width.max(1),
             height: size.height.max(1),
             present_mode: options.present_mode,
-            alpha_mode: *caps
-                .alpha_modes
-                .first()
-                .ok_or(WindowRenderError::UnsupportedSurface)?,
+            alpha_mode: caps.alpha_modes[0],
             view_formats: options.view_formats.clone(),
             desired_maximum_frame_latency: options.desired_maximum_frame_latency,
-        })
+        }
     }
 
     pub fn set_clear_color(&mut self, color: Color) {
@@ -166,26 +121,7 @@ impl WindowRender {
     ///
     /// The encoder and target must belong to this renderer's device. The target
     /// texture must have `TextureUsages::RENDER_ATTACHMENT` usage.
-    /// Its extent must match `surface_config`; use `encode_with_viewport` for
-    /// targets with a different size or scale.
     pub fn encode(&mut self, encoder: &mut CommandEncoder, target: &TextureView) {
-        if let Some(viewport) = RenderViewport::new(
-            self.surface_config.width,
-            self.surface_config.height,
-            self.window.scale_factor(),
-        ) {
-            self.encode_with_viewport(encoder, target, viewport);
-        }
-    }
-
-    /// Encodes a frame using an explicit target extent and scale, e.g. offscreen.
-    pub fn encode_with_viewport(
-        &mut self,
-        encoder: &mut CommandEncoder,
-        target: &TextureView,
-        viewport: RenderViewport,
-    ) {
-        self.content.prepare(&self.device, &self.queue, viewport);
         let color_attachments = [Some(RenderPassColorAttachment {
             view: target,
             depth_slice: None,
@@ -221,15 +157,12 @@ impl WindowRender {
     }
 
     fn render_frame(&mut self) {
-        let size = self.physical_size();
+        let size = self.window.inner_size();
         if size.width == 0 || size.height == 0 {
             return;
         }
-        if (self.surface_config.width != size.width || self.surface_config.height != size.height)
-            && let Err(error) = self.configure()
-        {
-            tracing::error!(%error, "surface reconfiguration failed");
-            return;
+        if self.surface_config.width != size.width || self.surface_config.height != size.height {
+            self.configure();
         }
 
         let (frame, suboptimal) = match self.surface.get_current_texture() {
@@ -237,10 +170,7 @@ impl WindowRender {
             CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
             CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => return,
             CurrentSurfaceTexture::Outdated => {
-                if let Err(error) = self.configure() {
-                    tracing::error!(%error, "surface reconfiguration failed");
-                    return;
-                }
+                self.configure();
                 self.window.request_redraw();
                 return;
             }
@@ -259,10 +189,7 @@ impl WindowRender {
         self.queue.present(frame);
 
         if suboptimal {
-            if let Err(error) = self.configure() {
-                tracing::error!(%error, "surface reconfiguration failed");
-                return;
-            }
+            self.configure();
             self.window.request_redraw();
         }
     }

@@ -2,15 +2,18 @@
 
 mod content;
 mod error;
+mod layout;
 mod observer;
 mod options;
+mod viewport;
 #[cfg(target_os = "linux")]
 mod wayland;
 
 pub use content::{RenderContent, RenderContentFactory};
 pub use error::WindowRenderError;
+pub use layout::{LayoutDebugRenderer, LayoutRenderError};
 pub use options::{SurfaceOptions, WindowRenderOptions};
-pub use phanerite_render::RenderViewport;
+pub use viewport::RenderViewport;
 
 use super::Window;
 use crate::Context;

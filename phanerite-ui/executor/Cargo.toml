@@ -11,14 +11,15 @@ categories = ["development-tools"]
 
 [dependencies]
 phanerite-ui-macro = { path = "macro" }
-phanerite-render = { path = "../render", default-features = false }
+phanerite-layout = { path = "../layout" }
 
 # Window / Event
 tao = "0.37"
 taao = { version = "0.1", features = ["event", "tracing"] }
 
 # GPU / Render
-wgpu.workspace = true
+wgpu = "30.0"
+bytemuck = "1.25"
 
 # Async / Executor
 async-executor.workspace = true
@@ -35,7 +36,3 @@ tracing.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 gdkwayland-sys = "0.18"
-
-[dev-dependencies]
-phanerite-layout = { path = "../layout" }
-phanerite-render = { path = "../render", default-features = false, features = ["layout-debug"] }

@@ -3,7 +3,7 @@
 use phanerite_layout::LayoutSnapshot;
 use wgpu::util::DeviceExt;
 
-use crate::{RenderContent, RenderViewport};
+use super::{RenderContent, RenderViewport};
 
 // Two Float32x4 instance attributes: logical rect and linear RGBA color.
 type RectInstance = [f32; 8];

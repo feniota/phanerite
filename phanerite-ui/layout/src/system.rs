@@ -9,14 +9,55 @@ pub trait AspectSet: 'static {
     ///
     /// # Panics
     ///
-    /// This method SHOULD panic once a duplicated aspect is detected, since it is an undefined
+    /// This method SHOULD panic once a duplicated aspect is detected, since it is undefined
     /// behavior for systems to care about the same aspect more than once and will lead to
     /// unexpected problems.
     fn validate();
 
+    /// The [`TypeId`]s of all aspects in the set.
     fn type_ids() -> Vec<TypeId>;
 }
 
+/// A unit of logic executed once per entity that has every aspect in its query.
+///
+/// `T` is the system's [`AspectSet`] — a tuple of distinct aspect types. For each entity
+/// carrying all of those aspects, the system function is called with a [`Context`] followed
+/// by one `&mut` reference per aspect; entities missing any of the aspects are skipped.
+/// The context exposes the taffy layout tree, node metadata, resources and deferred
+/// [`Commands`](crate::Commands), and reports the entity being processed via
+/// [`Context::node`].
+///
+/// Systems are usually plain closures or function pointers: any
+/// `Fn(&mut Context, &mut A, &mut B, ...)` automatically implements `System<(A, B, ...)>`
+/// (tuples of up to 16 aspects). Register one with [`World::insert_system`]; duplicate
+/// aspects in a single query are rejected at registration time.
+///
+/// # Example
+///
+/// ```no_run
+/// use phanerite_layout::taffy::Style;
+/// use phanerite_layout::{Aspect, Context, NodeMetadata, World};
+///
+/// #[derive(Aspect)]
+/// struct Position { x: f32, y: f32 }
+///
+/// #[derive(Aspect)]
+/// struct Velocity { x: f32, y: f32 }
+///
+/// let mut world = World::new();
+/// world.register::<Position>();
+/// world.register::<Velocity>();
+///
+/// let entity = world.spawn(Style::default(), NodeMetadata);
+/// world.insert_aspect(entity, Position { x: 0.0, y: 0.0 });
+/// world.insert_aspect(entity, Velocity { x: 1.0, y: 1.0 });
+///
+/// world.insert_system(|ctx: &mut Context, pos: &mut Position, vel: &mut Velocity| {
+///     // ctx.node() is the entity currently being processed.
+///     pos.x += vel.x;
+///     pos.y += vel.y;
+/// });
+/// ```
 pub trait System<T: AspectSet>: 'static {
     /// Iterate over the associated aspects and execute the inner system function.
     fn execute(&self, world: &mut World);
@@ -52,6 +93,7 @@ where
     F: System<T>,
     T: AspectSet,
 {
+    /// Box a system into a type-erased wrapper.
     pub(crate) fn new_boxed(system: F) -> Box<Self> {
         Box::new(Self {
             system,
@@ -59,12 +101,15 @@ where
         })
     }
 }
+/// Count the number of expressions in a comma-separated list.
 macro_rules! count_exprs {
     () => { 0usize };
     ($head:expr, $($tail:expr,)*) => {
         1usize + count_exprs!($($tail,)*)
     };
 }
+/// Implement [`AspectSet`] and [`System`] for a tuple of aspects, plus the blanket
+/// `System` impl for matching closures.
 macro_rules! implement_systems {
     ( $idx:ident $(, $aspect:ident )* ) =>{
         impl<$idx: $crate::Aspect, $($aspect: $crate::Aspect,)*> AspectSet for ($idx, $($aspect,)*) {
@@ -191,5 +236,6 @@ implement_systems!(
 );
 
 slotmap::new_key_type!(
+    /// Key identifying a system registered in the [`World`].
     pub struct SystemKey;
 );

@@ -13,6 +13,7 @@ impl Commands {
         self.despawns.push(key);
     }
 
+    /// Take all queued despawns, leaving the queue empty.
     pub(crate) fn drain_despawns(&mut self) -> std::vec::Drain<'_, DefaultKey> {
         self.despawns.drain(..)
     }

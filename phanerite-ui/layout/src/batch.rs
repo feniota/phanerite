@@ -11,8 +11,10 @@ use crate::{
 
 /// A tuple of aspects that can be inserted into entities in one batch.
 pub trait Bundle: AspectSet {
+    /// Raw pointers to the resolved storages of each bundle member.
     type Ptrs: Copy;
 
+    /// Resolve the storages of all bundle members. Returns `None` if any is not registered.
     fn resolve(world: &mut World) -> Option<Self::Ptrs>;
 
     /// # Safety
@@ -30,6 +32,8 @@ pub struct Batch<'w, B: Bundle> {
 }
 
 impl<'w, B: Bundle> Batch<'w, B> {
+    /// Resolve the bundle's storages in `world`. Returns `None` if any member aspect is
+    /// not registered.
     pub(crate) fn new(world: &'w mut World) -> Option<Self> {
         B::validate();
         Some(Self {

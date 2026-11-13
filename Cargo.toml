@@ -46,12 +46,12 @@ thiserror = "2.0"
 tracing = "0.1.44"
 
 [profile.dev.package]
-gpui-pre = { opt-level = 3 }
-gpui-component = { opt-level = 3 }
-gpui-kit = { opt-level = 3 }
-gpui-kit-assets = { opt-level = 3 }
-gpui-pre-macros = { opt-level = 3 }
-gpui-pre-platform = { opt-level = 3 }
-rustybuzz = { opt-level = 3 }
+# gpui-pre = { opt-level = 3 }
+# gpui-component = { opt-level = 3 }
+# gpui-kit = { opt-level = 3 }
+# gpui-kit-assets = { opt-level = 3 }
+# gpui-pre-macros = { opt-level = 3 }
+# gpui-pre-platform = { opt-level = 3 }
+# rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
-ttf-parser = { opt-level = 3 }
+# ttf-parser = { opt-level = 3 }

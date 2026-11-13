@@ -14,7 +14,7 @@ use crate::{
 
 /// The layout and UI data of a window.
 ///
-/// It is actually an ECS world and most of the logic runs inside this.
+/// It is actually an ECS world and most of the logic runs inside it.
 #[derive(Default)]
 pub struct World {
     taffy_tree: TaffyTree<()>,
@@ -33,10 +33,12 @@ pub struct World {
 }
 
 impl World {
+    /// Create an empty world.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Register a system, validating its aspect set. Returns a key for later removal.
     pub fn insert_system<T>(&mut self, system: impl System<T>) -> SystemKey
     where
         T: AspectSet,
@@ -45,11 +47,13 @@ impl World {
         self.systems.insert(SystemWrapper::new_boxed(system))
     }
 
+    /// Remove a previously registered system. Returns whether it existed.
     pub fn remove_system(&mut self, key: SystemKey) -> bool {
         // I don't think the system would be used after its removal
         self.systems.remove(key).is_some()
     }
 
+    /// Register a dense storage for `T`. Panics if a storage for `T` already exists.
     pub fn register_dense<T>(&mut self)
     where
         T: Aspect + 'static,
@@ -65,6 +69,7 @@ impl World {
         }
     }
 
+    /// Register a sparse storage for `T`. Panics if a storage for `T` already exists.
     pub fn register<T>(&mut self)
     where
         T: Aspect + 'static,
@@ -80,6 +85,7 @@ impl World {
         }
     }
 
+    /// Read the storage of `T`. Returns `None` if `T` is not registered.
     #[must_use]
     pub fn storage<T>(&self) -> Option<&Storage<T>>
     where
@@ -99,6 +105,7 @@ impl World {
         )
     }
 
+    /// Mutably access the storage of `T`. Returns `None` if `T` is not registered.
     #[must_use]
     pub fn storage_mut<T>(&mut self) -> Option<&mut Storage<T>>
     where
@@ -118,6 +125,8 @@ impl World {
         )
     }
 
+    /// Raw pointer to the storage of `T`, used by system and batch internals to avoid
+    /// holding borrows across iterations.
     #[must_use]
     pub(crate) fn storage_ptr<T>(&mut self) -> Option<*mut Storage<T>>
     where
@@ -136,13 +145,17 @@ impl World {
         )
     }
 
+    /// The underlying taffy layout tree.
     pub fn taffy_tree(&self) -> &TaffyTree<()> {
         &self.taffy_tree
     }
+    /// The underlying taffy layout tree, mutably.
     pub fn taffy_tree_mut(&mut self) -> &mut TaffyTree<()> {
         &mut self.taffy_tree
     }
 
+    /// Insert an aspect on `key`, returning the replaced value if any. Registers a sparse
+    /// storage on first use.
     pub fn insert_aspect<T>(&mut self, key: impl Into<DefaultKey>, aspect: T) -> Option<T>
     where
         T: Aspect,
@@ -150,10 +163,12 @@ impl World {
         crate::aspect::insert_aspect(&mut self.aspects, key.into(), aspect)
     }
 
+    /// The metadata of a node, if it exists.
     pub fn metadata(&self, key: DefaultKey) -> Option<&NodeMetadata> {
         self.metadatas.get(key)
     }
 
+    /// The metadata of a node, mutably, if it exists.
     pub fn metadata_mut(&mut self, key: DefaultKey) -> Option<&mut NodeMetadata> {
         self.metadatas.get_mut(key)
     }
@@ -184,6 +199,7 @@ impl World {
         }
     }
 
+    /// Insert a resource, returning the previous value of the same type if any.
     pub fn insert_resource<R: 'static>(&mut self, value: R) -> Option<R> {
         self.resources.insert(value)
     }
@@ -198,6 +214,7 @@ impl World {
         })
     }
 
+    /// Mutable access to a resource. Panics if it has not been inserted.
     pub fn resource_mut<R: 'static>(&mut self) -> &mut R {
         self.resources.get_mut::<R>().unwrap_or_else(|| {
             panic!(
@@ -207,6 +224,7 @@ impl World {
         })
     }
 
+    /// Remove a resource, returning it if present.
     pub fn remove_resource<R: 'static>(&mut self) -> Option<R> {
         self.resources.remove()
     }
@@ -217,6 +235,7 @@ impl World {
         Batch::new(self)
     }
 
+    /// Build a [`Context`] over the world for the given queried aspect set.
     pub(crate) fn context(&mut self, queried: Vec<TypeId>) -> Context<'_> {
         Context::new(
             &mut self.taffy_tree,
@@ -228,6 +247,7 @@ impl World {
         )
     }
 
+    /// Run a registered system, then flush its deferred commands.
     pub(crate) fn execute_system(&mut self, key: SystemKey) {
         // Take the system table out so the system can borrow the world mutably.
         let systems = std::mem::take(&mut self.systems);
@@ -238,6 +258,7 @@ impl World {
         self.flush_commands();
     }
 
+    /// Apply all queued commands (currently only despawns).
     pub(crate) fn flush_commands(&mut self) {
         let despawns: Vec<DefaultKey> = self.commands.drain_despawns().collect();
         for key in despawns {

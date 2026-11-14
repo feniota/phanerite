@@ -5,6 +5,9 @@ use crate::{aspect::Aspect, context::Context, world::World};
 
 /// A set of [`Aspect`]s that will be passed to a [`System`]
 pub trait AspectSet: 'static {
+    /// The [`TypeId`]s of all aspects in the set.
+    const TYPE_IDS: &'static [TypeId];
+
     /// Check if there is any duplicated aspect about which a system cares.
     ///
     /// # Panics
@@ -13,32 +16,26 @@ pub trait AspectSet: 'static {
     /// behavior for systems to care about the same aspect more than once and will lead to
     /// unexpected problems.
     fn validate();
-
-    /// The [`TypeId`]s of all aspects in the set.
-    fn type_ids() -> Vec<TypeId>;
 }
 
 impl AspectSet for () {
-    fn type_ids() -> Vec<TypeId> {
-        Vec::new()
-    }
+    const TYPE_IDS: &'static [TypeId] = &[];
     fn validate() {}
 }
 
 /// A stateless logic unit that queries [`Aspect`]s and processes their data.
 ///
 /// Typically you do not need to implement this trait yourself. This crate provides blanket
-/// implementations for all functions that meet the contraints, as decribed later.
+/// implementations for all functions that meet the following contraints:
 ///
-/// Systems are typically functions **with `'static` lifetimes**, that is, functions defined with
-/// the `fn` keyword, or closures that do not capture variables with limited lifetimes.
+/// - Returns [`()`](unit).
+/// - Receives a [`&mut Context`](crate::context::Context) as its first parameter, followed by
+///   up to 16 [`&mut Aspect`](crate::Aspect)s as the query (with which aspects does this system
+///   want to process?).
+/// - Has a `'static` lifetime. That is, it should be defined with the `fn` keyword, or is a closure
+///   that captures nothing whose lifetime is limited.
 ///
-/// The first parameters of system functions are always [`&mut Context`](crate::context::Context).
-/// Queries (with which aspects does this system want to process?) are later specified as
-/// [`&mut Aspect`](crate::aspect::Aspect)s in the parameter list. You can query up to 16 aspects
-/// per system.
-///
-/// For example, the `movement` is a system that update the positions of entities with both
+/// For example, the `movement` below is a system that update the positions of entities with both
 /// `Position` and `Velocity` aspects.
 ///
 /// ```
@@ -66,14 +63,19 @@ impl AspectSet for () {
 /// ```
 ///
 /// When you finish defining a system, you can insert it into the World by calling
-/// [`World::insert_system`] with your system function.
+/// [`World::insert_system`] with your system function. It is then automatically executed in the UI
+/// loop.
+///
+/// You can include any type that implements [`Aspect`] in your query, even if it is never inserted.
+/// In that case, execution will be safely and silently skipped. But please note you should NEVER
+/// query the same [`Aspect`] twice. See [Safety](#safety) for more details.
 ///
 /// # Performance
 ///
 /// There is no archetype in this crate, so iterations are implemented in a very simple manner.
-/// The first [`Aspect`] in your query is **always** fully iterated over, and the entities(
-/// retrieved from the first aspect's storage) are used to query the remaining storages, and then to
-/// determine whether to call the system.
+/// The first [`Aspect`] in your query is **always** fully iterated over, and the entities
+/// (retrieved from the first aspect's storage) are used to query the remaining storages, and then
+/// to determine whether to call the system.
 ///
 /// So, let's say you have 2 aspects, `A` with 10,000 entries and `B` with 200 entries. When writing
 /// a system for `(A, B)`, you should define your function as
@@ -87,19 +89,19 @@ impl AspectSet for () {
 /// # {}
 /// ```
 ///
-/// but not `fn(&mut Context, &mut A, &mut B)`, because the latter will lead to 9,800 useless
-/// iterations.
+/// but not `fn system(&mut Context, &mut A, &mut B)`, because the latter will lead to at least 9,800
+/// useless iterations.
 ///
 /// In other words, **always put the sparsest aspect in the front**.
 ///
 /// # Safety
 ///
-/// The system receive *raw* mutable references to the aspects at the same time. So trying to
-/// retrive the same aspect multiple times leads to aliasing the same mutable reference, (as there
-/// can only be one storage per aspect,) which is undefined behavior, and is therefore rejected.
+/// The system receives *raw* mutable references to the queried aspects directly. So trying to
+/// retrive the same aspect multiple times will alias a mutable reference, as there can only be one
+/// storage per aspect, which is undefined behavior, and is therefore rejected.
 ///
-/// There is no way to enforce the limitation without macros in current version of Rust, so the
-/// check is performed at runtime, when you insert the system into the world.
+/// There is no way to enforce the limitation without macros at compile time in current version of
+/// Rust, so the check is performed at runtime, when you insert the system into the world.
 ///
 /// ```should_panic
 /// use phanerite_layout::{Aspect, Context, World};
@@ -184,6 +186,9 @@ macro_rules! count_exprs {
 macro_rules! implement_systems {
     ( $idx:ident $(, $aspect:ident )* ) =>{
         impl<$idx: $crate::Aspect, $($aspect: $crate::Aspect,)*> AspectSet for ($idx, $($aspect,)*) {
+            const TYPE_IDS: &'static [TypeId] =
+                &[ TypeId::of::<$idx>() $(, TypeId::of::<$aspect>() )* ];
+
             fn validate() {
                 use std::collections::HashSet;
                 use std::any::type_name;
@@ -205,15 +210,6 @@ macro_rules! implement_systems {
                     type_name::<Self>()
                 )
             }
-
-            fn type_ids() -> Vec<TypeId> {
-                let mut ret = Vec::with_capacity(count_exprs!{ $idx, $($aspect,)* });
-                ret.push(TypeId::of::<$idx>());
-                $(
-                    ret.push(TypeId::of::<$aspect>());
-                )*
-                ret
-            }
         }
 
         impl<F, $idx, $($aspect,)*> $crate::System<($idx, $($aspect,)*)> for F
@@ -232,7 +228,7 @@ macro_rules! implement_systems {
                             return;
                         };
                     )*
-                    let mut ctx = world.context(<($idx, $($aspect,)*) as $crate::AspectSet>::type_ids());
+                    let mut ctx = world.context(<($idx, $($aspect,)*) as $crate::AspectSet>::TYPE_IDS);
                     // SAFETY: All aspect types are distinct, as enforced by `AspectSet::validate`,
                     // so these pointers refer to different storages. They were derived from the
                     // exclusive `world` borrow and remain valid throughout this iteration.
@@ -258,11 +254,8 @@ macro_rules! implement_systems {
 }
 
 impl<T: Aspect> AspectSet for (T,) {
+    const TYPE_IDS: &'static [TypeId] = &[TypeId::of::<T>()];
     fn validate() {}
-
-    fn type_ids() -> Vec<TypeId> {
-        vec![TypeId::of::<T>()]
-    }
 }
 impl<F, T> System<(T,)> for F
 where
@@ -273,7 +266,7 @@ where
         let Some(storage) = world.storage_ptr::<T>() else {
             return;
         };
-        let mut ctx = world.context(<(T,) as AspectSet>::type_ids());
+        let mut ctx = world.context(<(T,) as AspectSet>::TYPE_IDS);
         // SAFETY: same contract as the multi-aspect impls above; the single queried storage
         // is protected from Context access by the query-conflict check.
         unsafe {

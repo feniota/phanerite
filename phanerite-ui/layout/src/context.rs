@@ -34,7 +34,7 @@ pub struct Context<'w> {
     aspects: &'w mut AspectMap,
     resources: &'w mut Resources,
     commands: &'w mut Commands,
-    queried: Vec<TypeId>,
+    queried: &'static [TypeId],
 }
 
 impl<'w> Context<'w> {
@@ -45,7 +45,7 @@ impl<'w> Context<'w> {
         aspects: &'w mut AspectMap,
         resources: &'w mut Resources,
         commands: &'w mut Commands,
-        queried: Vec<TypeId>,
+        queried: &'static [TypeId],
     ) -> Self {
         Self {
             node: DefaultKey::null(),

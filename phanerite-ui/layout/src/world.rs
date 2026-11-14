@@ -236,7 +236,7 @@ impl World {
     }
 
     /// Build a [`Context`] over the world for the given queried aspect set.
-    pub(crate) fn context(&mut self, queried: Vec<TypeId>) -> Context<'_> {
+    pub(crate) fn context(&mut self, queried: &'static [TypeId]) -> Context<'_> {
         Context::new(
             &mut self.taffy_tree,
             &mut self.metadatas,
@@ -269,6 +269,6 @@ impl World {
     }
 
     pub fn run(&mut self) -> ! {
-        unimplemented!()
+        todo!()
     }
 }

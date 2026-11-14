@@ -8,10 +8,15 @@ import path from 'node:path';
 
 // The landing page, its data, and the stylesheet they share with the Worker's 404 page
 // live at the site root, so they own those names.
-const RESERVED_ROOT_NAMES = new Set(['index.html', 'branches.json', 'site.css', 'fonts']);
-// rustdoc writes this directory at the root of every doc tree; its presence is what
-// marks a subtree as "some branch's docs" when the snapshot is rescanned.
-const DOC_ROOT_MARKER = 'static.files';
+const RESERVED_ROOT_NAMES = new Set(['index.html', 'branches.json', 'site.css', 'fonts', 'static.files']);
+// rustdoc writes this file at the root of every doc tree; its presence is what marks a
+// subtree as "some branch's docs" when the snapshot is rescanned. (static.files used to
+// be the marker, but it now lives once at the site root, shared by every branch.)
+const DOC_ROOT_MARKER = 'crates.js';
+// rustdoc content-hashes every file in here, so the union of all branches' copies is
+// collision-free: one shared directory serves every branch and the browser caches each
+// file once, no matter how many branches reference it.
+const STATIC_DIR = 'static.files';
 const SEP = '<span class="sep"> &middot; </span>';
 // The faces rustdoc renders its pages with: its body text is Source Serif 4 and its
 // headings are Fira Sans. File names are content-hashed per rustdoc release, hence the
@@ -42,7 +47,7 @@ if (branchRelPath !== args.branch.trim()) {
   console.warn(`assemble: branch "${args.branch}" is not URL-safe, published at /${branchRelPath}/`);
 }
 if (!(await hasMarker(docsDir))) {
-  die(`${docsDir} does not look like rustdoc output (no ${DOC_ROOT_MARKER}/); refusing to publish it`);
+  die(`${docsDir} does not look like rustdoc output (no ${DOC_ROOT_MARKER}); refusing to publish it`);
 }
 await assertPathUsable(siteDir, branchRelPath, args.branch);
 
@@ -50,6 +55,9 @@ const targetDir = path.join(siteDir, branchRelPath);
 await rm(targetDir, { recursive: true, force: true });
 await mkdir(path.dirname(targetDir), { recursive: true });
 await cp(docsDir, targetDir, { recursive: true, force: true });
+
+await shareStaticFiles(targetDir, siteDir);
+await rewriteStaticRefs(targetDir);
 
 const crates = await readCrates(path.join(targetDir, 'crates.js'));
 // cargo leaves a lock sentinel in target/doc; it is not part of the documentation.
@@ -83,6 +91,7 @@ await writeFile(
   `${JSON.stringify({ generatedAt: builtAt, repo: repoUrl, branches: entries }, null, 2)}\n`,
 );
 await writeFile(path.join(siteDir, 'index.html'), renderLanding(entries, { repoUrl, builtAt }));
+await writeHeaders(siteDir);
 
 console.log(`Mounted ${args.branch} at /${branchRelPath}/ (${crates.length} crates).`);
 console.log(
@@ -175,7 +184,7 @@ async function findNestedRoots(absDir, relPrefix) {
 
   async function walk(abs, rel) {
     const dirents = await readdir(abs, { withFileTypes: true }).catch(() => []);
-    if (dirents.some((d) => d.name === DOC_ROOT_MARKER && d.isDirectory())) found.push(rel);
+    if (dirents.some((d) => d.name === DOC_ROOT_MARKER && d.isFile())) found.push(rel);
     for (const dirent of dirents) {
       if (!isBranchDir(dirent)) continue;
       await walk(path.join(abs, dirent.name), `${rel}/${dirent.name}`);
@@ -189,7 +198,7 @@ function isBranchDir(dirent) {
 
 async function hasMarker(dir) {
   const info = await stat(path.join(dir, DOC_ROOT_MARKER)).catch(() => null);
-  return Boolean(info?.isDirectory());
+  return Boolean(info?.isFile());
 }
 
 // The element shape of rustdoc's crate index is nightly-dependent, and every branch is
@@ -313,7 +322,7 @@ async function collectEntries(root) {
     } catch {
       return;
     }
-    if (rel && dirents.some((d) => d.name === DOC_ROOT_MARKER && d.isDirectory())) {
+    if (rel && dirents.some((d) => d.name === DOC_ROOT_MARKER && d.isFile())) {
       found.push(await describeTree(root, rel));
     }
     for (const dirent of dirents) {
@@ -351,24 +360,75 @@ function decodeSegment(segment) {
   }
 }
 
+// Moves this branch's static.files into the shared site-root union and drops the local
+// copy. Names are content hashes, so an existing file is either byte-identical (keep it)
+// or a hash collision (stop loudly rather than serve one branch's bytes as another's).
+// The union is append-only: a pruned branch's files linger, but they are few and tiny and
+// still serve any reader holding an older page.
+async function shareStaticFiles(targetDir, siteDir) {
+  const shared = path.join(siteDir, STATIC_DIR);
+  await mkdir(shared, { recursive: true });
+  const source = path.join(targetDir, STATIC_DIR);
+  for (const name of await readdir(source)) {
+    const to = path.join(shared, name);
+    const existing = await readFile(to).catch(() => null);
+    if (existing) {
+      if (!existing.equals(await readFile(path.join(source, name)))) {
+        die(`${STATIC_DIR}/${name} already exists with different bytes; rustdoc's content hash collided`);
+      }
+      continue;
+    }
+    await cp(path.join(source, name), to);
+  }
+  await rm(path.join(targetDir, STATIC_DIR), { recursive: true, force: true });
+}
+
+// rustdoc addresses its assets as ../static.files/… relative to each page, and the
+// lazy-loaded scripts resolve against data-static-root-path, which carries the same
+// prefix. Rewriting every occurrence to the shared root path is what lets one cached
+// copy serve all branches; the relative data-root-path (crate links, search index) is
+// left alone because those files really are per-branch.
+async function rewriteStaticRefs(dir) {
+  for (const dirent of await readdir(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, dirent.name);
+    if (dirent.isDirectory()) {
+      await rewriteStaticRefs(abs);
+    } else if (dirent.name.endsWith('.html')) {
+      const html = await readFile(abs, 'utf8');
+      const rewritten = html.replace(/(?:\.\.\/)+static\.files\//g, `/${STATIC_DIR}/`);
+      if (rewritten !== html) await writeFile(abs, rewritten);
+    }
+  }
+}
+
+// Workers Assets serves everything with `max-age=0, must-revalidate` by default, which
+// revalidates every font and script on each navigation. Content-hashed names never change
+// meaning, so they can be cached for a year; HTML and the generated root files keep the
+// revalidating default so a deploy is visible immediately. Rules are per hashed file (the
+// platform caps _headers at 100 rules), so a non-hashed file an older rustdoc might ship
+// keeps the safe default instead of being frozen for a year.
+async function writeHeaders(siteDir) {
+  const shared = await readdir(path.join(siteDir, STATIC_DIR)).catch(() => []);
+  const rules = shared
+    .filter((name) => /-[0-9a-f]{8}\./.test(name))
+    .map((name) => `/${STATIC_DIR}/${name}\n  Cache-Control: public, max-age=31536000, immutable\n`);
+  await writeFile(path.join(siteDir, '_headers'), rules.join(''));
+}
+
 // The Worker's 404 page links this same file, so the palette and the faces live once.
+// The faces are the shared /static.files/ copies, so the site's own pages and the rustdoc
+// pages fetch the exact same font URLs and share one browser cache.
 async function publishStylesheet(docsDir, siteDir) {
-  const available = await readdir(path.join(docsDir, DOC_ROOT_MARKER)).catch(() => []);
+  const available = await readdir(path.join(docsDir, STATIC_DIR)).catch(() => []);
   const faces = [];
   for (const face of FONT_FACES) {
     const name = available.find((entry) => entry.startsWith(face.prefix) && entry.endsWith('.woff2'));
     if (!name) continue;
     faces.push({ ...face, name });
   }
-  // Replaced wholesale: a rustdoc that renames its hashes must not leave the old faces
-  // behind, because the snapshot is committed with `git add --all`.
+  // The site used to keep its own copy of the faces here; drop it so the snapshot does
+  // not carry the duplicates forward.
   await rm(path.join(siteDir, 'fonts'), { recursive: true, force: true });
-  if (faces.length) {
-    await mkdir(path.join(siteDir, 'fonts'), { recursive: true });
-    for (const face of faces) {
-      await cp(path.join(docsDir, DOC_ROOT_MARKER, face.name), path.join(siteDir, 'fonts', face.name));
-    }
-  }
   await writeFile(path.join(siteDir, 'site.css'), renderStylesheet(faces));
 }
 
@@ -376,7 +436,7 @@ function renderStylesheet(faces) {
   const fontFaces = faces
     .map(
       (face) =>
-        `@font-face {\n  font-family: "${face.family}";\n  font-style: normal;\n  font-display: swap;\n  font-weight: ${face.weight};\n  src: local("${face.local}"), url("/fonts/${face.name}") format("woff2");\n}`,
+        `@font-face {\n  font-family: "${face.family}";\n  font-style: normal;\n  font-display: swap;\n  font-weight: ${face.weight};\n  src: local("${face.local}"), url("/${STATIC_DIR}/${face.name}") format("woff2");\n}`,
     )
     .join('\n');
   // The stacks are rustdoc's own, so the name in front is useful even when its face is
@@ -392,7 +452,7 @@ function renderStylesheet(faces) {
 body { margin: 0 auto; padding: 3rem 1.25rem 4rem; max-width: 48rem; color: var(--fg);
   font-size: 1rem; line-height: 1.5; font-family: var(--serif); }
 h1, .branch { margin-block: 0; font-family: var(--sans); }
-h1 { margin-bottom: .5rem; font-weight: 500; letter-spacing: -.01em; }
+h1 { font-weight: 500; letter-spacing: -.01em; }
 .source { margin: 0 0 1.75rem; font-family: var(--sans); font-size: 1rem; font-weight: 400; }
 a { color: var(--accent); text-decoration: none; }
 a:hover, a:focus { text-decoration: underline; }

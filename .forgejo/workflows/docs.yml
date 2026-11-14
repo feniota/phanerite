@@ -129,8 +129,8 @@ jobs:
           git -C "$SITE_DIR" checkout --quiet --orphan "site-$GITHUB_RUN_ID"
           git -C "$SITE_DIR" add --all
           git -C "$SITE_DIR" \
-            -c user.name=phanerite-docs-bot \
-            -c user.email=phanerite-docs-bot@feniota.org \
+            -c user.name=bot \
+            -c user.email=noreply-bot@feniota.org \
             -c commit.gpgsign=false \
             commit --quiet -m "$BRANCH @ ${COMMIT:0:7}"
           git -C "$SITE_DIR" push --quiet --force-with-lease origin HEAD:refs/heads/site

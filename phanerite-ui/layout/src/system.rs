@@ -283,24 +283,24 @@ where
     }
 }
 
-implement_systems!(Idx, T1);
-implement_systems!(Idx, T1, T2);
-implement_systems!(Idx, T1, T2, T3);
-implement_systems!(Idx, T1, T2, T3, T4);
-implement_systems!(Idx, T1, T2, T3, T4, T5);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
-implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+implement_systems!(T, T1);
+implement_systems!(T, T1, T2);
+implement_systems!(T, T1, T2, T3);
+implement_systems!(T, T1, T2, T3, T4);
+implement_systems!(T, T1, T2, T3, T4, T5);
+implement_systems!(T, T1, T2, T3, T4, T5, T6);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
 implement_systems!(
-    Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14
+    T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14
 );
 implement_systems!(
-    Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
+    T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
 );
 
 slotmap::new_key_type!(

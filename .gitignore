@@ -6,3 +6,7 @@ logs/
 authlib-injector.log
 *.log
 .env
+
+# The feniota/phanerite-docs snapshot checkout that CI deploys as the Worker's assets.
+docs-site/site/
+node_modules/

@@ -1,0 +1,146 @@
+name: Build docs site
+
+on:
+  # Every branch push republishes that branch's docs. Listing `branches` keeps tag
+  # pushes out, and pull requests never run this file because it declares no
+  # `pull_request` trigger.
+  push:
+    branches: ['**']
+
+# Publishing is a read-modify-write of the feniota/phanerite-docs snapshot, and a
+# Worker version's asset list replaces the previous one outright, so two overlapping
+# runs would drop whichever finished last. `--force-with-lease` is the backstop.
+concurrency:
+  group: phanerite-docs-site
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: rust-nightly
+
+    env:
+      SNAPSHOT_REPO: ${{ github.server_url }}/${{ github.repository_owner }}/phanerite-docs.git
+      SITE_DIR: docs-site/site
+      DOCS_ORIGIN: https://phanerite.docs.feniota.org
+      # Credentials are answered by a script instead of being baked into the remote URL.
+      GIT_ASKPASS: ${{ github.workspace }}/docs-site/git-askpass.mjs
+      GIT_TERMINAL_PROMPT: 0
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Run doc-tests
+        run: cargo test --doc --workspace
+
+      - name: Build docs
+        # Deliberately no `+toolchain`: a branch builds with the channel pinned in its
+        # own rust-toolchain.toml, so the version is never stated twice.
+        # `-Zrustdoc-mergeable-info` speeds up the doc build.
+        # `--no-deps` is forced by the asset limit rather than by taste: documenting the
+        # dependency closure put a single branch at 96,000 files and 1.6 GB, against
+        # 100,000 files per Worker version. `-Zrustdoc-map` is what makes skipping them
+        # affordable, by sending rustdoc's links to crates.io deps over to docs.rs.
+        run: cargo doc --workspace --no-deps -Z rustdoc-map -Z rustdoc-mergeable-info
+
+      - name: Fetch deployment secrets
+        uses: git.feniota.org/feniota/infisical-secrets-action@v1.0.18
+        # Omitting `secret-name` exports every secret under the path to later steps:
+        #   CLOUDFLARE_TOKEN               API token, scoped to Workers Scripts: Edit
+        #   CLOUDFLARE_ACCOUNT_ID          the account that owns the phanerite-docs Worker
+        #   FORGEJO_PHANERITE_DOCS_TOKEN   push-only token for the phanerite-docs snapshot
+        with:
+          method: "universal"
+          # Forgejo upper-cases secret names, so the lower-case spellings never resolve.
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          project-slug: feniota
+          env-slug: prod
+          secret-path: /forgejo/phanerite
+
+      - name: Clone the docs snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A runner that reuses its workspace must not deploy a stale snapshot.
+          rm -rf "$SITE_DIR"
+          # Exit 2 means the branch genuinely is not there yet. Anything else is auth or
+          # network, and must stop the job: falling through to an empty snapshot would
+          # publish a site with only this branch on it.
+          rc=0
+          git ls-remote --exit-code --heads "$SNAPSHOT_REPO" site >/dev/null || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            git clone --quiet --depth 1 --single-branch --branch site "$SNAPSHOT_REPO" "$SITE_DIR"
+            echo "Snapshot $(git -C "$SITE_DIR" rev-parse --short HEAD)."
+          elif [ "$rc" -eq 2 ]; then
+            echo "No site branch yet, starting an empty snapshot."
+            mkdir -p "$SITE_DIR"
+            git -C "$SITE_DIR" init --quiet --initial-branch=site
+            git -C "$SITE_DIR" remote add origin "$SNAPSHOT_REPO"
+          else
+            echo "Cannot read branches of $SNAPSHOT_REPO (git exit $rc)." >&2
+            exit 1
+          fi
+
+      - name: Assemble the site
+        id: assemble
+        env:
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A deleted branch never runs this workflow, so the snapshot is pruned against
+          # the repository's live branch list. Reading that list is anonymous and
+          # optional: when it cannot be read, nothing is pruned rather than everything.
+          prune=()
+          if git ls-remote --heads "$REPO" > "$RUNNER_TEMP/live-refs.txt"; then
+            sed -E 's|.*refs/heads/||' "$RUNNER_TEMP/live-refs.txt" > "$RUNNER_TEMP/live-branches.txt"
+            prune=(--live-branches-file "$RUNNER_TEMP/live-branches.txt")
+          else
+            echo "::warning::cannot read the branch list of $REPO; stale branch docs will linger"
+          fi
+          node docs-site/assemble.mjs \
+            --site "$SITE_DIR" \
+            --docs target/doc \
+            --branch "$BRANCH" \
+            --commit "$COMMIT" \
+            --repo "$REPO" \
+            --toolchain "$(rustc --version)" \
+            "${prune[@]}"
+
+      - name: Publish the docs snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          # One commit per snapshot, always replaced: rustdoc trees are far too large to
+          # keep a history of. Unchanged files are still sent as existing blobs, so the
+          # push only carries what this branch actually changed.
+          git -C "$SITE_DIR" checkout --quiet --orphan "site-$GITHUB_RUN_ID"
+          git -C "$SITE_DIR" add --all
+          git -C "$SITE_DIR" \
+            -c user.name=phanerite-docs-bot \
+            -c user.email=phanerite-docs-bot@feniota.org \
+            -c commit.gpgsign=false \
+            commit --quiet -m "$BRANCH @ ${COMMIT:0:7}"
+          git -C "$SITE_DIR" push --quiet --force-with-lease origin HEAD:refs/heads/site
+          # wrangler 4.162 has no way to exclude paths from an asset bundle, and this
+          # checkout's own history would be published as part of the site.
+          rm -rf "$SITE_DIR/.git"
+        env:
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+
+      - name: Deploy the Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_TOKEN"
+          pnpm dlx --package wrangler@4.162.0 wrangler deploy --config docs-site/wrangler.jsonc
+
+      - name: Report
+        run: echo "::notice title=Docs for $BRANCH::$DOCS_ORIGIN/$MOUNTED_PATH/"
+        env:
+          BRANCH: ${{ github.ref_name }}
+          MOUNTED_PATH: ${{ steps.assemble.outputs.mounted_path }}

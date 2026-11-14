@@ -1,0 +1,27 @@
+{
+  // Deployed by .forgejo/workflows/docs.yml. The token comes from Infisical as
+  // CLOUDFLARE_TOKEN, which wrangler reads as CLOUDFLARE_API_TOKEN.
+  "name": "phanerite-docs",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-01",
+
+  "assets": {
+    // A checkout of git.feniota.org/feniota/phanerite-docs (branch `site`), whose tree
+    // is `<branch>/…` doc roots plus the generated root index. Every deploy publishes
+    // the whole tree, because a Worker version's asset list replaces the previous one.
+    "directory": "site",
+    "binding": "ASSETS",
+
+    // "none" is what lets misses reach worker.mjs: "single-page-application" would
+    // answer them with the landing page, so `/dev/gui` could not redirect to
+    // `/dev/gui/` and an unknown branch could not get a branch list.
+    "not_found_handling": "none"
+  }
+
+  // wrangler 4.162 has no assets.exclude, so the snapshot's git history is deleted
+  // from the working tree by docs.yml before this deploy runs.
+
+  // Bind phanerite.docs.feniota.org in the Cloudflare dashboard. Doing it from here
+  // would need Workers Routes on the token:
+  // "custom_domains": [{ "hostname": "phanerite.docs.feniota.org" }]
+}

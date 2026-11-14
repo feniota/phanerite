@@ -4,12 +4,14 @@ use taffy::{Baselines, LayoutOutput};
 
 use crate::{Aspect, Context, NodeMetadata, World};
 
+#[derive(Aspect)]
 struct Pos(f32);
-impl Aspect for Pos {}
+
+#[derive(Aspect)]
 struct Vel(f32);
-impl Aspect for Vel {}
+
+#[derive(Aspect)]
 struct Tag(u32);
-impl Aspect for Tag {}
 
 fn world_with_two() -> (World, DefaultKey, DefaultKey) {
     let mut world = World::new();
@@ -73,6 +75,13 @@ fn context_insert_remove() {
     });
     world.execute_system(key);
     assert!(world.storage::<Tag>().unwrap().get(b).is_none());
+}
+
+#[test]
+#[should_panic(expected = "retrieve the same type multiple times")]
+fn duplicated_aspect_panics() {
+    let (mut world, _a, _b) = world_with_two();
+    let _ = world.insert_system(|_ctx: &mut Context, _pos1: &mut Pos, _pos2: &mut Pos| {});
 }
 
 #[test]

@@ -18,46 +18,113 @@ pub trait AspectSet: 'static {
     fn type_ids() -> Vec<TypeId>;
 }
 
-/// A unit of logic executed once per entity that has every aspect in its query.
+impl AspectSet for () {
+    fn type_ids() -> Vec<TypeId> {
+        Vec::new()
+    }
+    fn validate() {}
+}
+
+/// A unit of logic executed repeatedly on every entity that has all aspects in its query.
 ///
-/// `T` is the system's [`AspectSet`] — a tuple of distinct aspect types. For each entity
-/// carrying all of those aspects, the system function is called with a [`Context`] followed
-/// by one `&mut` reference per aspect; entities missing any of the aspects are skipped.
-/// The context exposes the taffy layout tree, node metadata, resources and deferred
-/// [`Commands`](crate::Commands), and reports the entity being processed via
-/// [`Context::node`].
+/// Typically you do not need to implement this trait yourself. This crate provides blanket
+/// implementations for all functions that meet the contraints, as decribed later.
 ///
-/// Systems are usually plain closures or function pointers: any
-/// `Fn(&mut Context, &mut A, &mut B, ...)` automatically implements `System<(A, B, ...)>`
-/// (tuples of up to 16 aspects). Register one with [`World::insert_system`]; duplicate
-/// aspects in a single query are rejected at registration time.
+/// Systems are typically functions **with `'static` lifetimes**, that is, functions defined with
+/// the `fn` keyword, or closures that do not capture variables with limited lifetimes.
 ///
-/// # Example
+/// The first parameters of system functions are always [`&mut Context`](crate::context::Context).
+/// Queries (with which aspects does this system want to process?) are later specified as
+/// [`&mut Aspect`](crate::aspect::Aspect)s in the parameter list. You can query up to 16 aspects
+/// per system.
 ///
-/// ```no_run
+/// For example, the `movement` is a system that update the positions of entities with both
+/// `Position` and `Velocity` aspects.
+///
+/// ```
 /// use phanerite_layout::taffy::Style;
 /// use phanerite_layout::{Aspect, Context, NodeMetadata, World};
 ///
 /// #[derive(Aspect)]
-/// struct Position { x: f32, y: f32 }
+/// struct Position {
+///     x: f32,
+///     y: f32,
+/// }
 ///
 /// #[derive(Aspect)]
-/// struct Velocity { x: f32, y: f32 }
+/// struct Velocity {
+///     x: f32,
+///     y: f32,
+/// }
 ///
-/// let mut world = World::new();
-/// world.register::<Position>();
-/// world.register::<Velocity>();
-///
-/// let entity = world.spawn(Style::default(), NodeMetadata);
-/// world.insert_aspect(entity, Position { x: 0.0, y: 0.0 });
-/// world.insert_aspect(entity, Velocity { x: 1.0, y: 1.0 });
-///
-/// world.insert_system(|ctx: &mut Context, pos: &mut Position, vel: &mut Velocity| {
-///     // ctx.node() is the entity currently being processed.
+/// fn movement(_ctx: &mut Context, pos: &mut Position, vel: &mut Velocity) {
 ///     pos.x += vel.x;
 ///     pos.y += vel.y;
-/// });
+/// }
+///
+/// let mut world = World::new();
+/// world.insert_system(movement);
 /// ```
+///
+/// When you finish defining a system, you can insert it into the World by calling
+/// [`World::insert_system`] with your system function.
+///
+/// # Performance
+///
+/// There is no archetype in this crate, so iterations are implemented in a very simple manner.
+/// The first [`Aspect`] in your query is **always** fully iterated over, and the entities (retrieved
+/// from the first aspect's storage) are used to query the remaining storages, and then to determine
+/// whether to call the system.
+///
+/// So, let's say you have 2 aspects, `A` with 10,000 entries and `B` with 200 entries. When writing
+/// a system for `(A, B)`, you should define your function as
+///
+/// ```
+/// # use phanerite_layout::Context;
+/// # struct A;
+/// # struct B;
+/// # #[allow(unused)]
+/// fn system(ctx: &mut Context, b: &mut B, a: &mut A) {}
+/// ```
+///
+/// but not `Fn(&mut Context, &mut A, &mut B)`, because the latter will lead to 9,800 useless
+/// iterations.
+///
+/// In other words, **always put the sparsest aspect in the front**.
+///
+/// # Safety
+///
+/// The system receive *raw* mutable references to the aspects at the same time. So trying to retrive
+/// the same aspect multiple times leads to aliasing the same mutable reference, (as there can only
+/// be one storage per aspect,) which is undefined behavior, and is therefore rejected.
+///
+/// There is no way to enforce the limitation without macros in current version of Rust, so the check
+/// is performed at runtime, when you insert the system into the world.
+///
+/// ```should_panic
+/// use phanerite_layout::{Aspect, Context, World};
+/// #[derive(Aspect)]
+/// struct A;
+///
+/// let mut world = World::new();
+/// world.insert_system(|_: &mut Context, aspect1: &mut A, aspect2: &mut A| {}); // Panics
+/// ```
+///
+/// # Context
+///
+/// When you need to work with the world itself in a system, [`Context`] is there to help. See
+/// its doc for more details. But please note that the same safety rule is still enforced even when
+/// you access the aspect through the [`Context`].
+///
+/// # Implement this trait yourself
+///
+/// It is possible to implement this trait yourself and insert it into the system. In that case, you
+/// just need to use `()` as the type parameter in this trait.
+///
+/// The World would always run [`AspectSet::validate`], even if the system is not the blanket
+/// implementation, while the validation is only reasonable when the system receives raw mutable
+/// references to the aspects, which may not fit your case. So there is a blanket implementation
+/// for [`()`](unit) whose [`validate()`](AspectSet::validate) does nothing.
 pub trait System<T: AspectSet>: 'static {
     /// Iterate over the associated aspects and execute the inner system function.
     fn execute(&self, world: &mut World);
@@ -101,6 +168,7 @@ where
         })
     }
 }
+
 /// Count the number of expressions in a comma-separated list.
 macro_rules! count_exprs {
     () => { 0usize };
@@ -215,24 +283,24 @@ where
     }
 }
 
-implement_systems!(T, T1);
-implement_systems!(T, T1, T2);
-implement_systems!(T, T1, T2, T3);
-implement_systems!(T, T1, T2, T3, T4);
-implement_systems!(T, T1, T2, T3, T4, T5);
-implement_systems!(T, T1, T2, T3, T4, T5, T6);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
-implement_systems!(T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+implement_systems!(Idx, T1);
+implement_systems!(Idx, T1, T2);
+implement_systems!(Idx, T1, T2, T3);
+implement_systems!(Idx, T1, T2, T3, T4);
+implement_systems!(Idx, T1, T2, T3, T4, T5);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+implement_systems!(Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
 implement_systems!(
-    T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14
+    Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14
 );
 implement_systems!(
-    T, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
+    Idx, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
 );
 
 slotmap::new_key_type!(

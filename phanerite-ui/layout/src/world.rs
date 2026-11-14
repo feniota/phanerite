@@ -248,6 +248,8 @@ impl World {
     }
 
     /// Run a registered system, then flush its deferred commands.
+    ///
+    /// This is intended for internal usage only.
     pub(crate) fn execute_system(&mut self, key: SystemKey) {
         // Take the system table out so the system can borrow the world mutably.
         let systems = std::mem::take(&mut self.systems);
@@ -264,5 +266,9 @@ impl World {
         for key in despawns {
             self.despawn(key);
         }
+    }
+
+    pub fn run(&mut self) -> ! {
+        unimplemented!()
     }
 }

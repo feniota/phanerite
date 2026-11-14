@@ -42,7 +42,6 @@ impl AspectSet for () {
 /// `Position` and `Velocity` aspects.
 ///
 /// ```
-/// use phanerite_layout::taffy::Style;
 /// use phanerite_layout::{Aspect, Context, NodeMetadata, World};
 ///
 /// #[derive(Aspect)]
@@ -72,9 +71,9 @@ impl AspectSet for () {
 /// # Performance
 ///
 /// There is no archetype in this crate, so iterations are implemented in a very simple manner.
-/// The first [`Aspect`] in your query is **always** fully iterated over, and the entities (retrieved
-/// from the first aspect's storage) are used to query the remaining storages, and then to determine
-/// whether to call the system.
+/// The first [`Aspect`] in your query is **always** fully iterated over, and the entities(
+/// retrieved from the first aspect's storage) are used to query the remaining storages, and then to
+/// determine whether to call the system.
 ///
 /// So, let's say you have 2 aspects, `A` with 10,000 entries and `B` with 200 entries. When writing
 /// a system for `(A, B)`, you should define your function as
@@ -84,29 +83,33 @@ impl AspectSet for () {
 /// # struct A;
 /// # struct B;
 /// # #[allow(unused)]
-/// fn system(ctx: &mut Context, b: &mut B, a: &mut A) {}
+/// fn system(ctx: &mut Context, b: &mut B, a: &mut A)
+/// # {}
 /// ```
 ///
-/// but not `Fn(&mut Context, &mut A, &mut B)`, because the latter will lead to 9,800 useless
+/// but not `fn(&mut Context, &mut A, &mut B)`, because the latter will lead to 9,800 useless
 /// iterations.
 ///
 /// In other words, **always put the sparsest aspect in the front**.
 ///
 /// # Safety
 ///
-/// The system receive *raw* mutable references to the aspects at the same time. So trying to retrive
-/// the same aspect multiple times leads to aliasing the same mutable reference, (as there can only
-/// be one storage per aspect,) which is undefined behavior, and is therefore rejected.
+/// The system receive *raw* mutable references to the aspects at the same time. So trying to
+/// retrive the same aspect multiple times leads to aliasing the same mutable reference, (as there
+/// can only be one storage per aspect,) which is undefined behavior, and is therefore rejected.
 ///
-/// There is no way to enforce the limitation without macros in current version of Rust, so the check
-/// is performed at runtime, when you insert the system into the world.
+/// There is no way to enforce the limitation without macros in current version of Rust, so the
+/// check is performed at runtime, when you insert the system into the world.
 ///
 /// ```should_panic
 /// use phanerite_layout::{Aspect, Context, World};
+///
 /// #[derive(Aspect)]
 /// struct A;
 ///
 /// let mut world = World::new();
+///
+/// // This closure tries to query `A` twice
 /// world.insert_system(|_: &mut Context, aspect1: &mut A, aspect2: &mut A| {}); // Panics
 /// ```
 ///
@@ -118,7 +121,7 @@ impl AspectSet for () {
 ///
 /// # Implement this trait yourself
 ///
-/// It is possible to implement this trait yourself and insert it into the system. In that case, you
+/// It is possible to implement this trait yourself and insert it into the world. In that case, you
 /// just need to use `()` as the type parameter in this trait.
 ///
 /// The World would always run [`AspectSet::validate`], even if the system is not the blanket

@@ -29,6 +29,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # A persisted runner token becomes an http.extraheader that outranks GIT_ASKPASS,
+          # so the snapshot read below would authenticate as the Actions identity, not bot.
+          persist-credentials: false
 
       - name: Run doc-tests
         run: cargo test --doc --workspace

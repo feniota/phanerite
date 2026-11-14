@@ -5,7 +5,7 @@ members = ["phanerite-core", "phanerite-ui/executor", "phanerite-ui/layout", "ph
 [workspace.package]
 authors = ["Enita <enitanureya@outlook.com>", "Tuxium <ursusfeline07@gmail.com>"]
 repository = "https://github.com/feniota/phanerite"
-homepage = "https://phenocryst.ferris.love/phanerite/"
+homepage = "https://mc.feniota.org/phanerite/"
 description = "A preconfigure-able Minecraft launcher, which connects to and is managed by an Aphanite server."
 readme = "README.md"
 keywords = ["minecraft", "launcher"]

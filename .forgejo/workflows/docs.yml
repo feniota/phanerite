@@ -34,6 +34,11 @@ jobs:
           # so the snapshot read below would authenticate as the Actions identity, not bot.
           persist-credentials: false
 
+      - name: Install build dependencies
+        run: |
+          dnf install --setopt=install_weak_deps=False -y dbus-devel glib2-devel cairo-devel \
+          cairo-gobject-devel gtk3-devel
+
       - name: Run doc-tests
         run: cargo test --doc --workspace
 

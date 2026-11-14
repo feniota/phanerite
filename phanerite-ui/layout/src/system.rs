@@ -25,7 +25,7 @@ impl AspectSet for () {
     fn validate() {}
 }
 
-/// A unit of logic executed repeatedly on every entity that has all aspects in its query.
+/// A stateless logic unit that queries [`Aspect`]s and processes their data.
 ///
 /// Typically you do not need to implement this trait yourself. This crate provides blanket
 /// implementations for all functions that meet the contraints, as decribed later.

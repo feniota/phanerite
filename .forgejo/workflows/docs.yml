@@ -5,7 +5,7 @@ on:
   # pushes out, and pull requests never run this file because it declares no
   # `pull_request` trigger.
   push:
-    branches: ['**']
+    branches: ["**"]
 
 # Publishing is a read-modify-write of the feniota/phanerite-docs snapshot, and a
 # Worker version's asset list replaces the previous one outright, so two overlapping
@@ -44,7 +44,7 @@ jobs:
         run: cargo doc --workspace --no-deps -Z rustdoc-map -Z rustdoc-mergeable-info
 
       - name: Fetch deployment secrets
-        uses: git.feniota.org/feniota/infisical-secrets-action@v1.0.18
+        uses: https://git.feniota.org/feniota/infisical-secrets-action@v1.0.18
         # Omitting `secret-name` exports every secret under the path to later steps:
         #   CLOUDFLARE_TOKEN               API token, scoped to Workers Scripts: Edit
         #   CLOUDFLARE_ACCOUNT_ID          the account that owns the phanerite-docs Worker

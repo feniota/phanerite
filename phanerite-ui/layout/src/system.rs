@@ -33,7 +33,7 @@ impl AspectSet for () {
 ///   up to 16 [`&mut Aspect`](crate::Aspect)s as the query (with which aspects does this system
 ///   want to process?).
 /// - Has a `'static` lifetime. That is, it should be defined with the `fn` keyword, or is a closure
-///   that captures nothing whose lifetime is limited.
+///   that captures no lifetime-limited variable.
 ///
 /// For example, the `movement` below is a system that update the positions of entities with both
 /// `Position` and `Velocity` aspects.

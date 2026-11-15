@@ -4,11 +4,14 @@ use std::{
     collections::HashMap,
 };
 
+mod no_op_hasher;
+pub use no_op_hasher::NoOpHash;
+
 /// Component (as in ECS). Implement it with `#[derive(Aspect)]`.
 pub trait Aspect: 'static {}
 
 /// Map from an aspect's [`TypeId`] to its type-erased storage.
-pub(crate) type AspectMap = HashMap<TypeId, Box<dyn AnyStorage>>;
+pub(crate) type AspectMap = HashMap<TypeId, Box<dyn AnyStorage>, NoOpHash>;
 
 /// Insert a component, registering a sparse storage on first use. Single map lookup.
 pub(crate) fn insert_aspect<A: Aspect>(

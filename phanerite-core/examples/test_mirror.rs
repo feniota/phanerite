@@ -10,6 +10,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use tracing::Level;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> error::Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
     smol::block_on(async {

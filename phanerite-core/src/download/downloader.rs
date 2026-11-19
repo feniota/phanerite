@@ -3,25 +3,27 @@ use crate::download::task::{DownloadProcess, DownloadTask, Target};
 use crate::error::{Error, Result};
 use crate::storage::temp::TempGuard;
 use crate::utils::Hash;
-use async_channel::{Receiver, Sender};
 use bytes::Bytes;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use http::{HeaderMap, Response};
 use std::mem::forget;
 use std::num::NonZeroU8;
-use std::ops::{Deref, DerefMut};
 use std::time::Duration;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 use trillium_cache::InMemoryStorage;
 use trillium_cache::client::Cache;
 use trillium_client::Client;
 use trillium_client_retry::RetryHandler;
 use trillium_compression::client::Compression;
+use trillium_logger::ColorMode;
+use trillium_logger::client::{ClientLogger, formatters};
 use trillium_quinn::ClientQuicConfig;
 use trillium_redirect::client::FollowRedirects;
 use trillium_rustls::RustlsConfig;
 use trillium_smol::ClientConfig;
 use url::Url;
+
+const BUFFER_CAPACITY: usize = 2 * 1024 * 1024;
 
 pub struct DownloaderBuilder {
     // 重试次数
@@ -30,21 +32,6 @@ pub struct DownloaderBuilder {
     // 最大并发数,
     /// Maximum concurrency
     concurrency: usize,
-    // 大文件阈值
-    /// Large-file threshold
-    threshold: u64,
-    // 大文件并行度
-    /// Parallelism for large files
-    large_parallelism: usize,
-    // 小文件并行度
-    /// Parallelism for small files
-    small_parallelism: usize,
-    // 大文件缓冲大小
-    /// Buffer size for large files
-    large_buffer: usize,
-    // 小文件缓冲大小
-    /// Buffer size for small files
-    small_buffer: usize,
     // UA
     /// User agent
     user_agent: &'static str,
@@ -54,12 +41,7 @@ impl Default for DownloaderBuilder {
     fn default() -> Self {
         Self {
             retries: 3,
-            concurrency: 32,
-            threshold: 2 * 1024 * 1024,
-            large_parallelism: 4,
-            small_parallelism: 16,
-            large_buffer: 512 * 1024,
-            small_buffer: 128 * 1024,
+            concurrency: 16,
             // 符合 Modrinth 规范的 User Agent
             user_agent: concat!(
                 "feniota/phanerite/",
@@ -85,36 +67,6 @@ impl DownloaderBuilder {
         self.concurrency = max.get() as usize;
         self
     }
-    // 设置大文件阈值
-    /// Sets the large-file threshold
-    pub fn threshold(mut self, threshold: u64) -> Self {
-        self.threshold = threshold;
-        self
-    }
-    // 设置大文件并行度
-    /// Sets the parallelism for large files
-    pub fn large_parallelism(mut self, max: NonZeroU8) -> Self {
-        self.large_parallelism = max.get() as usize;
-        self
-    }
-    // 设置小文件并行度
-    /// Sets the parallelism for small files
-    pub fn small_parallelism(mut self, max: NonZeroU8) -> Self {
-        self.small_parallelism = max.get() as usize;
-        self
-    }
-    // 设置大文件下载缓冲
-    /// Sets the download buffer for large files
-    pub fn large_buffer(mut self, buffer: usize) -> Self {
-        self.large_buffer = buffer;
-        self
-    }
-    // 设置大文件下载缓冲
-    /// Sets the download buffer for small files
-    pub fn small_buffer(mut self, buffer: usize) -> Self {
-        self.small_buffer = buffer;
-        self
-    }
     // 设置 User-Agent
     /// Sets the User-Agent
     pub fn user_agent(mut self, ua: &'static str) -> Self {
@@ -123,23 +75,9 @@ impl DownloaderBuilder {
     }
 
     pub async fn build(self) -> Result<RawDownloader> {
-        let (large_tx, large_rx) = async_channel::bounded(self.large_parallelism);
-        for _ in 0..self.large_parallelism {
-            large_tx.send(vec![0u8; self.large_buffer]).await.unwrap()
-        }
-        let (small_tx, small_rx) = async_channel::bounded(self.small_parallelism);
-        for _ in 0..self.small_parallelism {
-            small_tx.send(vec![0u8; self.small_buffer]).await.unwrap()
-        }
-        if self.small_parallelism + self.large_parallelism > self.concurrency {
-            warn!(
-                "The parallelism is greater than the concurrency, and thus the buffer cannot be fully utilized."
-            )
-        }
         Ok(RawDownloader {
             retries: self.retries,
             concurrency: self.concurrency,
-            threshold: self.threshold,
             client: Client::new_with_quic(
                 RustlsConfig::<ClientConfig>::default(),
                 ClientQuicConfig::with_webpki_roots(),
@@ -152,13 +90,27 @@ impl DownloaderBuilder {
                     .with_exponential_backoff(Duration::from_millis(100))
                     .with_max_attempts(5)
                     .with_max_elapsed(Duration::from_secs(10)),
+                ClientLogger::new()
+                    .with_formatter((
+                        formatters::status,
+                        " ",
+                        formatters::version,
+                        " ",
+                        formatters::method,
+                        " ",
+                        formatters::url,
+                        " -> ",
+                        formatters::response_time,
+                        " ",
+                        formatters::body_len_human,
+                    ))
+                    .with_target(trillium_logger::Target::Logger(
+                        tracing_log::log::Level::Info,
+                    ))
+                    .with_color_mode(ColorMode::Off),
             ))
             .with_default_header("User-Agent", self.user_agent)
             .with_default_header("Accept-Encoding", "zstd, br;q=0.9, gzip;q=0.8"),
-            large_tx,
-            large_rx,
-            small_tx,
-            small_rx,
         })
     }
 }
@@ -166,23 +118,10 @@ impl DownloaderBuilder {
 pub struct RawDownloader {
     retries: usize,
     concurrency: usize,
-    threshold: u64,
 
     // HTTP 客户端
     /// HTTP client
     client: Client,
-    // 获取大缓冲
-    /// Acquires a large buffer
-    large_rx: Receiver<Vec<u8>>,
-    // 归还大缓冲
-    /// Returns a large buffer
-    large_tx: Sender<Vec<u8>>,
-    // 获取小缓冲
-    /// Acquires a small buffer
-    small_rx: Receiver<Vec<u8>>,
-    // 归还小缓冲
-    /// Returns a small buffer
-    small_tx: Sender<Vec<u8>>,
 }
 
 impl Downloader for RawDownloader {
@@ -366,9 +305,8 @@ impl RawDownloader {
             // Trillium 默认限制响应体为 16 MB
             .with_max_len(u64::MAX);
         let mut hasher = task.file_hash.hasher();
+        let mut buf = vec![0u8; BUFFER_CAPACITY];
 
-        // 申请缓存并等待
-        let mut buf = self.alloc_buf(task.process.total()).await;
         // 流式下载
         loop {
             let n = reader.read(&mut buf).await?;
@@ -448,58 +386,6 @@ impl RawDownloader {
                     .await?
             }
         }
-
         Ok(())
-    }
-    // 申请下载缓存，限制总并行度
-    /// Acquires a download buffer, bounding the total parallelism
-    async fn alloc_buf(&self, size: Option<u64>) -> impl DerefMut<Target = [u8]> {
-        struct BufferGuard {
-            buf: Option<Vec<u8>>,
-            pool: Sender<Vec<u8>>,
-        }
-
-        impl Deref for BufferGuard {
-            type Target = [u8];
-
-            fn deref(&self) -> &Self::Target {
-                self.buf.as_deref().unwrap()
-            }
-        }
-
-        impl DerefMut for BufferGuard {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                self.buf.as_deref_mut().unwrap()
-            }
-        }
-
-        impl Drop for BufferGuard {
-            fn drop(&mut self) {
-                if let Some(buf) = self.buf.take() {
-                    match self.pool.try_send(buf) {
-                        Ok(_) => {}
-                        Err(async_channel::TrySendError::Full(_))
-                        | Err(async_channel::TrySendError::Closed(_)) => {
-                            error!("Buffer loss")
-                        }
-                    }
-                }
-            }
-        }
-
-        match size {
-            Some(size) if size > self.threshold => BufferGuard {
-                buf: Some(self.large_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.large_tx.clone(),
-            }, // >=阈值
-            Some(size) if size <= self.threshold => BufferGuard {
-                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.small_tx.clone(),
-            }, // <=阈值
-            _ => BufferGuard {
-                buf: Some(self.small_rx.recv().await.expect("Failed to alloc buffer")),
-                pool: self.small_tx.clone(),
-            }, // 默认小文件
-        }
     }
 }

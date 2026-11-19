@@ -4,7 +4,7 @@ use async_channel::{Receiver, Sender};
 use futures::FutureExt;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use tracing::warn;
+use tracing::trace;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -160,11 +160,13 @@ impl<'storage> Storage {
         let items = self.cleaner.rx.clone();
 
         async fn do_clean((t, p): (FileType, PathBuf)) {
-            if let Err(e) = match t {
-                FileType::File => async_fs::remove_file(p).await,
-                FileType::Directory => async_fs::remove_dir_all(p).await,
-            } {
-                warn!("Failed to clean temp file: {e}")
+            if match t {
+                FileType::File => async_fs::remove_file(&p).await,
+                FileType::Directory => async_fs::remove_dir_all(&p).await,
+            }
+            .is_err()
+            {
+                trace!("Failed to clean temp file: {}", p.display());
             }
         }
 

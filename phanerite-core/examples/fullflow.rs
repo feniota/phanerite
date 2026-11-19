@@ -7,11 +7,14 @@ use phanerite_core::download::vanilla::VersionIndex;
 use phanerite_core::download::{Downloader, DownloaderExt};
 use phanerite_core::error::Error;
 use phanerite_core::instance::Instance;
-use phanerite_core::mod_loader::neoforge::NeoForge;
+use phanerite_core::mod_loader::fabric::Fabric;
 use phanerite_core::runtime::java::JavaManager;
 use phanerite_core::storage::SharePreference::Hardlink;
 use phanerite_core::storage::Storage;
 use phanerite_core::storage::multi::{MultiStorageWithPlugin, StorageWithPlugin};
+
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
     // （登录信息）
@@ -19,6 +22,7 @@ fn main() {
     // 日志输出
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
+        .with_ansi(true)
         .init();
     // （用于测试阻塞时间）
     let executor = async_executor::Executor::new();
@@ -160,7 +164,7 @@ fn main() {
             // 安装模组加载器
             instance
                 // 安装需要正确的游戏版本 ID，并在闭包内选择需要的加载器版本
-                .install_loader::<NeoForge>(NAME, &downloader, async |into_iter| {
+                .install_loader::<Fabric>(NAME, &downloader, async |into_iter| {
                     // （调试输出）
                     // let iter = iter
                     //     .inspect(|x| println!("{}:{} stable:{}", x.name(), x.version(), x.stable()));
@@ -240,7 +244,7 @@ fn process_monitor<D: Downloader, B: std::borrow::Borrow<D> + Send + Sync>(
     };
     let exit = g.exit.clone();
     smol::spawn(async move {
-        while !exit.load(Relaxed)  {
+        while !exit.load(Relaxed) {
             let downloading = monitor.downloading().await;
             let number = monitor.len();
             let speed = monitor

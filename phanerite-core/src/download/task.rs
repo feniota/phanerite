@@ -5,11 +5,10 @@ use crate::utils::state::NotReady;
 use crate::utils::{EmptyHash, Hash, HashValue, hash_file};
 use async_lock::OnceCell;
 use event_listener::Event;
-use futures::Stream;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use std::sync::atomic::{AtomicU8, AtomicU64};
+use std::sync::atomic::{AtomicU64, AtomicU8};
 use std::sync::{Arc, OnceLock};
 use url::Url;
 

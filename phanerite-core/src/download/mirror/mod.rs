@@ -1,8 +1,3 @@
-use bytes::Bytes;
-use futures::StreamExt;
-use std::borrow::Borrow;
-use std::marker::PhantomData;
-
 // BMCL API
 mod bmclapi;
 pub use bmclapi::Bmclapi;
@@ -15,8 +10,11 @@ use crate::download::Downloader;
 use crate::download::task::DownloadTask;
 use crate::error::Result;
 use crate::utils::Hash;
-use futures::Stream;
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use http::{HeaderMap, Response};
+use std::borrow::Borrow;
+use std::marker::PhantomData;
 use url::Url;
 
 pub trait Mirror: Send + Sync {

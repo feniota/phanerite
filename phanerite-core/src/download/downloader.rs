@@ -361,7 +361,10 @@ impl RawDownloader {
 
         // 创建文件
         let mut file = async_fs::File::create(&cache).await?;
-        let mut reader = res.response_body();
+        let mut reader = res
+            .response_body()
+            // Trillium 默认限制响应体为 16 MB
+            .with_max_len(u64::MAX);
         let mut hasher = task.file_hash.hasher();
 
         // 申请缓存并等待

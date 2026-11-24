@@ -1,0 +1,17 @@
+[package]
+name = "phanerite-framework"
+version = "0.1.0"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-executor = "1.14.1"
+async-task = "4.7"
+futures.workspace = true
+slotmap = "1.1"
